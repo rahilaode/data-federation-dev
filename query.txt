@@ -1,0 +1,11 @@
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX voc: <http://example.org/voc#>
+
+SELECT ?person ?firstName ?lastName ?source
+WHERE {
+    ?person a foaf:Person ;
+            foaf:firstName ?firstName ;
+            foaf:lastName ?lastName ;
+            voc:sourceDatabase ?source .
+}
+ORDER BY ?source

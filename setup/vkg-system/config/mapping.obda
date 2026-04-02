@@ -1,0 +1,42 @@
+[PrefixDeclaration]
+:               http://bansos.go.id/ontology#
+bansos:         http://bansos.go.id/ontology/
+res:            http://bansos.go.id/resource/
+rdf:            http://www.w3.org/1999/02/22-rdf-syntax-ns#
+xsd:            http://www.w3.org/2001/XMLSchema#
+
+[MappingDeclaration] @collection [[
+
+mappingId    MAP-PROGRAM
+target       res:program/{program_id} a bansos:ProgramBansos ; bansos:programId {program_id}^^xsd:integer ; bansos:namaProgram {nama_program} ; bansos:tipeProgram {tipe_program} ; bansos:nominal {nominal}^^xsd:decimal .
+source       SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos
+
+mappingId    MAP-PENERIMA
+target       res:penerima/{penerima_id} a bansos:PenerimaBansos ; bansos:penerimaId {penerima_id}^^xsd:integer ; bansos:nik {nik} ; bansos:namaLengkap {nama_lengkap} ; bansos:tglLahir {tgl_lahir}^^xsd:date ; bansos:statusEkonomi {status_ekonomi} ; bansos:aktif {aktif}^^xsd:boolean .
+source       SELECT * FROM kemensos.penerima_manfaat
+
+mappingId    MAP-TRANSAKSI
+target       res:transaksi/{transaksi_id} a bansos:TransaksiBansos ; bansos:transaksiId {transaksi_id}^^xsd:integer ; bansos:periodeTransaksi {periode} ; bansos:statusTransaksi {status} ; bansos:terdaftarPadaProgram res:program/{program_id} ; bansos:disalurkanKepada res:penerima/{penerima_id} .
+source       SELECT * FROM kemensos.transaksi_bansos
+
+mappingId    MAP-ELIGIBILITY
+target       res:check/{check_id} a bansos:EligibilityCheck ; bansos:checkId {check_id}^^xsd:integer ; bansos:statusEligible {status_eligible} ; bansos:alasan {alasan} ; bansos:divalidasiDalam res:program/{program_id} ; bansos:validasiPenerima res:penerima/{penerima_id} .
+source       SELECT * FROM kemensos.eligibility_check
+
+mappingId    MAP-PENDUDUK
+target       res:penduduk/{nik} a bansos:Penduduk ; bansos:nik {nik} ; bansos:namaPenduduk {nama} ; bansos:tanggalLahir {tanggal_lahir}^^xsd:date ; bansos:pekerjaan {pekerjaan} ; bansos:penghasilan {penghasilan}^^xsd:decimal ; bansos:statusHidup {status_hidup} ; bansos:tergabungDalamKeluarga res:keluarga/{no_kk} .
+source       SELECT * FROM dukcapil.master_penduduk
+
+mappingId    MAP-KELUARGA
+target       res:keluarga/{no_kk} a bansos:KeluargaKependudukan ; bansos:noKK {no_kk} ; bansos:berdomisiliDi res:wilayah/{wilayah_id} .
+source       SELECT * FROM dukcapil.master_keluarga
+
+mappingId    MAP-WILAYAH
+target       res:wilayah/{wilayah_id} a bansos:Wilayah ; bansos:wilayahId {wilayah_id}^^xsd:integer ; bansos:provinsi {provinsi} ; bansos:kabupaten {kabupaten} ; bansos:kecamatan {kecamatan} ; bansos:desa {desa} .
+source       SELECT * FROM dukcapil.master_wilayah
+
+mappingId    LINK-PENERIMA-KE-DUKCAPIL
+target       res:penerima/{penerima_id} bansos:memilikDataKependudukan res:penduduk/{nik} .
+source       SELECT penerima_id, nik FROM kemensos.penerima_manfaat
+
+]]

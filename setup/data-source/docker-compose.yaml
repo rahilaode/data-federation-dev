@@ -1,0 +1,59 @@
+version: '3.4'
+services:
+  pgsql:
+    image: postgres:13.2
+    container_name: datasources-pgsql
+    ports:
+      - 15433:5432
+    networks:
+      - ascam-networks
+    volumes:
+      - ./pgsql:/docker-entrypoint-initdb.d
+      - data-pgsql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: kemensos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    
+  mysql:
+    image: mysql:8.0
+    container_name: datasources-mysql
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - '0.0.0.0:13306:3306'
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - ascam-networks
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - data-mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: dukcapil
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: mysql
+      MYSQL_ROOT_PASSWORD: mysql
+      
+  # sqlserver:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   container_name: datasources-sqlserver
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+  #     MSSQL_PID: Developer
+  #   ports:
+  #     - "1433:1433"
+  #   networks:
+  #     - ascam-networks
+  #   volumes:
+  #     - sqlserverdata:/var/opt/mssql
+
+networks:
+  ascam-networks:
+    external: True
+
+volumes:
+  data-pgsql:
+  data-mysql:
+  # sqlserverdata:

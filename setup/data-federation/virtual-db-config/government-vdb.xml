@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vdb name="government" version="1">
+    <model visible="true" name="dukcapil">
+        <source name="dukcapil" translator-name="mysql5" connection-jndi-name="java:/mysql-dukcapil"/>
+        <metadata type="DDL"><![CDATA[
+                CREATE FOREIGN TABLE master_wilayah (
+                  wilayah_id integer not null primary key,
+                  provinsi varchar(100) not null,
+                  kabupaten varchar(100) not null,
+                  kecamatan varchar(100) not null,
+                  desa varchar(100) not null
+                 )OPTIONS(UPDATABLE 'FALSE');
+
+                CREATE FOREIGN TABLE master_keluarga (
+                  no_kk varchar(16) not null primary key,
+                  wilayah_id integer not null
+                )OPTIONS(UPDATABLE 'FALSE');
+
+                CREATE FOREIGN TABLE master_penduduk (
+                  nik  varchar(16) not null primary key,
+                  no_kk varchar(16) not null,
+                  nama varchar(100) not null,
+                  tanggal_lahir date not null,
+                  pekerjaan varchar(100) not null,
+                  penghasilan integer not null,
+                  status_hidup varchar(20) not null
+                 )OPTIONS(UPDATABLE 'FALSE');
+            ]]></metadata>   
+    </model>
+    
+    <model visible="true" name="kemensos">
+        <source name="kemensos" translator-name="postgresql" connection-jndi-name="java:/pgsql-kemensos"/>
+        <metadata type="DDL"><![CDATA[
+                CREATE FOREIGN TABLE program_bansos(
+                  program_id integer not null primary key,
+                  nama_program varchar(100) not null,
+                  tipe_program varchar(50) not null,
+                  nominal integer not null
+                )OPTIONS(UPDATABLE 'FALSE');
+
+                CREATE FOREIGN TABLE penerima_manfaat(
+                  penerima_id integer not null primary key,
+                  nik varchar(16) not null,
+                  nama_lengkap varchar(100) not null,
+                  tgl_lahir date not null,
+                  status_ekonomi varchar(50) not null,
+                  no_kartu_keluarga varchar(16) not null,
+                  aktif boolean not null
+                )OPTIONS(UPDATABLE 'FALSE');
+
+                CREATE FOREIGN TABLE transaksi_bansos(
+                  transaksi_id integer not null primary key,
+                  program_id integer not null,
+                  penerima_id integer not null,
+                  periode varchar(7) not null,
+                  status varchar(50) not null
+                )OPTIONS(UPDATABLE 'FALSE');
+
+                CREATE FOREIGN TABLE eligibility_check(
+                  check_id integer not null primary key,
+                  program_id integer not null,
+                  penerima_id integer not null,
+                  status_eligible varchar(20) not null,
+                  alasan varchar(255)
+                )OPTIONS(UPDATABLE 'FALSE');
+            ]]></metadata>                
+    </model>
+</vdb>

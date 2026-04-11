@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+  pgsql:
+    image: debezium/postgres:15
+    container_name: datasources-pgsql
+    command: postgres -c wal_level=logical -c max_wal_senders=10 -c max_replication_slots=10
+    ports:
+      - 15433:5432
+    networks:
+      - ascam-networks
+    volumes:
+      - ./pgsql:/docker-entrypoint-initdb.d
+      - data-pgsql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: kemensos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    
+  mysql:
+    image: quay.io/debezium/example-mysql:2.0
+    container_name: datasources-mysql
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - '0.0.0.0:13306:3306'
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - ascam-networks
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - data-mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: dukcapil
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: mysql
+      MYSQL_ROOT_PASSWORD: mysql
+
+networks:
+  ascam-networks:
+    external: True
+
+volumes:
+  data-pgsql:
+  data-mysql:

@@ -1,0 +1,433 @@
+@prefix :        <http://bansos.go.id/ontology#> .
+@prefix bansos:  <http://bansos.go.id/ontology/> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# ================================================================
+# ONTOLOGY METADATA
+# ================================================================
+
+<http://bansos.go.id/ontology>
+    a                       owl:Ontology ;
+    rdfs:label              "Ontologi Sistem Bantuan Sosial Indonesia"@id ;
+    rdfs:label              "Indonesian Social Assistance System Ontology"@en ;
+    rdfs:comment            "Ontologi untuk mengintegrasikan data Kemensos (PostgreSQL) dan Dukcapil (MySQL) dalam sistem bansos."@id ;
+    dcterms:creator         "Tim Integrasi Data Bansos" ;
+    dcterms:created         "2026-04-01"^^xsd:date ;
+    owl:versionInfo         "1.0.0" .
+
+
+# ================================================================
+# CLASSES
+# ================================================================
+
+bansos:ProgramBansos
+    a                   owl:Class ;
+    rdfs:label          "Program Bantuan Sosial"@id ;
+    rdfs:label          "Social Assistance Program"@en ;
+    rdfs:comment        "Program bantuan sosial yang dikelola oleh Kementerian Sosial."@id .
+
+bansos:PenerimaBansos
+    a                   owl:Class ;
+    rdfs:label          "Penerima Manfaat Bansos"@id ;
+    rdfs:label          "Social Assistance Beneficiary"@en ;
+    rdfs:comment        "Individu yang terdaftar sebagai penerima manfaat program bansos."@id .
+
+bansos:Penduduk
+    a                   owl:Class ;
+    rdfs:label          "Penduduk"@id ;
+    rdfs:label          "Resident"@en ;
+    rdfs:comment        "Data kependudukan dari sistem Dukcapil."@id .
+
+bansos:TransaksiBansos
+    a                   owl:Class ;
+    rdfs:label          "Transaksi Penyaluran Bansos"@id ;
+    rdfs:label          "Social Assistance Transaction"@en ;
+    rdfs:comment        "Rekaman penyaluran bantuan sosial kepada penerima manfaat."@id .
+
+bansos:EligibilityCheck
+    a                   owl:Class ;
+    rdfs:label          "Pemeriksaan Kelayakan"@id ;
+    rdfs:label          "Eligibility Check"@en ;
+    rdfs:comment        "Hasil validasi kelayakan penerima manfaat terhadap program bansos."@id .
+
+bansos:KeluargaKependudukan
+    a                   owl:Class ;
+    rdfs:label          "Kartu Keluarga"@id ;
+    rdfs:label          "Family Card"@en ;
+    rdfs:comment        "Unit keluarga berdasarkan data Kartu Keluarga (KK) Dukcapil."@id .
+
+bansos:Wilayah
+    a                   owl:Class ;
+    rdfs:label          "Wilayah Administratif"@id ;
+    rdfs:label          "Administrative Region"@en ;
+    rdfs:comment        "Wilayah administratif meliputi provinsi, kabupaten, kecamatan, dan desa."@id .
+
+bansos:RiwayatPerubahan
+    a                   owl:Class ;
+    rdfs:label          "Riwayat Perubahan Data"@id ;
+    rdfs:label          "Data Change History"@en ;
+    rdfs:comment        "Catatan perubahan data kependudukan dalam sistem Dukcapil."@id .
+
+# --- Subclass Tipe Program ---
+
+bansos:ProgramPKH
+    a                   owl:Class ;
+    rdfs:subClassOf     bansos:ProgramBansos ;
+    rdfs:label          "Program Keluarga Harapan"@id ;
+    skos:altLabel       "PKH"@id .
+
+bansos:ProgramBPNT
+    a                   owl:Class ;
+    rdfs:subClassOf     bansos:ProgramBansos ;
+    rdfs:label          "Bantuan Pangan Non Tunai"@id ;
+    skos:altLabel       "BPNT"@id .
+
+bansos:ProgramBST
+    a                   owl:Class ;
+    rdfs:subClassOf     bansos:ProgramBansos ;
+    rdfs:label          "Bantuan Sosial Tunai"@id ;
+    skos:altLabel       "BST"@id .
+
+
+# ================================================================
+# OBJECT PROPERTIES
+# ================================================================
+
+bansos:menerimaBansos
+    a                   owl:ObjectProperty ;
+    rdfs:label          "menerima bansos"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          bansos:TransaksiBansos ;
+    owl:inverseOf       bansos:disalurkanKepada .
+
+bansos:disalurkanKepada
+    a                   owl:ObjectProperty ;
+    rdfs:label          "disalurkan kepada"@id ;
+    rdfs:domain         bansos:TransaksiBansos ;
+    rdfs:range          bansos:PenerimaBansos .
+
+bansos:terdaftarPadaProgram
+    a                   owl:ObjectProperty ;
+    rdfs:label          "terdaftar pada program"@id ;
+    rdfs:domain         bansos:TransaksiBansos ;
+    rdfs:range          bansos:ProgramBansos .
+
+bansos:divalidasiDalam
+    a                   owl:ObjectProperty ;
+    rdfs:label          "divalidasi dalam program"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          bansos:ProgramBansos .
+
+bansos:validasiPenerima
+    a                   owl:ObjectProperty ;
+    rdfs:label          "validasi untuk penerima"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          bansos:PenerimaBansos .
+
+bansos:memilikDataKependudukan
+    a                   owl:ObjectProperty ;
+    rdfs:label          "memiliki data kependudukan"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          bansos:Penduduk ;
+    rdfs:comment        "Relasi antara penerima bansos (Kemensos) dan data Dukcapil melalui NIK."@id .
+
+bansos:tergabungDalamKeluarga
+    a                   owl:ObjectProperty ;
+    rdfs:label          "tergabung dalam keluarga"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          bansos:KeluargaKependudukan .
+
+bansos:berdomisiliDi
+    a                   owl:ObjectProperty ;
+    rdfs:label          "berdomisili di"@id ;
+    rdfs:domain         bansos:KeluargaKependudukan ;
+    rdfs:range          bansos:Wilayah .
+
+bansos:memilikiRiwayatPerubahan
+    a                   owl:ObjectProperty ;
+    rdfs:label          "memiliki riwayat perubahan"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          bansos:RiwayatPerubahan .
+
+
+# ================================================================
+# DATA PROPERTIES — ProgramBansos
+# ================================================================
+
+bansos:programId
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "ID Program"@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:integer .
+
+bansos:namaProgram
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nama Program"@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:string .
+
+bansos:tipeProgram
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Tipe Program"@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:string .
+
+bansos:nominal
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nominal Bantuan"@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:decimal .
+
+bansos:periodeMulai
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Periode Mulai"@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:date .
+
+bansos:periodeSelesai
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Periode Selesai"@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:date .
+
+
+# ================================================================
+# DATA PROPERTIES — PenerimaBansos
+# ================================================================
+
+bansos:penerimaId
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "ID Penerima"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          xsd:integer .
+
+bansos:nik
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "NIK"@id ;
+    rdfs:comment        "Nomor Induk Kependudukan (16 digit)."@id ;
+    rdfs:domain         [ owl:unionOf ( bansos:PenerimaBansos bansos:Penduduk bansos:RiwayatPerubahan ) ] ;
+    rdfs:range          xsd:string .
+
+bansos:namaLengkap
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nama Lengkap (Kemensos)"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          xsd:string .
+
+bansos:tglLahir
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Tanggal Lahir (Kemensos)"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          xsd:date .
+
+bansos:statusEkonomi
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Status Ekonomi"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          xsd:string .
+
+bansos:noKartuKeluarga
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nomor Kartu Keluarga (Kemensos)"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          xsd:string .
+
+bansos:aktif
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Status Aktif"@id ;
+    rdfs:domain         bansos:PenerimaBansos ;
+    rdfs:range          xsd:boolean .
+
+
+# ================================================================
+# DATA PROPERTIES — TransaksiBansos
+# ================================================================
+
+bansos:transaksiId
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "ID Transaksi"@id ;
+    rdfs:domain         bansos:TransaksiBansos ;
+    rdfs:range          xsd:integer .
+
+bansos:periodeTransaksi
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Periode Transaksi (YYYY-MM)"@id ;
+    rdfs:domain         bansos:TransaksiBansos ;
+    rdfs:range          xsd:string .
+
+bansos:statusTransaksi
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Status Transaksi"@id ;
+    rdfs:comment        "Nilai: TERSALURKAN | GAGAL | PENDING"@id ;
+    rdfs:domain         bansos:TransaksiBansos ;
+    rdfs:range          xsd:string .
+
+bansos:createdAt
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Waktu Dibuat"@id ;
+    rdfs:domain         [ owl:unionOf ( bansos:TransaksiBansos bansos:KeluargaKependudukan bansos:Penduduk ) ] ;
+    rdfs:range          xsd:dateTime .
+
+
+# ================================================================
+# DATA PROPERTIES — EligibilityCheck
+# ================================================================
+
+bansos:checkId
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "ID Pemeriksaan"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          xsd:integer .
+
+bansos:statusEligible
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Status Kelayakan"@id ;
+    rdfs:comment        "Nilai: ELIGIBLE | TIDAK ELIGIBLE"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          xsd:string .
+
+bansos:alasan
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Alasan Kelayakan"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          xsd:string .
+
+bansos:validatedAt
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Waktu Validasi"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          xsd:dateTime .
+
+bansos:validatedBy
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Divalidasi Oleh"@id ;
+    rdfs:domain         bansos:EligibilityCheck ;
+    rdfs:range          xsd:string .
+
+
+# ================================================================
+# DATA PROPERTIES — Penduduk (Dukcapil)
+# ================================================================
+
+bansos:namaPenduduk
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nama Penduduk (Dukcapil)"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          xsd:string .
+
+bansos:tanggalLahir
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Tanggal Lahir (Dukcapil)"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          xsd:date .
+
+bansos:pekerjaan
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Pekerjaan"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          xsd:string .
+
+bansos:penghasilan
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Penghasilan"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          xsd:decimal .
+
+bansos:statusHidup
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Status Hidup"@id ;
+    rdfs:domain         bansos:Penduduk ;
+    rdfs:range          xsd:string .
+
+bansos:noKK
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nomor KK (Dukcapil)"@id ;
+    rdfs:domain         [ owl:unionOf ( bansos:Penduduk bansos:KeluargaKependudukan ) ] ;
+    rdfs:range          xsd:string .
+
+
+# ================================================================
+# DATA PROPERTIES — Wilayah
+# ================================================================
+
+bansos:wilayahId
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "ID Wilayah"@id ;
+    rdfs:domain         bansos:Wilayah ;
+    rdfs:range          xsd:integer .
+
+bansos:provinsi
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Provinsi"@id ;
+    rdfs:domain         bansos:Wilayah ;
+    rdfs:range          xsd:string .
+
+bansos:kabupaten
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Kabupaten/Kota"@id ;
+    rdfs:domain         bansos:Wilayah ;
+    rdfs:range          xsd:string .
+
+bansos:kecamatan
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Kecamatan"@id ;
+    rdfs:domain         bansos:Wilayah ;
+    rdfs:range          xsd:string .
+
+bansos:desa
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Desa/Kelurahan"@id ;
+    rdfs:domain         bansos:Wilayah ;
+    rdfs:range          xsd:string .
+
+
+# ================================================================
+# DATA PROPERTIES — RiwayatPerubahan
+# ================================================================
+
+bansos:riwayatId
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "ID Riwayat"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:integer .
+
+bansos:kolomDiubah
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Kolom yang Diubah"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:string .
+
+bansos:nilaiLama
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nilai Lama"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:string .
+
+bansos:nilaiLama
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nilai Lama"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:string .
+
+bansos:nilaiBaru
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Nilai Baru"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:string .
+
+bansos:diubahPada
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Diubah Pada"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:dateTime .
+
+bansos:diubahOleh
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Diubah Oleh"@id ;
+    rdfs:domain         bansos:RiwayatPerubahan ;
+    rdfs:range          xsd:string .

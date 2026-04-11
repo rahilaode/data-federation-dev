@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  ontop-teiid:
+    image: ontop/ontop-endpoint:4.1.1
+    container_name: vkg-system-ontop-teiid
+    restart: unless-stopped
+    environment:
+      ONTOP_ONTOLOGY_FILE: /opt/ontop/input/ontology_file.ttl
+      ONTOP_MAPPING_FILE: /opt/ontop/input/mapping.obda
+      ONTOP_PROPERTIES_FILE: /opt/ontop/input/government.docker.properties
+      ONTOP_CORS_ALLOWED_ORIGINS: '*'
+      ONTOP_DEV_MODE: 'true'
+    ports:
+      - '0.0.0.0:8080:8080'
+    networks:
+      - ascam-networks
+    volumes:
+      - ./config:/opt/ontop/input
+      - ./jdbc:/opt/ontop/jdbc
+      - ./wait-for-it:/opt/wait-for-it
+    entrypoint: [
+        "/opt/wait-for-it/wait-for-it.sh",
+        "teiid:31000",
+        "--timeout=0",
+        "--strict",
+        "--",
+        "/opt/ontop/entrypoint.sh" ]
+
+networks:
+  ascam-networks:
+    external: True

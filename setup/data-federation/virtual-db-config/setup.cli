@@ -1,0 +1,13 @@
+connect
+
+# Deploy JDBC Drivers
+deploy /opt/jboss/jdbc/mysql-connector-java-8.0.21.jar   
+/subsystem=datasources/data-source=mysql-ds:add(jndi-name=java:/mysql-dukcapil, enabled=true, use-java-context=true, driver-name=mysql-connector-java-8.0.21.jar, connection-url="jdbc:mysql://datasources-mysql:3306/dukcapil",user-name=mysql, password=mysql)
+/subsystem=datasources/data-source=mysql-ds:enable
+
+deploy /opt/jboss/jdbc/postgresql-42.2.14.jre7.jar
+/subsystem=datasources/data-source=pgsql-ds:add(jndi-name=java:/pgsql-kemensos, enabled=true, use-java-context=true, driver-name=postgresql-42.2.14.jre7.jar, connection-url="jdbc:postgresql://datasources-pgsql:5432/kemensos",user-name=postgres, password=postgres)
+/subsystem=datasources/data-source=pgsql-ds:enable
+
+# Deploy VDBs
+deploy /opt/jboss/data-federation/government-vdb.xml

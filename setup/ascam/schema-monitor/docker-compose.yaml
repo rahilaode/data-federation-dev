@@ -1,0 +1,59 @@
+version: '3.8'
+services:
+  zookeeper:
+    image: quay.io/debezium/zookeeper:3.1
+    container_name: ascam-sm-zookeeper
+    ports: 
+      - 2181:2181
+    networks:
+      - ascam-networks
+
+  kafka:
+    image: quay.io/debezium/kafka:3.1
+    container_name: ascam-sm-kafka
+    depends_on: [zookeeper]
+    ports: 
+      - 29092:29092
+    networks:
+      - ascam-networks
+    environment:
+      ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  connect:
+    image: quay.io/debezium/connect:3.1
+    container_name: ascam-sm-connector
+    depends_on: [kafka]
+    ports: 
+      - 8083:8083
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    networks:
+      - ascam-networks
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ascam-sm-kafka-ui
+    depends_on: [kafka]
+    ports:
+      - 8081:8080
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - ascam-networks
+
+networks:
+  ascam-networks:
+    external: True

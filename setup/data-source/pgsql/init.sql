@@ -156,6 +156,8 @@ CREATE TABLE IF NOT EXISTS schema_monitor.ddl_event_log (
 COMMENT ON TABLE schema_monitor.ddl_event_log
     IS 'Log event ALTER TABLE: hanya ADD COLUMN, DROP COLUMN, RENAME COLUMN.';
 
+-- Pastikan log ini memiliki REPLICA IDENTITY FULL agar bisa capture perubahan dengan wal2json
+ALTER TABLE schema_monitor.ddl_event_log REPLICA IDENTITY FULL;
 
 -- ============================================================
 -- 3. FUNGSI EVENT TRIGGER

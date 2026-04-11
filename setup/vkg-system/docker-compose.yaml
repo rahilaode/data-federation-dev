@@ -1,4 +1,4 @@
-version: '3.4'
+version: '3.8'
 services:
   ontop-teiid:
     image: ontop/ontop-endpoint:4.1.1

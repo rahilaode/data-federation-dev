@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS schema_monitor.ddl_event_log (
     alter_type   VARCHAR(32),        -- 'ADD COLUMN' | 'DROP COLUMN' | 'RENAME COLUMN'
     column_name  VARCHAR(256),       -- nama kolom yang terlibat
     ddl_command  TEXT,               -- teks DDL lengkap
-    is_regulated BOOLEAN DEFAULT FALSE,
+    is_regulated BOOLEAN DEFAULT TRUE,
     captured_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

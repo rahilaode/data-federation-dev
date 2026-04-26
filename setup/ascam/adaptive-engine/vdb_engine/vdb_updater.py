@@ -233,6 +233,39 @@ class VDBUpdater:
                  old_col, new_col, model_name, table_name)
         return True
 
+
+    # ── Public helper: ambil daftar kolom dari tabel ─────────
+    def get_columns(self, model_name: str, table_name: str) -> list[str]:
+        """
+        Kembalikan daftar nama kolom dari CREATE FOREIGN TABLE di VDB.
+        Panggil SEBELUM rename_column() agar daftar masih pakai nama lama.
+        """
+        cdata, _, _ = self._get_cdata(model_name)
+        if cdata is None:
+            log.warning('[VDB] Model %s tidak ditemukan untuk get_columns', model_name)
+            return []
+        table_block = _get_table_block(cdata, table_name)
+        if table_block is None:
+            log.warning('[VDB] Tabel %s tidak ditemukan untuk get_columns', table_name)
+            return []
+        import re as _re
+        body_match = _re.search(
+            r'CREATE\s+FOREIGN\s+TABLE\s+\S+\s*\((.*?)\)\s*OPTIONS',
+            table_block, _re.DOTALL | _re.IGNORECASE,
+        )
+        if not body_match:
+            return []
+        columns = []
+        for line in body_match.group(1).splitlines():
+            line = line.strip().rstrip(',')
+            if not line:
+                continue
+            col_name = line.split()[0].strip()
+            if col_name:
+                columns.append(col_name)
+        log.info('[VDB] Kolom %s.%s: %s', model_name, table_name, columns)
+        return columns
+
     # ─────────────────────────────────────────────────────────
     # Save
     # ─────────────────────────────────────────────────────────

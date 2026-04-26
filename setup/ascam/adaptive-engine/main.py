@@ -17,9 +17,9 @@ from config.settings      import (KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPICS,
                                    TABLE_TO_CLASS, TABLE_TO_VDB_MODEL)
 from pattern_library.patterns      import (get_pattern, sql_type_to_xsd,
                                    column_to_property)
-from pattern_library.ddl_parser import (parse_ddl, extract_event)
-from mapping_engine.obda_updater       import OBDAUpdater
-from mapping_engine.ttl_updater import TTLUpdater
+from pattern_library.ddl_parser import parse_ddl, extract_event
+from mapping_engine.obda_updater import OBDAUpdater
+from mapping_engine.ttl_updater  import TTLUpdater
 from vdb_engine.vdb_updater           import VDBUpdater
 from vdb_engine.container_restarter import restart_all, restart_ontop_only
 
@@ -93,7 +93,23 @@ def process_event(msg_dict: dict):
         old_col = parsed['old_column']
         new_col = parsed['new_column']
 
-        obda_changed = obda.alias_column(mapping_id, old_col, new_col)
+        # Ambil daftar kolom dari VDB SEBELUM rename —
+        # dibutuhkan alias_column() untuk expand SELECT * menjadi eksplisit.
+        # Urutan wajib: get_columns() → alias_column() → rename_column()
+        all_columns: list[str] = []
+        if vdb:
+            all_columns = vdb.get_columns(vdb_model, table_name)
+            if not all_columns:
+                log.warning(
+                    '[Main] get_columns() kosong untuk %s.%s — '
+                    'alias_column() pakai fallback subquery.',
+                    vdb_model, table_name
+                )
+
+        obda_changed = obda.alias_column(
+            mapping_id, old_col, new_col,
+            all_columns=all_columns or None,
+        )
 
         if vdb:
             vdb_changed = vdb.rename_column(vdb_model, table_name, old_col, new_col)

@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS ddl_event_log (
     alter_type   VARCHAR(32),
     column_name  VARCHAR(256),
     ddl_command  TEXT,
-    is_regulated TINYINT(1) DEFAULT 0,
+    is_regulated TINYINT(1) DEFAULT 1,
     captured_at  DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='Log event ALTER TABLE: hanya ADD COLUMN, DROP COLUMN, RENAME COLUMN.';

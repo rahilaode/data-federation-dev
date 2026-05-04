@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  adaptive-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ascam-adaptive-engine
+    restart: unless-stopped
+    networks:
+      - ascam-networks
+    volumes:
+      # Config Ontop: mapping.obda dan ontology_file.ttl
+      - ../../vkg-system/config:/opt/ontop/input
+
+      # Config Teiid: government-vdb.xml
+      - ../../data-federation/virtual-db-config:/opt/teiid/data-federation
+
+      # Docker socket untuk restart container
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Override jika nama container berbeda
+      ONTOP_CONTAINER_NAME: vkg-system-ontop-teiid
+      TEIID_CONTAINER_NAME: data-federation-teiid
+
+networks:
+  ascam-networks:
+    external: true

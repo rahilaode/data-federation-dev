@@ -29,3 +29,7 @@ curl -X POST -H "Content-Type: application/json" \
      --data @./setup/ascam/schema-monitor/register-mysql.json \
      http://localhost:8083/connectors
 
+
+# ascam adaptive engine
+docker-compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml down -v
+docker-compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml up --build --detach

@@ -10,7 +10,7 @@ ENV TEIID_VERSION 16.0.0
 
 # Download and unzip Teiid server
 RUN cd $JBOSS_HOME \
-    && curl -O https://oss.sonatype.org/service/local/repositories/releases/content/org/teiid/wildfly/teiid-wildfly/$TEIID_VERSION/teiid-wildfly-$TEIID_VERSION-dist.zip \
+    && curl -O https://repo1.maven.org/maven2/org/teiid/wildfly/teiid-wildfly/$TEIID_VERSION/teiid-wildfly-$TEIID_VERSION-dist.zip \
     && bsdtar -xf teiid-wildfly-$TEIID_VERSION-dist.zip \
     && chmod +x $JBOSS_HOME/bin/*.sh \
     && rm teiid-wildfly-$TEIID_VERSION-dist.zip

@@ -10,6 +10,18 @@
 # ================================================================
 # ONTOLOGY METADATA
 # ================================================================
+#
+# CATATAN REVISI (v1.0.1):
+#   Ontologi ini disesuaikan agar patuh penuh pada profil OWL 2 QL.
+#   Perubahan dari v1.0.0:
+#   (1) Menghapus deklarasi rdfs:domain berbentuk owl:unionOf pada
+#       properti bansos:nik, bansos:createdAt, dan bansos:noKK.
+#       Disjungsi (owl:unionOf) tidak diperbolehkan di OWL 2 QL, dan
+#       tipe individu untuk ketiga properti tersebut sudah ditegaskan
+#       melalui mapping (mapping.obda), sehingga penghapusan domain
+#       tidak menghilangkan informasi apa pun yang diperlukan OBDA.
+#   (2) Menghapus deklarasi bansos:nilaiLama yang tertulis ganda.
+# ================================================================
 
 <http://bansos.go.id/ontology>
     a                       owl:Ontology ;
@@ -18,7 +30,7 @@
     rdfs:comment            "Ontologi untuk mengintegrasikan data Kemensos (PostgreSQL) dan Dukcapil (MySQL) dalam sistem bansos."@id ;
     dcterms:creator         "Tim Integrasi Data Bansos" ;
     dcterms:created         "2026-04-01"^^xsd:date ;
-    owl:versionInfo         "1.0.0" .
+    owl:versionInfo         "1.0.1" .
 
 
 # ================================================================
@@ -206,11 +218,13 @@ bansos:penerimaId
     rdfs:domain         bansos:PenerimaBansos ;
     rdfs:range          xsd:integer .
 
+# CATATAN: bansos:nik dipakai lintas kelas (PenerimaBansos, Penduduk,
+# RiwayatPerubahan). Karena OWL 2 QL melarang union pada domain, domain
+# sengaja tidak dideklarasikan; tipe individu ditegaskan oleh mapping.
 bansos:nik
     a                   owl:DatatypeProperty ;
     rdfs:label          "NIK"@id ;
-    rdfs:comment        "Nomor Induk Kependudukan (16 digit)."@id ;
-    rdfs:domain         [ owl:unionOf ( bansos:PenerimaBansos bansos:Penduduk bansos:RiwayatPerubahan ) ] ;
+    rdfs:comment        "Nomor Induk Kependudukan (16 digit). Dipakai oleh PenerimaBansos, Penduduk, dan RiwayatPerubahan; domain tidak dideklarasikan agar patuh OWL 2 QL."@id ;
     rdfs:range          xsd:string .
 
 bansos:namaLengkap
@@ -267,10 +281,13 @@ bansos:statusTransaksi
     rdfs:domain         bansos:TransaksiBansos ;
     rdfs:range          xsd:string .
 
+# CATATAN: bansos:createdAt dipakai lintas kelas (TransaksiBansos,
+# KeluargaKependudukan, Penduduk). Domain tidak dideklarasikan agar
+# patuh OWL 2 QL (union domain dilarang).
 bansos:createdAt
     a                   owl:DatatypeProperty ;
     rdfs:label          "Waktu Dibuat"@id ;
-    rdfs:domain         [ owl:unionOf ( bansos:TransaksiBansos bansos:KeluargaKependudukan bansos:Penduduk ) ] ;
+    rdfs:comment        "Dipakai oleh TransaksiBansos, KeluargaKependudukan, dan Penduduk; domain tidak dideklarasikan agar patuh OWL 2 QL."@id ;
     rdfs:range          xsd:dateTime .
 
 
@@ -344,10 +361,12 @@ bansos:statusHidup
     rdfs:domain         bansos:Penduduk ;
     rdfs:range          xsd:string .
 
+# CATATAN: bansos:noKK dipakai lintas kelas (Penduduk, KeluargaKependudukan).
+# Domain tidak dideklarasikan agar patuh OWL 2 QL (union domain dilarang).
 bansos:noKK
     a                   owl:DatatypeProperty ;
     rdfs:label          "Nomor KK (Dukcapil)"@id ;
-    rdfs:domain         [ owl:unionOf ( bansos:Penduduk bansos:KeluargaKependudukan ) ] ;
+    rdfs:comment        "Dipakai oleh Penduduk dan KeluargaKependudukan; domain tidak dideklarasikan agar patuh OWL 2 QL."@id ;
     rdfs:range          xsd:string .
 
 
@@ -399,12 +418,6 @@ bansos:riwayatId
 bansos:kolomDiubah
     a                   owl:DatatypeProperty ;
     rdfs:label          "Kolom yang Diubah"@id ;
-    rdfs:domain         bansos:RiwayatPerubahan ;
-    rdfs:range          xsd:string .
-
-bansos:nilaiLama
-    a                   owl:DatatypeProperty ;
-    rdfs:label          "Nilai Lama"@id ;
     rdfs:domain         bansos:RiwayatPerubahan ;
     rdfs:range          xsd:string .
 

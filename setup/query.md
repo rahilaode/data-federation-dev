@@ -1,5 +1,5 @@
 ### 1. Integrasi Data Kemensos & Dukcapil
-Query ini mengambil nama dari sistem Kemensos dan mencocokkannya dengan data pekerjaan serta penghasilan dari sistem Dukcapil. Ini adalah inti dari integrasi data Anda.
+Query ini mengambil nama dari sistem Kemensos dan mencocokkannya dengan data pekerjaan serta penghasilan dari sistem Dukcapil. Ini adalah inti dari integrasi data.
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
@@ -20,7 +20,7 @@ WHERE {
 ---
 
 ### 2. Mencari Penerima di Wilayah Tertentu
-Misalkan Anda ingin melihat siapa saja penerima bansos yang berdomisili di Provinsi **"Jawa Barat"**. Query ini akan menelusuri dari tabel Kemensos ke tabel Wilayah di MySQL.
+Misalkan Anda ingin melihat siapa saja penerima bansos yang berdomisili di Provinsi **"Sulawesi Selatan"**. Query ini akan menelusuri dari tabel Kemensos ke tabel Wilayah di MySQL.
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
@@ -35,7 +35,7 @@ WHERE {
   ?penduduk bansos:tergabungDalamKeluarga ?kk .
   ?kk bansos:berdomisiliDi ?wilayah .
   
-  ?wilayah bansos:provinsi "Jawa Barat" ;
+  ?wilayah bansos:provinsi "Sulawesi Selatan" ;
            bansos:desa ?desa ;
            bansos:kecamatan ?kecamatan .
 }
@@ -111,7 +111,39 @@ GROUP BY ?namaProgram
 
 ### Tips Menjalankan Query:
 1.  **Gunakan Ontop**: Jika Anda menggunakan **Ontop Protege**, pastikan tab "Ontop SPARQL" sudah aktif dan file `.obda` Anda sudah terhubung ke database virtual (Teiid/Government VDB).
-2.  **Case Sensitive**: Perhatikan bahwa nilai string di dalam `FILTER` (seperti "Jawa Barat") bersifat *case-sensitive* kecuali Anda menggunakan fungsi `LCASE()`.
+2.  **Case Sensitive**: Perhatikan bahwa nilai string di dalam `FILTER` (seperti "Sulawesi Selatan") bersifat *case-sensitive* kecuali Anda menggunakan fungsi `LCASE()`.
 3.  **Typo Ontology**: Pada query di atas, saya menggunakan `bansos:memilikDataKependudukan` (kurang huruf 'i' di akhir) sesuai dengan nama property yang Anda tulis di file `.ttl` tadi. Jika nanti Anda memperbaikinya di ontologi, pastikan di SPARQL juga diubah ya!
 
 Apakah ada skenario pengecekan data spesifik lainnya yang ingin Anda buatkan query-nya?
+
+PREFIX bansos: <http://bansos.go.id/ontology/>
+PREFIX : <http://bansos.go.id/ontology#>
+
+SELECT ?periodeTransaksi ?statusTransaksi ?tipeProgram ?namaProgram ?namaPenerima ?pekerjaan ?penghasilan ?tanggalLahir ?desa
+WHERE {
+  ?transaksiBansos a bansos:TransaksiBansos;
+                   bansos:periodeTransaksi ?periodeTransaksi ;
+                   bansos:terdaftarPadaProgram ?programBansos ;
+                   bansos:statusTransaksi ?statusTransaksi ;
+                   bansos:disalurkanKepada ?PenerimaBansos .
+  
+  ?programBansos a bansos:ProgramBansos ;
+                 bansos:tipeProgram ?tipeProgram ;
+                 bansos:namaProgram ?namaProgram .
+  
+  ?PenerimaBansos a bansos:PenerimaBansos ;
+                  bansos:namaLengkap ?namaPenerima ;
+                  bansos:memilikDataKependudukan ?penduduk .
+  
+  ?penduduk a bansos:Penduduk ;
+            bansos:pekerjaan ?pekerjaan ;
+            bansos:penghasilan ?penghasilan ;
+            bansos:tanggalLahir ?tanggalLahir ;
+            bansos:tergabungDalamKeluarga ?keluarga .
+  
+  ?keluarga a bansos:KeluargaKependudukan ;
+            bansos:berdomisiliDi ?wilayah .
+  
+  ?wilayah a bansos:Wilayah ;
+           bansos:desa ?desa .
+}	

@@ -149,7 +149,9 @@ def build_plan(after: dict, t_received: float, kafka_ts_ms: int | None) -> Adapt
     if obda_changed:
         changes.append(ArtifactChange('mapping', OBDA_PATH, obda.render()))
     if ttl_changed:
-        changes.append(ArtifactChange('ontology', TTL_PATH, ttl.render()))
+        col = parsed['column_name'] or f"{parsed['old_column']}->{parsed['new_column']}"
+        note = f"{pattern['pattern_id']} {alter_type} {vdb_model}.{table_name}.{col}"
+        changes.append(ArtifactChange('ontology', TTL_PATH, ttl.render(note)))
 
     timestamps = {'t_received': t_received, 't_planned': time.time()}
     t_source = _parse_captured_at(after.get('captured_at'))

@@ -43,6 +43,10 @@ def parse_ddl(ddl_command: str) -> dict | None:
 
     # Normalisasi whitespace
     ddl = ' '.join(ddl_command.split())
+    # Trigger PostgreSQL menangkap teks perintah apa adanya, termasuk ';'
+    # di akhir (terlihat pada skenario A001). Tanpa ini, tipe kolom terbaca
+    # sebagai 'integer;' dan jatuh ke tipe bawaan string.
+    ddl = ddl.rstrip().rstrip(';').rstrip()
 
     def clean(token: str) -> str:
         """Hapus backtick dan ambil bagian setelah titik (strip schema prefix)."""

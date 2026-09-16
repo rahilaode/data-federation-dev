@@ -157,12 +157,14 @@ def _durations(t: dict) -> dict:
 
     last = 't_verified' if 't_verified' in t else 't_ontop_ready'
     out = {
-        'detect'       : d('t_source', 't_kafka'),        # DDL -> event tercatat di Kafka
+        # t_source = captured_at di ddl_event_log (waktu pencatatan, bukan waktu
+        # DDL dieksekusi). Jeda DDL -> captured_at diukur dari sisi eksperimen.
+        'capture_to_kafka': d('t_source', 't_kafka'),
         'deliver'      : d('t_kafka', 't_received'),      # Kafka -> diterima Orchestrator
         'analyze_plan' : d('t_received', 't_planned'),
         'vdb_redeploy' : d('t_exec_start', 't_vdb_deployed'),
         'ontop_reload' : d('t_artifacts_written', 't_ontop_ready'),
         'verify'       : d('t_ontop_ready', 't_verified'),
-        'adapt_total'  : d('t_source', last),             # definisi Δt_adapt yang diusulkan
+        'adapt_total'  : d('t_source', last),             # captured_at -> F' siap
     }
     return {k: v for k, v in out.items() if v is not None}

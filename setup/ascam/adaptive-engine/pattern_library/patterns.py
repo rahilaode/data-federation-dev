@@ -76,14 +76,20 @@ def get_pattern(alter_type: str) -> dict | None:
 
 def sql_type_to_xsd(sql_type: str) -> str:
     """'VARCHAR(100)' → 'xsd:string'"""
-    base = sql_type.lower().split('(')[0].strip()
+    base = _base_type(sql_type)
     return SQL_TO_XSD.get(base, 'xsd:string')
 
 
 def sql_type_to_teiid(sql_type: str) -> str:
     """'VARCHAR(100)' → 'string'  (tipe untuk VDB DDL Teiid)"""
-    base = sql_type.lower().split('(')[0].strip()
+    base = _base_type(sql_type)
     return SQL_TO_TEIID.get(base, 'string')
+
+
+def _base_type(sql_type: str) -> str:
+    """'VARCHAR(100) NOT NULL' -> 'varchar'; 'integer;' -> 'integer'"""
+    head = sql_type.lower().strip().rstrip(';').split('(')[0].split()
+    return head[0] if head else ''
 
 
 def column_to_property(col_name: str) -> str:

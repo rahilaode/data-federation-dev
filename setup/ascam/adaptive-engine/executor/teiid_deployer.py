@@ -17,6 +17,14 @@ Dasar:
 
 Scanner diset ke manual deploy mode untuk XML (setup.cli), sehingga
 redeploy hanya terjadi ketika fungsi ini membuat marker .dodeploy.
+
+Mesin status marker (diverifikasi dari source WildFly Core 11.1.1.Final,
+FileSystemDeploymentService: handleSuccessResult() dan writeFailedMarker()):
+  sukses -> hapus .dodeploy & .failed, tulis .deployed dengan
+            mtime = mtime berkas VDB (setLastModified(doDeployTimestamp)),
+            lalu hapus .isdeploying
+  gagal  -> hapus .dodeploy, .deployed, .undeployed, lalu tulis .failed
+Proses selesai bila .dodeploy dan .isdeploying sudah tidak ada.
 """
 
 import logging
@@ -65,10 +73,19 @@ def redeploy_vdb(vdb_path: str | Path, timeout: int = 120,
                 reason = failed.read_text(encoding='utf-8', errors='ignore')[:500]
                 log.error('[Teiid] Deploy GAGAL: %s', reason)
                 return DeployResult(False, time.time() - t0, reason)
-            if deployed.exists() and deployed.stat().st_mtime >= t0 - 1:
+            if deployed.exists():
                 elapsed = time.time() - t0
+                # Pemeriksaan kewarasan: WildFly menyamakan mtime .deployed
+                # dengan mtime VDB yang di-deploy (presisi milidetik).
+                drift = abs(deployed.stat().st_mtime - vdb.stat().st_mtime)
+                if drift > 1.0:
+                    log.warning('[Teiid] mtime .deployed berbeda %.3f s dari VDB; '
+                                'kemungkinan marker bukan hasil deploy ini', drift)
+                    return DeployResult(False, elapsed, 'marker .deployed tidak cocok dengan VDB')
                 log.info('[Teiid] VDB ter-deploy dalam %.2f s', elapsed)
                 return DeployResult(True, elapsed)
+            return DeployResult(False, time.time() - t0,
+                                'scanner selesai tanpa .deployed maupun .failed')
         time.sleep(poll)
 
     return DeployResult(False, time.time() - t0,

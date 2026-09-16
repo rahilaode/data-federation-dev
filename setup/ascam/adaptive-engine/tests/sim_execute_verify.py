@@ -43,17 +43,22 @@ def scanner():
     vdb = f'{W}/deploy/government-vdb.xml'
     while True:
         if os.path.exists(vdb + '.dodeploy'):
-            os.remove(vdb + '.dodeploy'); open(vdb + '.isdeploying','w').close()
+            open(vdb + '.isdeploying','w').close()
             time.sleep(0.5)
             import xml.etree.ElementTree as ET
             try:
                 ET.parse(vdb)
                 if FAIL_DEPLOY['on']: raise RuntimeError('simulated failure')
                 DEPLOYED_VDB.clear(); DEPLOYED_VDB.update(vdb_tables(open(vdb).read()))
+                # tiru handleSuccessResult(): hapus .failed, tulis .deployed, mtime = mtime VDB
+                if os.path.exists(vdb + '.failed'): os.remove(vdb + '.failed')
                 open(vdb + '.deployed','w').write('government-vdb.xml')
+                m = os.path.getmtime(vdb); os.utime(vdb + '.deployed', (m, m))
             except Exception as e:
+                # tiru writeFailedMarker(): hapus .deployed, tulis .failed
+                if os.path.exists(vdb + '.deployed'): os.remove(vdb + '.deployed')
                 open(vdb + '.failed','w').write(str(e))
-            os.remove(vdb + '.isdeploying')
+            os.remove(vdb + '.dodeploy'); os.remove(vdb + '.isdeploying')
         time.sleep(0.1)
 
 # --- Ontop palsu: validasi mapping terhadap VDB aktif & skema fisik ---------

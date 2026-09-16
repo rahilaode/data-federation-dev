@@ -1,0 +1,225 @@
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix : <http://bansos.go.id/ontology#> .
+@prefix bansos: <http://bansos.go.id/ontology/> .
+@prefix res: <http://bansos.go.id/resource/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ==========================================
+# MAP-PROGRAM
+# ==========================================
+<#MapProgram> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/program/{program_id}" ;
+        rr:class bansos:ProgramBansos ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:programId ;
+        rr:objectMap [ rr:column "program_id" ; rr:datatype xsd:integer ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:namaProgram ;
+        rr:objectMap [ rr:column "nama_program" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:tipeProgram ;
+        rr:objectMap [ rr:column "tipe_program" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:nominal ;
+        rr:objectMap [ rr:column "nominal" ; rr:datatype xsd:decimal ]
+    ] .
+
+# ==========================================
+# MAP-PENERIMA
+# ==========================================
+<#MapPenerima> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM kemensos.penerima_manfaat" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ;
+        rr:class bansos:PenerimaBansos ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:penerimaId ;
+        rr:objectMap [ rr:column "penerima_id" ; rr:datatype xsd:integer ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:nik ;
+        rr:objectMap [ rr:column "nik" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:namaLengkap ;
+        rr:objectMap [ rr:column "nama_lengkap" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:tglLahir ;
+        rr:objectMap [ rr:column "tgl_lahir" ; rr:datatype xsd:date ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:statusEkonomi ;
+        rr:objectMap [ rr:column "status_ekonomi" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:aktif ;
+        rr:objectMap [ rr:column "aktif" ; rr:datatype xsd:boolean ]
+    ] .
+
+# ==========================================
+# MAP-TRANSAKSI
+# ==========================================
+<#MapTransaksi> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM kemensos.transaksi_bansos" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/transaksi/{transaksi_id}" ;
+        rr:class bansos:TransaksiBansos ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:transaksiId ;
+        rr:objectMap [ rr:column "transaksi_id" ; rr:datatype xsd:integer ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:periodeTransaksi ;
+        rr:objectMap [ rr:column "periode" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:statusTransaksi ;
+        rr:objectMap [ rr:column "status" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:terdaftarPadaProgram ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/program/{program_id}" ; rr:termType rr:IRI ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:disalurkanKepada ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ; rr:termType rr:IRI ]
+    ] .
+
+# ==========================================
+# MAP-ELIGIBILITY
+# ==========================================
+<#MapEligibility> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM kemensos.eligibility_check" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/check/{check_id}" ;
+        rr:class bansos:EligibilityCheck ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:checkId ;
+        rr:objectMap [ rr:column "check_id" ; rr:datatype xsd:integer ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:statusEligible ;
+        rr:objectMap [ rr:column "status_eligible" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:alasan ;
+        rr:objectMap [ rr:column "alasan" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:divalidasiDalam ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/program/{program_id}" ; rr:termType rr:IRI ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:validasiPenerima ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ; rr:termType rr:IRI ]
+    ] .
+
+# ==========================================
+# MAP-PENDUDUK
+# ==========================================
+<#MapPenduduk> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM dukcapil.master_penduduk" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/penduduk/{nik}" ;
+        rr:class bansos:Penduduk ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:nik ;
+        rr:objectMap [ rr:column "nik" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:namaPenduduk ;
+        rr:objectMap [ rr:column "nama" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:tanggalLahir ;
+        rr:objectMap [ rr:column "tanggal_lahir" ; rr:datatype xsd:date ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:pekerjaan ;
+        rr:objectMap [ rr:column "pekerjaan" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:penghasilan ;
+        rr:objectMap [ rr:column "penghasilan" ; rr:datatype xsd:decimal ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:statusHidup ;
+        rr:objectMap [ rr:column "status_hidup" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:tergabungDalamKeluarga ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/keluarga/{no_kk}" ; rr:termType rr:IRI ]
+    ] .
+
+# ==========================================
+# MAP-KELUARGA
+# ==========================================
+<#MapKeluarga> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM dukcapil.master_keluarga" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/keluarga/{no_kk}" ;
+        rr:class bansos:KeluargaKependudukan ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:noKK ;
+        rr:objectMap [ rr:column "no_kk" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:berdomisiliDi ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/wilayah/{wilayah_id}" ; rr:termType rr:IRI ]
+    ] .
+
+# ==========================================
+# MAP-WILAYAH
+# ==========================================
+<#MapWilayah> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM dukcapil.master_wilayah" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/wilayah/{wilayah_id}" ;
+        rr:class bansos:Wilayah ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:wilayahId ;
+        rr:objectMap [ rr:column "wilayah_id" ; rr:datatype xsd:integer ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:provinsi ;
+        rr:objectMap [ rr:column "provinsi" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:kabupaten ;
+        rr:objectMap [ rr:column "kabupaten" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:kecamatan ;
+        rr:objectMap [ rr:column "kecamatan" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:desa ;
+        rr:objectMap [ rr:column "desa" ]
+    ] .
+
+# ==========================================
+# LINK-PENERIMA-KE-DUKCAPIL
+# ==========================================
+<#MapLinkPenerimaDukcapil> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, nik FROM kemensos.penerima_manfaat" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:memilikDataKependudukan ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/penduduk/{nik}" ; rr:termType rr:IRI ]
+    ] .

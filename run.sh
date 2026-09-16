@@ -3,11 +3,12 @@
 # agar kegagalan tidak tertutup oleh langkah-langkah berikutnya.
 set -e
 
-# docker network create ascam-networks
+# Jaringan bersama semua stack (abaikan bila sudah ada, agar aman dengan set -e)
+docker network create ascam-networks >/dev/null 2>&1 || true
 
 # data source
-docker-compose -f ./setup/data-source/docker-compose.yaml down -v
-docker-compose -f ./setup/data-source/docker-compose.yaml up -d
+docker compose -f ./setup/data-source/docker-compose.yaml down -v
+docker compose -f ./setup/data-source/docker-compose.yaml up -d
 
 # data federation
 # Siapkan folder deployment scanner: bersihkan marker lama, lalu minta
@@ -20,8 +21,8 @@ touch "$DEPLOY_DIR"/government-vdb.xml.dodeploy
 # agar scanner bisa membuat/menghapus marker (cukup untuk lingkungan riset).
 chmod 777 "$DEPLOY_DIR"
 
-docker-compose -f ./setup/data-federation/docker-compose.yaml down -v
-docker-compose -f ./setup/data-federation/docker-compose.yaml up --build --detach
+docker compose -f ./setup/data-federation/docker-compose.yaml down -v
+docker compose -f ./setup/data-federation/docker-compose.yaml up --build --detach
 
 # tunggu VDB awal ter-deploy sebelum Ontop dinyalakan
 echo "Menunggu VDB government ter-deploy..."
@@ -39,12 +40,12 @@ if [ "$VDB_OK" -ne 1 ]; then
 fi
 
 # vkg-system
-docker-compose -f ./setup/vkg-system/docker-compose.yaml down -v
-docker-compose -f ./setup/vkg-system/docker-compose.yaml up --build --detach
+docker compose -f ./setup/vkg-system/docker-compose.yaml down -v
+docker compose -f ./setup/vkg-system/docker-compose.yaml up --build --detach
 
 # ascam schema monitor
-docker-compose -f ./setup/ascam/schema-monitor/docker-compose.yaml down -v
-docker-compose -f ./setup/ascam/schema-monitor/docker-compose.yaml up --build --detach
+docker compose -f ./setup/ascam/schema-monitor/docker-compose.yaml down -v
+docker compose -f ./setup/ascam/schema-monitor/docker-compose.yaml up --build --detach
 
 sleep 40
 
@@ -60,5 +61,5 @@ curl -X POST -H "Content-Type: application/json" \
 
 
 # ascam adaptive engine
-docker-compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml down -v
-docker-compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml up --build --detach
+docker compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml down -v
+docker compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml up --build --detach

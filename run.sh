@@ -1,3 +1,7 @@
+#!/usr/bin/env bash
+# Hentikan skrip segera bila ada perintah yang gagal (mis. build image),
+# agar kegagalan tidak tertutup oleh langkah-langkah berikutnya.
+set -e
 
 # docker network create ascam-networks
 
@@ -21,13 +25,18 @@ docker-compose -f ./setup/data-federation/docker-compose.yaml up --build --detac
 
 # tunggu VDB awal ter-deploy sebelum Ontop dinyalakan
 echo "Menunggu VDB government ter-deploy..."
+VDB_OK=0
 for i in $(seq 1 60); do
-  if [ -f "$DEPLOY_DIR"/government-vdb.xml.deployed ]; then echo "VDB ter-deploy."; break; fi
+  if [ -f "$DEPLOY_DIR"/government-vdb.xml.deployed ]; then VDB_OK=1; echo "VDB ter-deploy."; break; fi
   if [ -f "$DEPLOY_DIR"/government-vdb.xml.failed ]; then
     echo "Deploy VDB gagal:"; cat "$DEPLOY_DIR"/government-vdb.xml.failed; exit 1
   fi
   sleep 3
 done
+if [ "$VDB_OK" -ne 1 ]; then
+  echo "VDB belum ter-deploy setelah 180 detik. Periksa: docker logs data-federation-teiid"
+  exit 1
+fi
 
 # vkg-system
 docker-compose -f ./setup/vkg-system/docker-compose.yaml down -v

@@ -9,11 +9,21 @@ ENV TEIID_VERSION 16.0.0
 #COPY teiid-wildfly-$TEIID_VERSION-dist.zip $JBOSS_HOME 
 
 # Download and unzip Teiid server
+# oss.sonatype.org (OSSRH) sudah ditutup sejak 30 Juni 2025, sehingga
+# distribusi Teiid diambil dari Maven Central. Artefak yang sama
+# (org.teiid.wildfly:teiid-wildfly:<versi>:dist@zip).
+#   -f : gagal bila HTTP error (tidak menyimpan halaman error sebagai .zip)
+#   -L : ikuti redirect
+# Integritas berkas diperiksa dengan checksum .sha1 dari Maven Central.
+ARG MAVEN_REPO=https://repo1.maven.org/maven2
 RUN cd $JBOSS_HOME \
-    && curl -O https://repo1.maven.org/maven2/org/teiid/wildfly/teiid-wildfly/$TEIID_VERSION/teiid-wildfly-$TEIID_VERSION-dist.zip \
-    && bsdtar -xf teiid-wildfly-$TEIID_VERSION-dist.zip \
+    && TEIID_ZIP=teiid-wildfly-$TEIID_VERSION-dist.zip \
+    && TEIID_URL=$MAVEN_REPO/org/teiid/wildfly/teiid-wildfly/$TEIID_VERSION/$TEIID_ZIP \
+    && curl -fSL --retry 3 -o $TEIID_ZIP $TEIID_URL \
+    && echo "$(curl -fsSL $TEIID_URL.sha1 | cut -d' ' -f1)  $TEIID_ZIP" | sha1sum -c - \
+    && bsdtar -xf $TEIID_ZIP \
     && chmod +x $JBOSS_HOME/bin/*.sh \
-    && rm teiid-wildfly-$TEIID_VERSION-dist.zip
+    && rm $TEIID_ZIP
 
 
 ###################################

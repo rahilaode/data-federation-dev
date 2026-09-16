@@ -1,0 +1,3 @@
+PREFIX bansos: <http://bansos.go.id/ontology/>
+# A003 - semantic preservation: hasil harus identik sebelum/sesudah RENAME COLUMN
+SELECT ?p ?tgl WHERE { ?p a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?p

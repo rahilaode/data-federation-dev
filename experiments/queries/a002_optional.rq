@@ -1,0 +1,6 @@
+PREFIX bansos: <http://bansos.go.id/ontology/>
+# A002 - instance ProgramBansos harus tetap ada; tipeProgram menjadi tidak terikat
+SELECT ?prog ?nama ?tipe WHERE {
+  ?prog a bansos:ProgramBansos ; bansos:namaProgram ?nama .
+  OPTIONAL { ?prog bansos:tipeProgram ?tipe }
+} ORDER BY ?prog

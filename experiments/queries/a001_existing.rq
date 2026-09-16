@@ -1,0 +1,3 @@
+PREFIX bansos: <http://bansos.go.id/ontology/>
+# A001 - kueri lama: harus tetap valid dan identik sebelum/sesudah ADD COLUMN
+SELECT ?p ?nama WHERE { ?p a bansos:PenerimaBansos ; bansos:namaLengkap ?nama } ORDER BY ?p

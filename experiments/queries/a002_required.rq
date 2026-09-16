@@ -1,0 +1,3 @@
+PREFIX bansos: <http://bansos.go.id/ontology/>
+# A002 - property yang di-deprecate: answer set diharapkan kosong setelah DROP COLUMN
+SELECT ?prog ?tipe WHERE { ?prog a bansos:ProgramBansos ; bansos:tipeProgram ?tipe } ORDER BY ?prog

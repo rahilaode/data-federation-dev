@@ -1,0 +1,3 @@
+PREFIX bansos: <http://bansos.go.id/ontology/>
+# A001 - kueri baru: property bansos:email hasil adaptasi P-001
+SELECT ?p ?email WHERE { ?p a bansos:PenerimaBansos ; bansos:email ?email } ORDER BY ?p

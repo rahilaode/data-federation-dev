@@ -3,3 +3,4 @@ __pycache__/
 
 # Lingkungan Python lokal
 .venv/
+results/

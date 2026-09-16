@@ -1,8 +1,17 @@
 connect
 
 # Deploy JDBC Drivers
+#
+# Catatan MySQL: translator MySQL Teiid mengharapkan session ber-ANSI mode
+# (Teiid Reference Guide, JDBC translators > MySQL translator > Usage) dan
+# hanya meng-escape tanda kutip tunggal pada literal string
+# (SQLConversionVisitor.translateSQLType -> escapeString). Pada sql_mode
+# bawaan MySQL, backslash adalah karakter escape, sehingga literal '\\'
+# hasil unfolding IRI Ontop merusak SQL (error 1064). Karena itu setiap
+# koneksi pool di-set ke ANSI,NO_BACKSLASH_ESCAPES. Pengaturan ini hanya
+# berlaku pada sesi Teiid; konfigurasi global sumber tidak diubah.
 deploy /opt/jboss/jdbc/mysql-connector-java-8.0.21.jar   
-/subsystem=datasources/data-source=mysql-ds:add(jndi-name=java:/mysql-dukcapil, enabled=true, use-java-context=true, driver-name=mysql-connector-java-8.0.21.jar, connection-url="jdbc:mysql://datasources-mysql:3306/dukcapil",user-name=mysql, password=mysql)
+/subsystem=datasources/data-source=mysql-ds:add(jndi-name=java:/mysql-dukcapil, enabled=true, use-java-context=true, driver-name=mysql-connector-java-8.0.21.jar, connection-url="jdbc:mysql://datasources-mysql:3306/dukcapil",user-name=mysql, password=mysql, new-connection-sql="set SESSION sql_mode = 'ANSI,NO_BACKSLASH_ESCAPES'")
 /subsystem=datasources/data-source=mysql-ds:enable
 
 deploy /opt/jboss/jdbc/postgresql-42.2.14.jre7.jar

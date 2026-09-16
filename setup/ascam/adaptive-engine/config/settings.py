@@ -19,10 +19,27 @@ KAFKA_RETRY_DELAY    = int(os.getenv('KAFKA_RETRY_DELAY', '10'))
 # ── File paths (di dalam container) ─────────────────────────
 OBDA_PATH = os.getenv('OBDA_PATH', '/opt/ontop/input/mapping.obda')
 TTL_PATH  = os.getenv('TTL_PATH',  '/opt/ontop/input/ontology_file.ttl')
-VDB_PATH  = os.getenv('VDB_PATH',  '/opt/teiid/data-federation/government-vdb.xml')
+# VDB berada di folder deployment scanner Teiid (di-mount bersama)
+VDB_PATH  = os.getenv('VDB_PATH',  '/opt/teiid/deployments/government-vdb.xml')
+
+# ── Execute & Verify ─────────────────────────────────────────
+# Snapshot artefak F = (T, M, Σ_S) sebelum eksekusi (untuk revert)
+STATE_DIR            = os.getenv('ASCAM_STATE_DIR', '/app/state')
+SNAPSHOT_DIR         = os.path.join(STATE_DIR, 'snapshots')
+# Log adaptasi per event (JSON Lines) — sumber data metrik Bab IV.
+# Sementara ditulis ke file; nantinya dipindah ke Knowledge (Postgres).
+ADAPTATION_LOG       = os.path.join(STATE_DIR, 'adaptation_log.jsonl')
+
+TEIID_DEPLOY_TIMEOUT = int(os.getenv('TEIID_DEPLOY_TIMEOUT', '120'))   # detik
+TEIID_SCAN_POLL      = float(os.getenv('TEIID_SCAN_POLL', '0.5'))       # detik
+ONTOP_READY_TIMEOUT  = int(os.getenv('ONTOP_READY_TIMEOUT', '180'))    # detik
+VERIFY_TIMEOUT       = int(os.getenv('VERIFY_TIMEOUT', '30'))          # detik per kueri
+VERIFY_ENABLED       = os.getenv('VERIFY_ENABLED', 'true').lower() == 'true'
 
 # ── Ontop & Teiid ────────────────────────────────────────────
 ONTOP_CONTAINER_NAME  = os.getenv('ONTOP_CONTAINER_NAME',  'vkg-system-ontop-teiid')
+ONTOP_SPARQL_URL      = os.getenv('ONTOP_SPARQL_URL',
+                                  f'http://{ONTOP_CONTAINER_NAME}:8080/sparql')
 TEIID_CONTAINER_NAME  = os.getenv('TEIID_CONTAINER_NAME',  'data-federation-teiid')
 DOCKER_SOCK           = '/var/run/docker.sock'
 

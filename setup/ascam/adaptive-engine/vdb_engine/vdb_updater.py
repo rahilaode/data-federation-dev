@@ -51,11 +51,11 @@ bukan via DOM. Ini lebih aman untuk format file ini karena:
 """
 
 import re
-import shutil
 import logging
 from pathlib import Path
 
 from pattern_library.patterns import sql_type_to_teiid
+from executor.artifact_store import atomic_write
 
 log = logging.getLogger('ascam.vdb')
 
@@ -269,11 +269,14 @@ class VDBUpdater:
     # ─────────────────────────────────────────────────────────
     # Save
     # ─────────────────────────────────────────────────────────
+    def render(self) -> str:
+        """Isi VDB di memori. Backup ditangani Snapshot di Executor, bukan
+        berkas .bak di folder deployment (agar folder scanner tetap bersih)."""
+        return self._content
+
     def save(self):
-        backup = self.path.with_suffix('.xml.bak')
-        shutil.copy2(self.path, backup)
-        self.path.write_text(self._content, encoding='utf-8')
-        log.info('[VDB] Disimpan: %s (backup: %s)', self.path.name, backup.name)
+        atomic_write(self.path, self.render())
+        log.info('[VDB] Disimpan: %s', self.path.name)
 
     # ─────────────────────────────────────────────────────────
     # Private helpers

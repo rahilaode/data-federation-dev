@@ -15,6 +15,10 @@ services:
     volumes:
       - teiid-standalone-configuration:/opt/jboss/wildfly/standalone/configuration
       - teiid-domain-configuration:/opt/jboss/wildfly/domain/configuration
+      # Folder deployment dipakai bersama dengan ASCAM Executor.
+      # Berisi government-vdb.xml (Σ_S) beserta marker file scanner
+      # (.dodeploy, .isdeploying, .deployed, .failed).
+      - ./deployments:/opt/jboss/wildfly/standalone/deployments
 
 networks:
   ascam-networks:

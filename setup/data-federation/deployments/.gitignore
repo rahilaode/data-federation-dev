@@ -1,0 +1,11 @@
+# Marker file deployment scanner WildFly (dibuat saat runtime)
+*.dodeploy
+*.isdeploying
+*.deployed
+*.failed
+*.isundeploying
+*.undeployed
+*.pending
+*.skipdeploy
+# Berkas sementara dari atomic write ASCAM
+.*.tmp

@@ -25,11 +25,11 @@ daftar kolom SEBELUM rename (diambil dari VDB file oleh caller di main.py).
 """
 
 import re
-import shutil
 import logging
 from pathlib import Path
 
 from config.settings import ONTOLOGY_PREFIX
+from executor.artifact_store import atomic_write
 
 log = logging.getLogger('ascam.obda')
 
@@ -194,6 +194,18 @@ class OBDAUpdater:
 
         blk['target'] = _fix_target(new_target)
         log.info('[OBDA][P-002] hapus property %s dari %s', property_name, mapping_id)
+
+        # Kolom yang di-DROP juga harus dikeluarkan dari SELECT eksplisit,
+        # jika tidak, SQL source akan merujuk kolom yang sudah tidak ada.
+        # Pengecualian: kolom masih dipakai di target (mis. IRI template).
+        if re.search(rf'\{{{re.escape(col_name)}\}}', blk['target']):
+            log.warning('[OBDA][P-002] kolom %s masih dipakai di target %s; '
+                        'SELECT tidak diubah (kandidat HITL)', col_name, mapping_id)
+        else:
+            new_src = _select_remove(blk['source'], col_name)
+            if new_src != blk['source']:
+                blk['source'] = new_src
+                log.info('[OBDA][P-002] hapus kolom %s dari SELECT %s', col_name, mapping_id)
         return True
 
     # ── P-001: ADD COLUMN → tambah property ke target ────────
@@ -216,13 +228,26 @@ class OBDAUpdater:
         stripped      = blk['target'].rstrip().rstrip('.')
         blk['target'] = f'{stripped} ; {property_name} {{{col_name}}}^^{xsd_type} .'
         log.info('[OBDA][P-001] tambah property %s ke %s', property_name, mapping_id)
+
+        # Variabel {col_name} hanya dapat di-bind jika kolomnya ada di SELECT.
+        new_src = _select_add(blk['source'], col_name)
+        if new_src != blk['source']:
+            blk['source'] = new_src
+            log.info('[OBDA][P-001] tambah kolom %s ke SELECT %s', col_name, mapping_id)
         return True
 
-    # ── Save ─────────────────────────────────────────────────
-    def save(self):
-        backup = self.path.with_suffix('.obda.bak')
-        shutil.copy2(self.path, backup)
+    # ── Lookup: property yang di-bind ke suatu kolom ─────────
+    def property_for_column(self, mapping_id: str, col_name: str) -> str | None:
+        """'tgl_lahir' -> 'bansos:tglLahir' (dibaca dari target mapping)."""
+        blk = self._blocks.get(mapping_id)
+        if blk is None:
+            return None
+        m = re.search(rf'(\S+)\s+\{{{re.escape(col_name)}\}}', blk['target'])
+        return m.group(1) if m else None
 
+    # ── Render & Save ────────────────────────────────────────
+    def render(self) -> str:
+        """Serialisasi mapping di memori (belum ditulis ke disk)."""
         header_match = re.match(
             r'(.*?\[MappingDeclaration\]\s*@collection\s*\[\[)',
             self._raw, re.DOTALL,
@@ -237,9 +262,12 @@ class OBDAUpdater:
             f'source       {blk["source"]}'
             for mid, blk in self._blocks.items()
         ]
-        content = header + '\n\n' + '\n\n'.join(blocks) + '\n\n]]'
-        self.path.write_text(content, encoding='utf-8')
-        log.info('[OBDA] Disimpan: %s (backup: %s)', self.path.name, backup.name)
+        return header + '\n\n' + '\n\n'.join(blocks) + '\n\n]]'
+
+    def save(self):
+        """Penulisan langsung (dipakai di luar Executor, mis. pengujian)."""
+        atomic_write(self.path, self.render())
+        log.info('[OBDA] Disimpan: %s', self.path.name)
 
 
 # ── helper ────────────────────────────────────────────────────
@@ -250,3 +278,46 @@ def _fix_target(target: str) -> str:
     if not target.endswith('.'):
         target = target.rstrip(';').rstrip() + ' .'
     return target
+
+# ── helper: klausa SELECT eksplisit ──────────────────────────
+_SELECT_RE = re.compile(r'^(\s*SELECT\s+)(.*?)(\s+FROM\s+.*)$', re.IGNORECASE | re.DOTALL)
+
+
+def _select_items(src: str):
+    """Kembalikan (prefix, [item], suffix) atau None jika SELECT * / tak terbaca.
+
+    Keterbatasan: pemisahan dengan koma tingkat atas; ekspresi berisi koma
+    (mis. fungsi CONCAT(a, b)) belum didukung.
+    """
+    m = _SELECT_RE.match(src)
+    if not m or m.group(2).strip() == '*' or '(' in m.group(2):
+        return None
+    return m.group(1), [i.strip() for i in m.group(2).split(',')], m.group(3)
+
+
+def _item_names(item: str) -> set[str]:
+    """'new_col AS old_col' -> {'new_col', 'old_col'}; 'nama' -> {'nama'}"""
+    parts = re.split(r'\s+AS\s+', item, flags=re.IGNORECASE)
+    return {p.strip().split('.')[-1].lower() for p in parts}
+
+
+def _select_add(src: str, col: str) -> str:
+    parsed = _select_items(src)
+    if parsed is None:
+        return src
+    prefix, items, suffix = parsed
+    if any(col.lower() in _item_names(i) for i in items):
+        return src
+    return f'{prefix}{", ".join(items + [col])}{suffix}'
+
+
+def _select_remove(src: str, col: str) -> str:
+    parsed = _select_items(src)
+    if parsed is None:
+        return src
+    prefix, items, suffix = parsed
+    # Cocokkan pada nama kolom fisik (token pertama sebelum AS)
+    kept = [i for i in items
+            if re.split(r'\s+AS\s+', i, flags=re.IGNORECASE)[0].strip().split('.')[-1].lower()
+            != col.lower()]
+    return f'{prefix}{", ".join(kept)}{suffix}' if kept != items else src

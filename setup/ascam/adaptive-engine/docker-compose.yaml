@@ -10,20 +10,24 @@ services:
     networks:
       - ascam-networks
     volumes:
-      # Config Ontop: mapping.obda dan ontology_file.ttl
+      # Artefak OBDA: mapping (ℳ) dan ontologi (𝒯)
       - ../../vkg-system/config:/opt/ontop/input
 
-      # Config Teiid: government-vdb.xml
-      - ../../data-federation/virtual-db-config:/opt/teiid/data-federation
+      # Artefak federasi: folder deployment scanner Teiid (Σ_S + marker file).
+      # HARUS folder yang sama dengan yang di-mount ke kontainer Teiid.
+      - ../../data-federation/deployments:/opt/teiid/deployments
 
-      # Docker socket untuk restart container
+      # State ASCAM: snapshot artefak dan log adaptasi (metrik)
+      - ./state:/app/state
+
+      # Docker socket untuk reload Ontop
       - /var/run/docker.sock:/var/run/docker.sock
 
     environment:
       PYTHONUNBUFFERED: "1"
-      # Override jika nama container berbeda
       ONTOP_CONTAINER_NAME: vkg-system-ontop-teiid
       TEIID_CONTAINER_NAME: data-federation-teiid
+      VDB_PATH: /opt/teiid/deployments/government-vdb.xml
 
 networks:
   ascam-networks:

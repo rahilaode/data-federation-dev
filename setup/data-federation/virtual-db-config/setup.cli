@@ -9,5 +9,16 @@ deploy /opt/jboss/jdbc/postgresql-42.2.14.jre7.jar
 /subsystem=datasources/data-source=pgsql-ds:add(jndi-name=java:/pgsql-kemensos, enabled=true, use-java-context=true, driver-name=postgresql-42.2.14.jre7.jar, connection-url="jdbc:postgresql://datasources-pgsql:5432/kemensos",user-name=postgres, password=postgres)
 /subsystem=datasources/data-source=pgsql-ds:enable
 
-# Deploy VDBs
-deploy /opt/jboss/data-federation/government-vdb.xml
+# ------------------------------------------------------------------
+# VDB TIDAK lagi di-deploy saat build image.
+# VDB (government-vdb.xml) di-deploy lewat deployment scanner dari
+# folder standalone/deployments yang di-mount dari host, sehingga
+# ASCAM (effector fase Execute) dapat me-redeploy Σ'_S tanpa
+# me-restart kontainer Teiid.
+#
+# Scanner dipindah ke MANUAL DEPLOY MODE untuk berkas XML:
+# redeploy hanya terjadi ketika marker <nama>.dodeploy dibuat,
+# sehingga urutan eksekusi dikendalikan sepenuhnya oleh Executor
+# (lihat README deployments WildFly Core, bagian DEPLOYMENT MODES).
+# ------------------------------------------------------------------
+/subsystem=deployment-scanner/scanner=default:write-attribute(name=auto-deploy-xml, value=false)

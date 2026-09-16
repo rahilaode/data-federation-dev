@@ -64,7 +64,10 @@ WORKDIR ${JBOSS_HOME}
 #### CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
 
 COPY jdbc /opt/jboss/jdbc
-COPY virtual-db-config /opt/jboss/data-federation
+# Hanya skrip setup (driver JDBC, datasource, konfigurasi scanner) yang
+# dimasukkan ke image. VDB tidak di-bake ke image; VDB di-mount saat runtime
+# ke standalone/deployments (lihat docker-compose.yaml).
+COPY virtual-db-config/setup.cli /opt/jboss/data-federation/setup.cli
 
 RUN /bin/sh -c "${JBOSS_HOME}/bin/standalone.sh -c standalone-teiid.xml -b 0.0.0.0 -bmanagement 0.0.0.0 &" && \
       sleep 20 && \

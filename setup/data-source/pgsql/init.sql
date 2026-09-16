@@ -128,7 +128,7 @@ COMMENT ON TABLE schema_monitor.captured_tables_ref
 -- Seed contoh
 INSERT INTO schema_monitor.captured_tables_ref (schema_name, table_name, description)
 VALUES
-    ('public', 'program_bansos ',    'Tabel program bantuan sosial'),
+    ('public', 'program_bansos',     'Tabel program bantuan sosial'),
     ('public', 'penerima_manfaat',   'Tabel data penerima manfaat bansos'),
     ('public', 'transaksi_bansos',   'Tabel transaksi penyaluran bansos'),
     ('public', 'eligibility_check',  'Tabel hasil cek kelayakan penerima bansos')

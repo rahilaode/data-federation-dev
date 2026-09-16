@@ -10,12 +10,12 @@ Operasi:
 """
 
 import re
-import shutil
 import logging
 from pathlib import Path
 
 from rdflib import Graph, Namespace, Literal, RDF, RDFS, OWL, XSD as RDFXSD
 from config.settings import ONTOLOGY_PREFIX, ONTOLOGY_BASE
+from executor.artifact_store import atomic_write
 
 log = logging.getLogger('ascam.ttl')
 
@@ -91,11 +91,13 @@ class TTLUpdater:
         log.info('[TTL][P-002] deprecate %s', property_name)
         return True
 
+    def render(self) -> str:
+        """Serialisasi graf ontologi di memori (Turtle)."""
+        return self.g.serialize(format='turtle')
+
     def save(self):
-        backup = self.path.with_suffix('.ttl.bak')
-        shutil.copy2(self.path, backup)
-        self.g.serialize(destination=str(self.path), format='turtle')
-        log.info('[TTL] Disimpan: %s (backup: %s)', self.path.name, backup.name)
+        atomic_write(self.path, self.render())
+        log.info('[TTL] Disimpan: %s', self.path.name)
 
 
 def _to_label(prop_camel: str) -> str:

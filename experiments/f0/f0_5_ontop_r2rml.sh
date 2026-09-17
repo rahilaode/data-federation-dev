@@ -31,11 +31,13 @@ ONT=/opt/ontop/input/ontology_file.ttl
 PROPS=/opt/ontop/input/government.docker.properties
 
 ontop_cli() {  # menjalankan CLI Ontop di kontainer sementara; stdout+stderr ke layar
+  # CLI memakai logback langsung (bukan Spring Boot), sehingga konfigurasi log
+  # diberikan lewat -Dlogback.configurationFile, bukan -Dlogging.config.
   docker run --rm --network ascam-networks \
     -v "$CFG:/opt/ontop/input:ro" -v "$JDBC:/opt/ontop/jdbc:ro" \
     -v "$WORK:/work" -v "$QDIR:/q:ro" \
     --entrypoint java "$IMAGE" \
-    -cp '/opt/ontop/lib/*:/opt/ontop/jdbc/*' -Dlogging.config=/opt/ontop/log/logback.xml \
+    -cp '/opt/ontop/lib/*:/opt/ontop/jdbc/*' -Dlogback.configurationFile=/opt/ontop/log/logback.xml \
     it.unibz.inf.ontop.cli.Ontop "$@"
 }
 

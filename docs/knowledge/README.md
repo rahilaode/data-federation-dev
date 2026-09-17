@@ -1,6 +1,6 @@
 # Rancangan Komponen Knowledge ASCAM — versi 2
 
-> Status: **draf v2 untuk ditinjau** (menggantikan draf v1). Model logis; tipe fisik,
+> Status: **disetujui (K1–K8)**; diimplementasikan pada F1.2 (ADR-0007). Model logis; tipe fisik,
 > indeks, dan constraint ditetapkan pada migrasi (F1.2). Perubahan utama dari v1:
 > dependensi view Teiid (ADR-0006), graf lineage ujung-ke-ujung, kepemilikan elemen,
 > kebijakan (penamaan dan pemetaan tipe), masalah konsistensi, dan read model untuk UI.
@@ -14,7 +14,7 @@ bersama oleh seluruh fase MAPE-K (Kephart & Chess, 2003).
 |---|---|
 | **P1. Analyze dan Plan hanya membaca Knowledge** | Σ_S, ℳ, 𝒯, dan graf dependensinya tersedia tanpa menghubungi OBDF |
 | **P2. Terhubung kausal** | Setiap sync dan adaptasi menghasilkan versi spesifikasi baru |
-| **P3. Riwayat tidak diubah** | Versi, event, rencana, dan eksekusi bersifat append-only; hanya status yang berpindah |
+| **P3. Riwayat tidak diubah** | Versi, event, rencana, dan eksekusi bersifat append-only; hanya status yang berpindah. Baris versi tidak dihapus (tombstone); retensi menghapus isi versi dan menandainya `purged` |
 | **P4. Generik** | Tidak ada nama objek studi kasus di skema; satu instalasi dapat mengelola beberapa OBDF |
 | **P5. Merepresentasikan semua, mengadaptasi terbatas** | Semua pola pemakaian kolom dicatat; adaptasi otomatis hanya pada sel "otomatis" di §5 |
 | **P6. Kepemilikan elemen** | Setiap elemen artefak ditandai `managed_by` (`human`/`ascam`) dan `introduced_in_version`. **ASCAM hanya menambah, dan hanya menghapus yang ia tambahkan sendiri** |
@@ -139,7 +139,7 @@ erDiagram
         int version_no "berurutan per OBDF"
         bigint parent_id FK
         text origin "sync, adaptation, rollback, manual"
-        text status "candidate, active, superseded, rejected, rolled_back"
+        text status "candidate, active, superseded, rejected, rolled_back, purged"
         text teiid_vdb_name
         text teiid_vdb_version
         text teiid_connection_type "BY_VERSION, ANY, NONE"
@@ -621,10 +621,13 @@ bersifat `auto` hanya bila semua baris bernilai otomatis.
 
 ## 8. Implementasi
 
+- Kode: `setup/ascam/knowledge/` (lihat README di folder tersebut). Keputusan implementasi
+  dan buktinya: ADR-0007.
 - Migrasi: SQLAlchemy 2 + Alembic. Driver: psycopg 3 (ADR-0003).
-- Knowledge Service (FastAPI) sebagai satu-satunya pemilik basis data; role basis data
-  terpisah per layanan.
-- Sync diuji terhadap OBDF studi kasus dan dibandingkan dengan hasil F0.3, F0.5, dan F0.7.
+- Integritas P2/P3 ditegakkan dengan foreign key komposit dan trigger di basis data.
+- Knowledge Service (FastAPI) sebagai satu-satunya pengakses basis data (F1.3); role
+  `ascam_owner` (migrasi) dan `ascam_app` (DML).
+- Sync diuji terhadap OBDF studi kasus dan dibandingkan dengan hasil F0.3, F0.5, dan F0.7 (F1.4).
 
 ## Referensi
 

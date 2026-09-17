@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ascam-knowledge"
+version = "0.1.0"
+description = "Komponen Knowledge ASCAM: model runtime OBDF (registry, spec berversi, ops)"
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0.30,<2.1",
+    "alembic>=1.13,<2",
+    "psycopg[binary]>=3.1,<4",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

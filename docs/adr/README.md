@@ -11,6 +11,7 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0004](0004-effector-teiid-blue-green.md) | Effector Teiid: management API dan blue-green versi VDB | Execute | F0.4, F0.4b |
 | [0005](0005-mapping-r2rml-dan-validasi.md) | Mapping R2RML dan validasi sebelum aktivasi | Plan, Execute, Knowledge | F0.5 |
 | [0006](0006-dependensi-view-teiid.md) | Dependensi view Teiid dari SYSADMIN.Usage dan SYSADMIN.Views | Knowledge, Analyze | F0.7 |
+| [0007](0007-implementasi-skema-knowledge.md) | Implementasi skema Knowledge dan integritas di basis data | Knowledge | F1.2 |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

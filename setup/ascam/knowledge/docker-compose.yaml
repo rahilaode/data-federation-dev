@@ -1,0 +1,59 @@
+# Komponen Knowledge ASCAM: PostgreSQL + migrasi skema (docs/knowledge/README.md)
+# Jalankan scripts/init-secrets.sh sekali sebelum `docker compose up`.
+services:
+  knowledge-db:
+    image: postgres:16-alpine
+    container_name: ascam-knowledge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ascam_owner
+      POSTGRES_DB: ascam_knowledge
+      POSTGRES_PASSWORD_FILE: /run/secrets/knowledge_db_owner_password
+    secrets:
+      - knowledge_db_owner_password
+      - knowledge_db_app_password
+    volumes:
+      - knowledge-db-data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # hanya untuk inspeksi lokal; tidak diekspos ke jaringan lain
+      - '127.0.0.1:55432:5432'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ascam_owner -d ascam_knowledge"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks:
+      - ascam-networks
+
+  knowledge-migrate:
+    build:
+      context: ./service
+    image: ascam-knowledge:dev
+    container_name: ascam-knowledge-migrate
+    depends_on:
+      knowledge-db:
+        condition: service_healthy
+    environment:
+      ASCAM_KNOWLEDGE_DB_HOST: knowledge-db
+      ASCAM_KNOWLEDGE_DB_NAME: ascam_knowledge
+      ASCAM_KNOWLEDGE_DB_USER: ascam_owner
+      ASCAM_KNOWLEDGE_DB_PASSWORD_FILE: /run/secrets/knowledge_db_owner_password
+    secrets:
+      - knowledge_db_owner_password
+    restart: "no"
+    networks:
+      - ascam-networks
+
+secrets:
+  knowledge_db_owner_password:
+    file: ./secrets/knowledge_db_owner_password
+  knowledge_db_app_password:
+    file: ./secrets/knowledge_db_app_password
+
+volumes:
+  knowledge-db-data: {}
+
+networks:
+  ascam-networks:
+    external: true

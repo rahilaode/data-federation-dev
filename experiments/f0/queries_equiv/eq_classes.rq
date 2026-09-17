@@ -1,0 +1,2 @@
+# Jumlah instance per kelas
+SELECT ?c (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?c } GROUP BY ?c ORDER BY ?c

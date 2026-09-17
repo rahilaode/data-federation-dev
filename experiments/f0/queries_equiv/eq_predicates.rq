@@ -1,0 +1,2 @@
+# Jumlah triple per predikat: sidik jari seluruh graf virtual
+SELECT ?p (COUNT(*) AS ?n) WHERE { ?s ?p ?o } GROUP BY ?p ORDER BY ?p

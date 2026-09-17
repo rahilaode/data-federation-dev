@@ -54,6 +54,11 @@ SNAPSHOT_KEY = {'VirtualDatabases': 'vdb', 'Schemas': 'schemas', 'Tables': 'tabl
                 'Columns': 'columns', 'KeyColumns': 'keys'}
 
 
+def quote_ident(name):
+    """Identifier Teiid bertanda kutip ganda; kutip di dalam nama digandakan."""
+    return '"' + name.replace('"', '""') + '"'
+
+
 def available_columns(cur, sys_table):
     # literal konstan (bukan masukan pengguna), sengaja tanpa parameter
     cur.execute("SELECT Name FROM SYS.Columns WHERE SchemaName = 'SYS' "
@@ -94,7 +99,11 @@ def try_driver(label, connect):
             missing = [c for c in wanted if c not in have]
             if missing:
                 print(f'   SYS.{sys_table}: kolom tidak tersedia -> {missing}')
-            cur.execute(f"SELECT {', '.join(cols)} FROM SYS.{sys_table}{FILTER[sys_table]}")
+            # Semua identifier diberi tanda kutip ganda: sebagian nama kolom sistem
+            # adalah kata kunci Teiid (mis. PRECISION ada di bagian "Reserved words"
+            # SQLParser.jj), dan identifier bertanda kutip memakai "..." (QUOTED_ID).
+            select_list = ', '.join(quote_ident(c) for c in cols)
+            cur.execute(f"SELECT {select_list} FROM SYS.{sys_table}{FILTER[sys_table]}")
             snapshot[SNAPSHOT_KEY[sys_table]] = rows_as_dicts(cur)
             result.setdefault('queries_ok', []).append(sys_table)
         result['sync_s'] = round(time.perf_counter() - t0, 3)

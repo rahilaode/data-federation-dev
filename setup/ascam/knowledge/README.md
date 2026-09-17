@@ -10,8 +10,8 @@ knowledge/
 ├── db-init/                  pembuatan role aplikasi ascam_app pada inisialisasi pertama
 ├── scripts/init-secrets.sh   membuat berkas rahasia di secrets/ (tidak di-commit)
 └── service/
-    ├── src/ascam_knowledge/  model, API (FastAPI), keamanan, CLI
-    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial
+    ├── src/ascam_knowledge/  model, API (FastAPI), keamanan, uji koneksi, CLI
+    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial; 0003 hasil uji koneksi JSONB
     ├── tests/                uji migrasi, integritas, dan API
     └── scripts/test.sh       uji terhadap PostgreSQL sementara
 ```
@@ -30,6 +30,15 @@ Token klien ada di `secrets/knowledge_api_tokens` (format `<klien>:<token>`).
 TOKEN=$(grep '^ui:' setup/ascam/knowledge/secrets/knowledge_api_tokens | cut -d: -f2)
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf
 ```
+
+## Uji koneksi target
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf/1/checks
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf/1/status
+```
+
+Hasil disimpan di `registry.connection_check` (tanpa rahasia) dan menjadi sumber dasbor UI.
 
 ## Konfigurasi deklaratif
 

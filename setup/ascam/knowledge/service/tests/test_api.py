@@ -19,10 +19,12 @@ def new_obdf(api):
     return r.json()
 
 
-def test_health_and_ready(api):
+def test_health_and_ready(api, alembic_cfg):
+    from alembic.script import ScriptDirectory
+    head = ScriptDirectory.from_config(alembic_cfg).get_current_head()
     assert api.get('/health').json() == {'status': 'ok'}
     body = api.get('/ready').json()
-    assert body['status'] == 'ok' and body['schema_revision'] == body['expected_revision'] == '0002'
+    assert body['status'] == 'ok' and body['schema_revision'] == body['expected_revision'] == head
 
 
 @pytest.mark.parametrize('header', [None, 'Bearer salah', 'Basic abc'])

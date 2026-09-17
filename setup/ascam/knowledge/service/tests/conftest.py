@@ -101,3 +101,10 @@ def api(migrated, alembic_cfg, db_url, keys):
         client.app_ref = app
         yield client
     factory.kw['bind'].dispose()
+
+
+def pytest_configure(config):
+    # peringatan pustaka pihak ketiga pada TestClient; tidak terkait kode ASCAM
+    config.addinivalue_line('filterwarnings', 'ignore::DeprecationWarning:starlette.*')
+    config.addinivalue_line('filterwarnings', 'ignore::DeprecationWarning:fastapi.*')
+    config.addinivalue_line('filterwarnings', 'ignore:Using `httpx` with `starlette.testclient`')

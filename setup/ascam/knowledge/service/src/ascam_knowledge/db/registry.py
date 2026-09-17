@@ -1,7 +1,7 @@
 """Skema `registry`: OBDF yang dikelola, target, kredensial, sumber, dan kebijakan."""
 from datetime import datetime
 
-from sqlalchemy import (BigInteger, Boolean, DateTime, ForeignKey, Integer,
+from sqlalchemy import (BigInteger, Boolean, DateTime, ForeignKey, Index, Integer,
                         LargeBinary, Text, UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -104,10 +104,12 @@ class TypeMapping(Base):
 
 class ConnectionCheck(Base):
     __tablename__ = 'connection_check'
-    __table_args__ = S
+    __table_args__ = (Index(None, 'target_id', 'checked_at'), S)
     id: Mapped[int] = pk_id()
     target_id: Mapped[int] = mapped_column(ForeignKey('registry.target.id', ondelete='CASCADE'), index=True)
     checked_at: Mapped[datetime] = created_at()
     ok: Mapped[bool] = mapped_column(Boolean)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
-    detail: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[dict] = mapped_column(JSONB, server_default='{}',
+                                         comment='summary, facts, error (tanpa rahasia)')
+    actor: Mapped[str | None] = mapped_column(Text)

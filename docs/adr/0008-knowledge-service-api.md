@@ -38,6 +38,13 @@ perubahan untuk audit.
    (W3C OWL 2 Profiles, §3.2.3) dan tidak dapat diisi bertentangan dengan daftar tersebut.
 8. Layanan berjalan sebagai role `ascam_app` (DML saja); migrasi 0002 memberi role ini hak baca
    `alembic_version` agar `/ready` berfungsi.
+9. **Uji koneksi target** dijalankan di dalam layanan dengan kredensial terdekripsi dan dicatat di
+   `registry.connection_check` (hasil terstruktur JSONB, migrasi 0003) beserta aktornya:
+   `teiid_mgmt` (Digest; `server-state`, versi produk, daftar VDB dan status/connection type),
+   `teiid_odbc` (`SYS.VirtualDatabases`), `ontop_sparql` (kueri `ASK`), `kafka` (metadata broker dan
+   keberadaan topik setiap sumber), `ontop_agent` (`/health`). Target nonaktif tidak dihubungi.
+   Pesan galat disaring dari rahasia sebelum disimpan. Endpoint: uji satu target, uji semua target
+   aktif, riwayat, dan status terkini per target (dasbor UI).
 
 ## Bukti
 
@@ -48,17 +55,24 @@ audit dan tersimpan terenkripsi; rotasi kunci; aturan target (termasuk PATCH yan
 mendeteksi perubahan rahasia, dan di-rollback bila gagal; bootstrap saat start; `/ready` dan DML
 saat berjalan sebagai `ascam_app` (kegagalan `/ready` pada role ini ditemukan oleh uji tersebut
 dan diperbaiki di migrasi 0002). Uji CLI terhadap konfigurasi OBDF bansos: 46 objek dibuat,
-penerapan kedua 46 objek tidak berubah.
+penerapan kedua 46 objek tidak berubah. Uji koneksi (10 uji tambahan, total 48): jalur sukses
+dan penolakan kredensial Digest, status server bukan `running`, galat yang memuat kata sandi
+disaring, soket tak terjangkau, endpoint SPARQL tidak tersedia, topik Kafka yang hilang,
+target nonaktif, pencatatan riwayat, status terkini, dan audit. Migrasi 0003 mempertahankan
+teks hasil lama saat dinaikkan dan diturunkan.
 
 ## Konsekuensi
 
 - Orchestrator, Executor, dan UI tidak memerlukan akses basis data maupun kunci enkripsi.
 - Token antarlayanan dan kunci enkripsi harus dirotasi sebagai bagian operasi rutin.
-- Uji koneksi ke target (Teiid, Ontop, Kafka) menggunakan kredensial terdekripsi di dalam
-  layanan; dibangun pada langkah berikutnya.
+- Uji koneksi memerlukan jaringan dari Knowledge Service ke setiap target; untuk target di host
+  lain, jalur jaringan dan TLS (`endpoint.tls`) perlu disiapkan.
+- Uji koneksi dijalankan sinkron di dalam permintaan (timeout 5 s per target); penjadwalan
+  berkala dicatat sebagai pekerjaan lanjutan.
 
 ## Referensi
 
 - FastAPI — Security (HTTP Bearer): https://fastapi.tiangolo.com/tutorial/security/
 - cryptography — Fernet dan MultiFernet: https://cryptography.io/en/latest/fernet/
+- W3C (2013). SPARQL 1.1 Protocol. https://www.w3.org/TR/sparql11-protocol/
 - W3C (2012). OWL 2 Web Ontology Language Profiles (Second Edition), §3.2.3. https://www.w3.org/TR/owl2-profiles/

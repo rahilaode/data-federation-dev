@@ -207,3 +207,19 @@ class ApplySummary(BaseModel):
     created: list[str] = Field(default_factory=list)
     updated: list[str] = Field(default_factory=list)
     unchanged: list[str] = Field(default_factory=list)
+
+
+# ── uji koneksi ──────────────────────────────────────────────────────────────────
+class CheckOut(Out):
+    id: int
+    target_id: int
+    checked_at: datetime
+    ok: bool
+    latency_ms: int | None
+    detail: dict[str, Any]
+    actor: str | None
+
+
+class TargetStatusOut(BaseModel):
+    target: TargetOut
+    last_check: CheckOut | None

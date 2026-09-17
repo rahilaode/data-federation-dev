@@ -1,4 +1,6 @@
 """Menjalankan uji koneksi untuk target terdaftar dan mencatat hasilnya."""
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,9 @@ class Hooks:
 
 def run_check(db: Session, target: registry.Target, box: SecretBox, actor: str,
               hooks: type[Hooks] = Hooks) -> registry.ConnectionCheck:
+    # Waktu uji diambil dari jam aplikasi saat uji dimulai. now() PostgreSQL bernilai waktu
+    # AWAL transaksi, sehingga beberapa uji dalam satu permintaan akan bercap waktu sama.
+    checked_at = datetime.now(timezone.utc)
     username = password = None
     if target.credential_id is not None:
         cred = db.get(registry.Credential, target.credential_id)
@@ -39,8 +44,8 @@ def run_check(db: Session, target: registry.Target, box: SecretBox, actor: str,
     else:                                                    # dijaga CHECK constraint
         result = connectors.CheckResult(False, 0, f'jenis target {target.kind} tidak dikenal')
 
-    row = registry.ConnectionCheck(target_id=target.id, ok=result.ok, latency_ms=result.latency_ms,
-                                   detail=result.detail(), actor=actor)
+    row = registry.ConnectionCheck(target_id=target.id, checked_at=checked_at, ok=result.ok,
+                                   latency_ms=result.latency_ms, detail=result.detail(), actor=actor)
     db.add(row)
     db.flush()
     db.refresh(row)

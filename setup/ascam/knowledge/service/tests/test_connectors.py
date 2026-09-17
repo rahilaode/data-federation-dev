@@ -193,3 +193,18 @@ def test_check_all_skips_disabled_and_reports_kafka_gap(api, lab):
     assert status['agent']['ok'] is False and status['mgmt']['ok'] is True
     audit = [a['action'] for a in api.get(f'/api/v1/obdf/{oid}/audit').json()]
     assert 'check_all' in audit and 'check' in audit
+
+
+def test_checks_in_one_request_have_distinct_timestamps(api, lab):
+    """Regresi: now() PostgreSQL = waktu awal transaksi; cap waktu uji harus dari saat uji."""
+    import time as _time
+    oid, ids = lab
+    slow = api.app_ref.state.check_hooks
+
+    def slow_connect(**kw):
+        _time.sleep(0.05)
+        return FakeConn(('government', 1, datetime.datetime(2026, 9, 17)))
+    slow.connect = staticmethod(slow_connect)
+    rows = api.post(f'/api/v1/obdf/{oid}/checks').json()
+    stamps = [row['checked_at'] for row in rows]
+    assert len(set(stamps)) == len(stamps)

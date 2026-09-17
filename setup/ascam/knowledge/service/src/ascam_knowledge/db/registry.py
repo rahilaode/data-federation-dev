@@ -22,9 +22,10 @@ class ObdfInstance(Base):
 
 class Credential(Base):
     __tablename__ = 'credential'
-    __table_args__ = S
+    __table_args__ = (UniqueConstraint('obdf_id', 'name'), S)
     id: Mapped[int] = pk_id()
     obdf_id: Mapped[int] = mapped_column(ForeignKey('registry.obdf_instance.id', ondelete='CASCADE'), index=True)
+    name: Mapped[str] = mapped_column(Text, comment='nama rujukan pada konfigurasi dan UI')
     username: Mapped[str] = mapped_column(Text)
     secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
     key_version: Mapped[int] = mapped_column(Integer, server_default='1')

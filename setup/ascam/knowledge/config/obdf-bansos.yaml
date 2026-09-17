@@ -1,0 +1,92 @@
+# Konfigurasi deklaratif OBDF studi kasus (D5). Diterapkan idempoten saat Knowledge Service
+# start; objek yang tidak disebut di sini tidak dihapus. Rahasia hanya dirujuk lewat berkas.
+version: 1
+
+obdf:
+  name: bansos
+  description: Federasi data bantuan sosial (Kemensos PostgreSQL + Dukcapil MySQL)
+
+sources:
+  - logical_name: kemensos
+    dbms: postgresql
+    database_name: kemensos
+    kafka_topic: kemensos.schema_monitor.ddl_event_log
+  - logical_name: dukcapil
+    dbms: mysql
+    database_name: dukcapil
+    kafka_topic: dukcapil.dukcapil.ddl_event_log
+
+credentials:
+  - name: teiid-admin              # ManagementRealm (management API, ADR-0004)
+    username: admin
+    secret_file: /run/secrets/obdf_teiid_mgmt_password
+  - name: teiid-user               # ApplicationRealm (transport ODBC, ADR-0003)
+    username: user1
+    secret_file: /run/secrets/obdf_teiid_user_password
+
+targets:
+  - kind: teiid_mgmt
+    name: teiid-mgmt
+    endpoint: {host: data-federation-teiid, port: 9990, path: /management}
+    credential: teiid-admin
+  - kind: teiid_odbc
+    name: teiid-odbc
+    endpoint: {host: data-federation-teiid, port: 35432, options: {vdb: government}}
+    credential: teiid-user
+  - kind: ontop_sparql
+    name: ontop-sparql
+    endpoint: {host: vkg-system-ontop-teiid, port: 8080, path: /sparql}
+  - kind: kafka
+    name: schema-monitor-kafka
+    endpoint: {host: kafka, port: 9092}
+  - kind: ontop_agent               # dibangun pada F4
+    name: ontop-agent
+    endpoint: {host: ascam-ontop-agent, port: 8000}
+    enabled: false
+
+settings:
+  adaptation.add_column: {mode: auto}          # K4
+  adaptation.hitl_default: true                # sel yang tidak otomatis pada matriks D11
+  retention.keep_versions: 5
+  teiid.keep_previous_vdb_versions: 1          # ADR-0004 langkah 7
+
+naming_policy:
+  namespace: http://bansos.go.id/ontology/
+  property_iri_template: "{namespace}{column_camel}"
+  on_collision: qualify_with_class
+  label_language: id
+
+# Pemetaan tipe sumber -> Teiid -> XSD. owl2ql_compatible dihitung dari daftar datatype
+# OWL 2 QL (W3C OWL 2 Profiles, §3.2.3). Tipe bilangan bulat dipetakan ke xsd:integer
+# (bukan xsd:long/int/short yang tidak didukung OWL 2 QL).
+type_mappings:
+  - {dbms: postgresql, native_type: smallint, teiid_type: short, xsd_datatype: "xsd:integer"}
+  - {dbms: postgresql, native_type: integer, teiid_type: integer, xsd_datatype: "xsd:integer"}
+  - {dbms: postgresql, native_type: bigint, teiid_type: long, xsd_datatype: "xsd:integer"}
+  - {dbms: postgresql, native_type: numeric, teiid_type: bigdecimal, xsd_datatype: "xsd:decimal"}
+  - {dbms: postgresql, native_type: real, teiid_type: float, xsd_datatype: "xsd:float"}
+  - {dbms: postgresql, native_type: double precision, teiid_type: double, xsd_datatype: "xsd:double"}
+  - {dbms: postgresql, native_type: character varying, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: postgresql, native_type: character, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: postgresql, native_type: text, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: postgresql, native_type: uuid, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: postgresql, native_type: boolean, teiid_type: boolean, xsd_datatype: "xsd:boolean"}
+  - {dbms: postgresql, native_type: date, teiid_type: date, xsd_datatype: "xsd:date"}
+  - {dbms: postgresql, native_type: time without time zone, teiid_type: time, xsd_datatype: "xsd:time"}
+  - {dbms: postgresql, native_type: timestamp without time zone, teiid_type: timestamp, xsd_datatype: "xsd:dateTime"}
+  - {dbms: postgresql, native_type: timestamp with time zone, teiid_type: timestamp, xsd_datatype: "xsd:dateTime"}
+  - {dbms: mysql, native_type: tinyint, teiid_type: byte, xsd_datatype: "xsd:integer"}
+  - {dbms: mysql, native_type: smallint, teiid_type: short, xsd_datatype: "xsd:integer"}
+  - {dbms: mysql, native_type: int, teiid_type: integer, xsd_datatype: "xsd:integer"}
+  - {dbms: mysql, native_type: bigint, teiid_type: long, xsd_datatype: "xsd:integer"}
+  - {dbms: mysql, native_type: decimal, teiid_type: bigdecimal, xsd_datatype: "xsd:decimal"}
+  - {dbms: mysql, native_type: float, teiid_type: float, xsd_datatype: "xsd:float"}
+  - {dbms: mysql, native_type: double, teiid_type: double, xsd_datatype: "xsd:double"}
+  - {dbms: mysql, native_type: varchar, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: mysql, native_type: char, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: mysql, native_type: text, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: mysql, native_type: enum, teiid_type: string, xsd_datatype: "xsd:string"}
+  - {dbms: mysql, native_type: date, teiid_type: date, xsd_datatype: "xsd:date"}
+  - {dbms: mysql, native_type: time, teiid_type: time, xsd_datatype: "xsd:time"}
+  - {dbms: mysql, native_type: datetime, teiid_type: timestamp, xsd_datatype: "xsd:dateTime"}
+  - {dbms: mysql, native_type: timestamp, teiid_type: timestamp, xsd_datatype: "xsd:dateTime"}

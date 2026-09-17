@@ -1,7 +1,7 @@
 """skema awal knowledge
 
 Revision ID: 0001
-Revises: 
+Revises:
 Create Date: 2026-09-17 07:44:51.383959
 """
 from typing import Sequence, Union

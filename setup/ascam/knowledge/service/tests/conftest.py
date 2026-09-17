@@ -31,6 +31,8 @@ def db_url():
 
 @pytest.fixture(scope='session')
 def alembic_cfg(db_url):
+    # dipakai juga oleh create_app() saat paket dipasang (bukan dijalankan dari folder sumber)
+    os.environ.setdefault('ASCAM_KNOWLEDGE_ALEMBIC_INI', str(ROOT / 'alembic.ini'))
     return Config(str(ROOT / 'alembic.ini'))
 
 
@@ -70,3 +72,32 @@ def expect_db_error(session, sqlstate, action):
     got = getattr(info.value.orig, 'sqlstate', None)
     assert got == sqlstate, f'SQLSTATE {got} != {sqlstate}: {info.value.orig}'
     return info.value
+
+
+# ── fixture API ──────────────────────────────────────────────────────────────────
+TOKENS = {'ui': 'token-ui-uji', 'orchestrator': 'token-orch-uji'}
+
+
+@pytest.fixture
+def keys():
+    from ascam_knowledge.security.crypto import generate_key
+    return [generate_key()]
+
+
+@pytest.fixture
+def api(migrated, alembic_cfg, db_url, keys):
+    from fastapi.testclient import TestClient
+    from ascam_knowledge.api.app import create_app
+    from ascam_knowledge.db.session import make_session_factory
+    from ascam_knowledge.security.auth import TokenRegistry
+    from ascam_knowledge.security.crypto import SecretBox
+    factory = make_session_factory(db_url)
+    app = create_app(session_factory=factory, secret_box=SecretBox(keys),
+                     tokens=TokenRegistry([f'{k}:{v}' for k, v in TOKENS.items()]))
+    with TestClient(app) as client:
+        client.headers['Authorization'] = f"Bearer {TOKENS['ui']}"
+        client.headers['X-ASCAM-User'] = 'penguji'
+        client.factory = factory
+        client.app_ref = app
+        yield client
+    factory.kw['bind'].dispose()

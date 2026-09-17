@@ -29,3 +29,13 @@ def database_url() -> URL:
         port=int(os.getenv('ASCAM_KNOWLEDGE_DB_PORT', '5432')),
         database=os.getenv('ASCAM_KNOWLEDGE_DB_NAME', 'ascam_knowledge'),
     )
+
+
+def read_secret_file(path: str) -> str:
+    with open(path, encoding='utf-8') as fh:
+        return fh.read().strip()
+
+
+def env_path(name: str) -> str | None:
+    value = os.getenv(name)
+    return value or None

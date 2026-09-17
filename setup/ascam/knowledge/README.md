@@ -1,38 +1,50 @@
 # ASCAM Knowledge
 
-Implementasi komponen Knowledge (rancangan: `docs/knowledge/README.md`; keputusan: ADR-0007).
+Implementasi komponen Knowledge. Rancangan: `docs/knowledge/README.md`.
+Keputusan: ADR-0007 (skema dan integritas), ADR-0008 (Knowledge Service).
 
 ```
 knowledge/
-├── docker-compose.yaml      knowledge-db (PostgreSQL 16) + knowledge-migrate (Alembic)
-├── db-init/                 pembuatan role aplikasi ascam_app saat volume pertama kali dibuat
-├── scripts/init-secrets.sh  membuat kata sandi acak di secrets/ (tidak di-commit)
+├── docker-compose.yaml       knowledge-db, knowledge-migrate, knowledge-service
+├── config/obdf-bansos.yaml   konfigurasi deklaratif OBDF studi kasus (diterapkan saat start)
+├── db-init/                  pembuatan role aplikasi ascam_app pada inisialisasi pertama
+├── scripts/init-secrets.sh   membuat berkas rahasia di secrets/ (tidak di-commit)
 └── service/
-    ├── src/ascam_knowledge/ model SQLAlchemy (registry, spec, ops) dan konfigurasi koneksi
-    ├── migrations/          migrasi Alembic (0001: skema awal + integritas)
-    ├── tests/               uji migrasi dan integritas
-    └── scripts/test.sh      menjalankan uji terhadap PostgreSQL sementara
+    ├── src/ascam_knowledge/  model, API (FastAPI), keamanan, CLI
+    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial
+    ├── tests/                uji migrasi, integritas, dan API
+    └── scripts/test.sh       uji terhadap PostgreSQL sementara
 ```
 
 ## Menjalankan
 
 ```bash
-setup/ascam/knowledge/scripts/init-secrets.sh          # sekali saja
+setup/ascam/knowledge/scripts/init-secrets.sh        # aman dijalankan ulang (tidak menimpa)
 docker compose -f setup/ascam/knowledge/docker-compose.yaml up -d --build
-docker logs ascam-knowledge-migrate                     # harus berakhir dengan "Running upgrade -> 0001"
 ```
 
-Basis data dapat diinspeksi dari host lewat `127.0.0.1:55432`
-(pengguna `ascam_owner`, kata sandi di `secrets/knowledge_db_owner_password`).
+Layanan tersedia di `http://127.0.0.1:18000` (dokumentasi interaktif: `/docs`).
+Token klien ada di `secrets/knowledge_api_tokens` (format `<klien>:<token>`).
+
+```bash
+TOKEN=$(grep '^ui:' setup/ascam/knowledge/secrets/knowledge_api_tokens | cut -d: -f2)
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf
+```
+
+## Konfigurasi deklaratif
+
+Dokumen `config/*.yaml` (versi 1) memuat OBDF, sumber, kredensial (hanya `secret_file`),
+target, pengaturan, kebijakan penamaan, dan pemetaan tipe. Penerapan bersifat idempoten,
+non-destruktif, dan atomik. Selain saat start, dapat diterapkan lewat
+`POST /api/v1/config/apply` atau `ascam-knowledge apply-config <berkas>`.
+
+Placeholder `property_iri_template`: `{namespace}`, `{column}`, `{column_camel}`, `{class_local}`.
 
 ## Menguji
 
 ```bash
 setup/ascam/knowledge/service/scripts/test.sh
 ```
-
-Uji menghapus dan membuat ulang skema, sehingga dijalankan pada PostgreSQL sementara,
-bukan pada `ascam-knowledge-db`.
 
 ## Menambah tabel di skema `spec`
 

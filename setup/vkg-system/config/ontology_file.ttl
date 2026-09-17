@@ -18,7 +18,7 @@
 #       properti bansos:nik, bansos:createdAt, dan bansos:noKK.
 #       Disjungsi (owl:unionOf) tidak diperbolehkan di OWL 2 QL, dan
 #       tipe individu untuk ketiga properti tersebut sudah ditegaskan
-#       melalui mapping (mapping.obda), sehingga penghapusan domain
+#       melalui mapping (mapping.ttl, R2RML), sehingga penghapusan domain
 #       tidak menghilangkan informasi apa pun yang diperlukan OBDA.
 #   (2) Menghapus deklarasi bansos:nilaiLama yang tertulis ganda.
 # ================================================================

@@ -3,6 +3,11 @@
 Runner eksperimen ASCAM: skenario baseline (B00x, tanpa ASCAM) dan perlakuan
 (A00x, dengan ASCAM), berulang, pada satu commit yang sama.
 
+CATATAN: skrip ini dibuat untuk mesin adaptasi ITERASI 1 (mapping .obda, kontainer
+ascam-adaptive-engine) yang kini dipensiunkan (ADR-0010). Hasilnya tersimpan di results/
+sebagai bukti iterasi pertama. Versi untuk arsitektur baru (Knowledge, Orchestrator,
+Executor, mapping R2RML) disusun ulang pada fase evaluasi.
+
 Prosedur tiap run (sama dengan prosedur manual yang telah divalidasi):
   1. pastikan artefak F bersih (git), lalu ./run.sh (stack dari nol)
   2. tunggu stack sehat (4 task Debezium RUNNING, Ontop menjawab, ASCAM mendengarkan)

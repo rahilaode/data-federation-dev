@@ -60,6 +60,6 @@ curl -X POST -H "Content-Type: application/json" \
      http://localhost:8083/connectors
 
 
-# ascam adaptive engine
-docker compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml down -v
-docker compose -f ./setup/ascam/adaptive-engine/docker-compose.yaml up --build --detach
+# ascam adaptive engine (iterasi 1) TIDAK dijalankan lagi: mesin tersebut mengubah mapping
+# .obda, sedangkan ℳ kini berupa R2RML (ADR-0005, ADR-0010). Penggantinya (Orchestrator dan
+# Executor) sedang dibangun; lihat setup/ascam/adaptive-engine/README.md.

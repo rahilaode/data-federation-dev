@@ -1,6 +1,6 @@
 # ADR-0005: Mapping R2RML sebagai artefak ℳ dan strategi validasi sebelum aktivasi
 
-- **Status:** Diterima
+- **Status:** Diterima; dilaksanakan pada F1.4c (ADR-0010)
 - **Tanggal:** 2026-09-17
 - **Fase MAPE-K:** Plan (pembangkitan ℳ′), Execute (validasi sebelum aktivasi), Knowledge (sync ℳ)
 - **Terkait:** batasan artefak (R2RML dan ontologi dalam Turtle), D10 (validasi konsistensi), ADR-0004 langkah 4

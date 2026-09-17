@@ -223,3 +223,55 @@ class CheckOut(Out):
 class TargetStatusOut(BaseModel):
     target: TargetOut
     last_check: CheckOut | None
+
+
+# ── versi spesifikasi dan sync ───────────────────────────────────────────────────
+class SpecVersionOut(Out):
+    id: int
+    version_no: int
+    parent_id: int | None
+    origin: str
+    status: str
+    teiid_vdb_name: str | None
+    teiid_vdb_version: str | None
+    teiid_connection_type: str | None
+    content_digest: str | None
+    created_at: datetime
+    sealed_at: datetime | None
+
+
+class ArtifactOut(Out):
+    id: int
+    kind: str
+    name: str
+    media_type: str
+    sha256: str
+
+
+class VersionDetailOut(BaseModel):
+    version: SpecVersionOut
+    counts: dict[str, int]
+    artifacts: list[ArtifactOut]
+    issues: list[dict[str, Any]]
+
+
+class SyncResultOut(BaseModel):
+    sync_run_id: int
+    changed: bool
+    spec_version_id: int | None
+    version_no: int | None
+    drift_detected: bool
+    counts: dict[str, int]
+    issues: list[dict[str, Any]]
+
+
+class SyncRunOut(Out):
+    id: int
+    trigger: str
+    status: str
+    produced_spec_version_id: int | None
+    drift_detected: bool | None
+    drift_summary: dict[str, Any] | None
+    error: dict[str, Any] | None
+    started_at: datetime
+    finished_at: datetime | None

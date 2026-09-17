@@ -20,7 +20,7 @@ class ArtifactInfo:
 def info(cfg: AgentConfig, kind: str) -> ArtifactInfo:
     path = cfg.path_of(kind)
     if not path.is_file():
-        return ArtifactInfo(kind, cfg.names[kind], MEDIA_TYPES[kind], 0, '', 
+        return ArtifactInfo(kind, cfg.names[kind], MEDIA_TYPES[kind], 0, '',
                             datetime.fromtimestamp(0, timezone.utc), exists=False)
     data = path.read_bytes()
     return ArtifactInfo(kind=kind, name=cfg.names[kind], media_type=MEDIA_TYPES[kind],

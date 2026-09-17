@@ -10,8 +10,8 @@ knowledge/
 ├── db-init/                  pembuatan role aplikasi ascam_app pada inisialisasi pertama
 ├── scripts/init-secrets.sh   membuat berkas rahasia di secrets/ (tidak di-commit)
 └── service/
-    ├── src/ascam_knowledge/  model, API (FastAPI), keamanan, uji koneksi, CLI
-    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial; 0003 hasil uji koneksi JSONB
+    ├── src/ascam_knowledge/  model, API (FastAPI), keamanan, uji koneksi, sync, CLI
+    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial; 0003 hasil uji koneksi JSONB; 0004 sidik jari isi versi
     ├── tests/                uji migrasi, integritas, dan API
     └── scripts/test.sh       uji terhadap PostgreSQL sementara
 ```
@@ -39,6 +39,18 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf/1/s
 ```
 
 Hasil disimpan di `registry.connection_check` (tanpa rahasia) dan menjadi sumber dasbor UI.
+
+## Sync spesifikasi OBDF
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf/1/sync
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/obdf/1/versions
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/versions/1
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/versions/1/artifacts/r2rml
+```
+
+Sync mengambil Σ_S dari Teiid (ODBC + management API) dan artefak ℳ/𝒯 dari Ontop Agent,
+lalu menyimpannya sebagai satu versi spesifikasi bila isinya berubah (ADR-0012).
 
 ## Konfigurasi deklaratif
 

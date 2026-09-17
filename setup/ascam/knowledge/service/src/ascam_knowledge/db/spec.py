@@ -59,6 +59,7 @@ class SpecVersion(Base):
     plan_id: Mapped[int | None] = mapped_column(
         ForeignKey('ops.adaptation_plan.id', ondelete='RESTRICT', use_alter=True,
                    name='fk_spec_version_plan_id_adaptation_plan'))
+    content_digest: Mapped[str | None] = mapped_column(Text, comment='sidik jari isi versi (Σ_S + artefak)')
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at()
     sealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

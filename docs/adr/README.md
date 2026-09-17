@@ -16,6 +16,7 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0009](0009-sumber-artefak-sigma-s.md) | Sumber pengambilan artefak dan spesifikasi Σ_S untuk sync | Knowledge, Execute | F1.4a, F1.4b |
 | [0010](0010-migrasi-r2rml-dan-pensiun-iterasi-1.md) | Mapping runtime beralih ke R2RML; mesin iterasi 1 dipensiunkan | – | F0.5 |
 | [0011](0011-ontop-agent.md) | Ontop Agent sebagai satu-satunya jalur ke artefak OBDA | Knowledge, Execute | F1.4d |
+| [0012](0012-sync-dan-versioning-spesifikasi.md) | Proses sync dan pembentukan versi spesifikasi | Knowledge | F1.5a |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

@@ -28,20 +28,39 @@ OUT = os.getenv('OUT_DIR', '/out')
 
 SYSTEM_SCHEMAS = ('SYS', 'SYSADMIN', 'pg_catalog')
 
-QUERIES = {
-    'vdb': "SELECT Name, Version, LoadingTimestamp, ActiveTimestamp FROM SYS.VirtualDatabases",
-    'schemas': "SELECT Name, IsPhysical FROM SYS.Schemas "
-               "WHERE Name NOT IN ('SYS', 'SYSADMIN', 'pg_catalog') ORDER BY Name",
-    'tables': "SELECT SchemaName, Name, Type, NameInSource, IsPhysical FROM SYS.Tables "
-              "WHERE SchemaName NOT IN ('SYS', 'SYSADMIN', 'pg_catalog') ORDER BY SchemaName, Name",
-    'columns': "SELECT SchemaName, TableName, Name, Position, NameInSource, DataType, "
-               "NullType, ElementLength FROM SYS.Columns "
-               "WHERE SchemaName NOT IN ('SYS', 'SYSADMIN', 'pg_catalog') "
-               "ORDER BY SchemaName, TableName, Position",
-    'keys': "SELECT SchemaName, TableName, Name, KeyName, KeyType, Position FROM SYS.KeyColumns "
-            "WHERE SchemaName NOT IN ('SYS', 'SYSADMIN', 'pg_catalog') "
-            "ORDER BY SchemaName, TableName, KeyName, Position",
+EXCLUDE = "('SYS', 'SYSADMIN', 'pg_catalog')"
+
+# Kolom yang diinginkan per tabel sistem. Nama kolom TIDAK diasumsikan dari
+# dokumentasi saja: skrip menanyakan dulu kolom yang benar-benar ada di versi
+# Teiid yang berjalan (SYS.Columns juga mendeskripsikan tabel SYS itu sendiri),
+# lalu hanya meminta kolom yang tersedia. Pada uji pertama, 'ElementLength'
+# (tercantum di Reference Guide) ternyata tidak ada di Teiid 16.
+WANTED = {
+    'VirtualDatabases': ['Name', 'Version', 'LoadingTimestamp', 'ActiveTimestamp'],
+    'Schemas': ['Name', 'IsPhysical'],
+    'Tables': ['SchemaName', 'Name', 'Type', 'NameInSource', 'IsPhysical'],
+    'Columns': ['SchemaName', 'TableName', 'Name', 'Position', 'NameInSource', 'DataType',
+                'NullType', 'Length', 'ElementLength', 'Precision', 'Scale'],
+    'KeyColumns': ['SchemaName', 'TableName', 'Name', 'KeyName', 'KeyType', 'Position'],
 }
+FILTER = {
+    'VirtualDatabases': '',
+    'Schemas': f" WHERE Name NOT IN {EXCLUDE} ORDER BY Name",
+    'Tables': f" WHERE SchemaName NOT IN {EXCLUDE} ORDER BY SchemaName, Name",
+    'Columns': f" WHERE SchemaName NOT IN {EXCLUDE} ORDER BY SchemaName, TableName, Position",
+    'KeyColumns': f" WHERE SchemaName NOT IN {EXCLUDE} ORDER BY SchemaName, TableName, KeyName, Position",
+}
+SNAPSHOT_KEY = {'VirtualDatabases': 'vdb', 'Schemas': 'schemas', 'Tables': 'tables',
+                'Columns': 'columns', 'KeyColumns': 'keys'}
+
+
+def available_columns(cur, sys_table):
+    # literal konstan (bukan masukan pengguna), sengaja tanpa parameter
+    cur.execute("SELECT Name FROM SYS.Columns WHERE SchemaName = 'SYS' "
+                f"AND TableName = '{sys_table}' ORDER BY Position")
+    return [r[0] for r in cur.fetchall()]
+
+
 PARAM_QUERY = "SELECT Name, NameInSource FROM SYS.Columns WHERE SchemaName = %s AND TableName = %s ORDER BY Position"
 
 
@@ -67,9 +86,17 @@ def try_driver(label, connect):
         conn.autocommit = True
         cur = conn.cursor()
         t0 = time.perf_counter()
-        for key, sql in QUERIES.items():
-            cur.execute(sql)
-            snapshot[key] = rows_as_dicts(cur)
+        result['sys_columns'] = {}
+        for sys_table, wanted in WANTED.items():
+            have = available_columns(cur, sys_table)
+            result['sys_columns'][sys_table] = have
+            cols = [c for c in wanted if c in have]
+            missing = [c for c in wanted if c not in have]
+            if missing:
+                print(f'   SYS.{sys_table}: kolom tidak tersedia -> {missing}')
+            cur.execute(f"SELECT {', '.join(cols)} FROM SYS.{sys_table}{FILTER[sys_table]}")
+            snapshot[SNAPSHOT_KEY[sys_table]] = rows_as_dicts(cur)
+            result.setdefault('queries_ok', []).append(sys_table)
         result['sync_s'] = round(time.perf_counter() - t0, 3)
         print(f'   koneksi {result["connect_s"]} s | sync Σ_S {result["sync_s"]} s')
         try:
@@ -77,10 +104,10 @@ def try_driver(label, connect):
             result['param_query'] = f'OK ({len(cur.fetchall())} baris)'
         except Exception as exc:                  # noqa: BLE001
             result['param_query'] = f'GAGAL: {str(exc).strip()[:200]}'
-            conn.rollback() if not conn.autocommit else None
         print(f'   kueri berparameter: {result["param_query"]}')
     except Exception as exc:                      # noqa: BLE001
-        print(f'   KUERI GAGAL: {type(exc).__name__}: {str(exc).strip()[:300]}')
+        print(f'   KUERI GAGAL setelah {result.get("queries_ok", [])}: '
+              f'{type(exc).__name__}: {str(exc).strip()[:300]}')
         result['error'] = f'query: {exc}'
         snapshot = None
     finally:
@@ -119,6 +146,10 @@ def main():
     if snapshot is None:
         print('\nTidak ada driver yang berhasil membaca Σ_S.')
         sys.exit(1)
+
+    print('\n== kolom SYS.Columns pada versi Teiid ini')
+    print('   ' + ', '.join(results[0].get('sys_columns', {}).get('Columns', [])
+                          or results[1].get('sys_columns', {}).get('Columns', [])))
 
     print('\n== ringkasan Σ_S VDB', VDB)
     for v in snapshot['vdb']:

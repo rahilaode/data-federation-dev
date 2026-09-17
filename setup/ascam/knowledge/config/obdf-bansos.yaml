@@ -23,6 +23,9 @@ credentials:
   - name: teiid-user               # ApplicationRealm (transport ODBC, ADR-0003)
     username: user1
     secret_file: /run/secrets/obdf_teiid_user_password
+  - name: ontop-agent              # token bearer untuk agen di host Ontop
+    username: knowledge
+    secret_file: /run/secrets/obdf_ontop_agent_token
 
 targets:
   - kind: teiid_mgmt
@@ -39,10 +42,10 @@ targets:
   - kind: kafka
     name: schema-monitor-kafka
     endpoint: {host: kafka, port: 9092}
-  - kind: ontop_agent               # dibangun pada F4
+  - kind: ontop_agent               # membaca ℳ dan 𝒯 di host Ontop; penerapan artefak pada F4
     name: ontop-agent
     endpoint: {host: ascam-ontop-agent, port: 8000}
-    enabled: false
+    credential: ontop-agent
 
 settings:
   adaptation.add_column: {mode: auto}          # K4

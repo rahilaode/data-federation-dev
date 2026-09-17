@@ -79,7 +79,7 @@ class Endpoint(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
-REQUIRES_CREDENTIAL = {'teiid_mgmt', 'teiid_odbc'}
+REQUIRES_CREDENTIAL = {'teiid_mgmt', 'teiid_odbc', 'ontop_agent'}
 
 
 class TargetIn(BaseModel):

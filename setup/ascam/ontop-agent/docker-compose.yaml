@@ -1,0 +1,38 @@
+# Agen ASCAM pada host Ontop (docs/adr/0011-ontop-agent.md).
+# Token dibuat oleh setup/ascam/knowledge/scripts/init-secrets.sh (satu tempat penyimpanan
+# rahasia untuk lingkungan laboratorium ini).
+services:
+  ontop-agent:
+    build: {context: ./service}
+    image: ascam-ontop-agent:dev
+    container_name: ascam-ontop-agent
+    restart: unless-stopped
+    environment:
+      ASCAM_AGENT_ARTIFACTS_DIR: /artifacts
+      ASCAM_AGENT_ONTOP_CONTAINER: vkg-system-ontop-teiid
+      ASCAM_AGENT_ONTOP_IMAGE: ontop/ontop-endpoint:4.1.1
+      ASCAM_AGENT_API_TOKENS_FILE: /run/secrets/ontop_agent_api_tokens
+    secrets: [ontop_agent_api_tokens]
+    volumes:
+      # Artefak OBDA milik host Ontop. Dipasang read-only pada tahap ini (hanya dibaca);
+      # penerapan artefak oleh Executor (F4) akan mengubahnya menjadi baca-tulis.
+      - ../../vkg-system/config:/artifacts:ro
+      # Diperlukan untuk menjalankan CLI Ontop sekali jalan dan (F4) memuat ulang Ontop.
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - '127.0.0.1:18100:8000'
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [ascam-networks]
+
+secrets:
+  ontop_agent_api_tokens:
+    file: ../knowledge/secrets/ontop_agent_api_tokens
+
+networks:
+  ascam-networks:
+    external: true

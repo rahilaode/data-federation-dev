@@ -32,6 +32,21 @@ def wildfly(valid_user='admin', state='running'):
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
+def agent_server(token='rahasia-token', artifacts=True):
+    """Agen Ontop tiruan: /health terbuka, /api/v1/artifacts memerlukan token."""
+    def handler(request: httpx.Request):
+        if request.url.path == '/health':
+            return httpx.Response(200, json={'status': 'ok', 'ontop_container': 'ontop',
+                                             'artifacts': {'r2rml': True, 'ontology': True}})
+        if request.headers.get('authorization') != f'Bearer {token}':
+            return httpx.Response(401, json={'detail': 'Token tidak valid'})
+        if not artifacts:
+            return httpx.Response(500)
+        return httpx.Response(200, json=[{'kind': 'r2rml', 'sha256': 'a' * 64},
+                                         {'kind': 'ontology', 'sha256': 'b' * 64}])
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
 def sparql(status=200):
     def handler(request: httpx.Request):
         assert request.url.params['query'].startswith('ASK')
@@ -110,6 +125,15 @@ def test_ontop_sparql():
     assert not down.ok and down.summary == 'HTTP 503'
 
 
+def test_ontop_agent_check_uses_token():
+    ep = {'host': 'agent', 'port': 8000}
+    ok = connectors.check_ontop_agent(ep, token='rahasia-token', http=agent_server())
+    assert ok.ok and ok.facts['artifact_digests'] == {'r2rml': 'a' * 12, 'ontology': 'b' * 12}
+    denied = connectors.check_ontop_agent(ep, token='token-salah', http=agent_server())
+    assert not denied.ok and denied.summary == 'token agen ditolak'
+    assert 'token-salah' not in json.dumps(denied.detail())
+
+
 def test_kafka_reports_missing_topics():
     ok = connectors.check_kafka({'host': 'kafka', 'port': 9092}, ['a', 'b'],
                                 admin_factory=lambda: FakeAdmin({'a', 'b', 'c'}))
@@ -161,6 +185,7 @@ def lab(api):
         'kafka': api.post(base, json={'kind': 'kafka', 'name': 'kafka',
                                       'endpoint': {'host': 'kafka', 'port': 9092}}).json()['id'],
         'agent': api.post(base, json={'kind': 'ontop_agent', 'name': 'agent', 'enabled': False,
+                                      'credential_id': user,
                                       'endpoint': {'host': 'agent', 'port': 8000}}).json()['id'],
     }
     yield oid, ids

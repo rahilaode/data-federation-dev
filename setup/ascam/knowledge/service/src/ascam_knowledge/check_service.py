@@ -40,7 +40,8 @@ def run_check(db: Session, target: registry.Target, box: SecretBox, actor: str,
                                         .filter_by(obdf_id=target.obdf_id)).scalars() if t]
         result = connectors.check_kafka(ep, topics, admin_factory=hooks.kafka_admin_factory)
     elif target.kind == 'ontop_agent':
-        result = connectors.check_ontop_agent(ep, http=hooks.http)
+        # rahasia kredensial agen adalah token bearer (bukan kata sandi basis data)
+        result = connectors.check_ontop_agent(ep, token=password, http=hooks.http)
     else:                                                    # dijaga CHECK constraint
         result = connectors.CheckResult(False, 0, f'jenis target {target.kind} tidak dikenal')
 

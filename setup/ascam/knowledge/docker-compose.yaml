@@ -60,6 +60,7 @@ services:
       - knowledge_api_tokens
       - obdf_teiid_mgmt_password
       - obdf_teiid_user_password
+      - obdf_ontop_agent_token
     volumes:
       - ./config:/config:ro
     ports:
@@ -79,6 +80,7 @@ secrets:
   knowledge_api_tokens: {file: ./secrets/knowledge_api_tokens}
   obdf_teiid_mgmt_password: {file: ./secrets/obdf_teiid_mgmt_password}
   obdf_teiid_user_password: {file: ./secrets/obdf_teiid_user_password}
+  obdf_ontop_agent_token: {file: ./secrets/obdf_ontop_agent_token}
 
 volumes:
   knowledge-db-data: {}

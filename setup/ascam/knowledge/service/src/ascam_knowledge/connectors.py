@@ -145,14 +145,26 @@ def check_kafka(endpoint: dict, expected_topics: list[str],
     return _timed(run)
 
 
-def check_ontop_agent(endpoint: dict, http: httpx.Client | None = None,
+def check_ontop_agent(endpoint: dict, token: str | None = None,
+                      http: httpx.Client | None = None,
                       timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
     def run():
         client = http or httpx.Client(timeout=timeout)
         try:
-            r = client.get(_url(endpoint, '') + '/health')
-            return CheckResult(r.status_code == 200, 0, f'HTTP {r.status_code}')
+            base = _url(endpoint, '')
+            health = client.get(f'{base}/health')
+            if health.status_code != 200:
+                return CheckResult(False, 0, f'HTTP {health.status_code}', error=health.text[:200])
+            facts = health.json()
+            if token:                       # sekaligus memastikan token diterima agen
+                listing = client.get(f'{base}/api/v1/artifacts',
+                                     headers={'Authorization': f'Bearer {token}'})
+                if listing.status_code != 200:
+                    return CheckResult(False, 0, 'token agen ditolak',
+                                       facts, error=f'HTTP {listing.status_code}')
+                facts['artifact_digests'] = {a['kind']: a['sha256'][:12] for a in listing.json()}
+            return CheckResult(True, 0, 'agen menjawab', facts)
         finally:
             if http is None:
                 client.close()
-    return _timed(run)
+    return _timed(run, token)

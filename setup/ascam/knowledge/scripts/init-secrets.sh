@@ -24,6 +24,14 @@ write knowledge_encryption_keys "$(fernet_key)"
 # token API antarlayanan: <klien>:<token>
 write knowledge_api_tokens "$(printf 'ui:%s\norchestrator:%s\nexecutor:%s' "$(rand)" "$(rand)" "$(rand)")"
 
+# Token agen Ontop: Knowledge menyimpan token mentah sebagai kredensial, sedangkan agen
+# membaca berkas berformat <klien>:<token>.
+if [ ! -s "$DIR/obdf_ontop_agent_token" ]; then
+  AGENT_TOKEN="$(rand)"
+  write obdf_ontop_agent_token "$AGENT_TOKEN"
+  write ontop_agent_api_tokens "knowledge:$AGENT_TOKEN"
+fi
+
 # Kredensial OBDF LABORATORIUM (nilai bawaan setup/data-federation/Dockerfile).
 # Pada lingkungan nyata, isi berkas ini dengan kredensial milik pengelola OBDF.
 write obdf_teiid_mgmt_password "Password12345_"

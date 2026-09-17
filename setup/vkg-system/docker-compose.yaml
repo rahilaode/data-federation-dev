@@ -13,6 +13,11 @@ services:
       # terkendali dan pengukuran Δt_adapt menjadi bias. Reload Ontop
       # dilakukan secara eksplisit oleh ASCAM Executor.
       ONTOP_DEV_MODE: 'false'
+    # init (tini) sebagai PID 1 dan entrypoint yang meng-exec java, sehingga
+    # SIGTERM sampai ke JVM: kontainer berhenti ~0,8 s (bukan menunggu timeout
+    # 10 s lalu SIGKILL) dan shutdown Spring berjalan rapi.
+    # Lihat docs/adr/0001-reload-ontop.md
+    init: true
     ports:
       - '0.0.0.0:8080:8080'
     networks:
@@ -21,6 +26,9 @@ services:
       - ./config:/opt/ontop/input
       - ./jdbc:/opt/ontop/jdbc
       - ./wait-for-it:/opt/wait-for-it
+      # entrypoint resmi Ontop 4.1.1 dengan satu perubahan: `java` -> `exec java`
+      # (backport perilaku entrypoint Ontop 5.0.0). Lihat entrypoint/README.md
+      - ./entrypoint/entrypoint-4.1.1-exec.sh:/opt/ontop/entrypoint.sh:ro
     entrypoint: [
         "/opt/wait-for-it/wait-for-it.sh",
         "teiid:31000",

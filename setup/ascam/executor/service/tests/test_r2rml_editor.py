@@ -82,3 +82,42 @@ def test_apply_actions_runs_plan():
         {'operation': 'remove_predicate_object_map', 'predicate_iri': STATUS}])
     predikat = r2rml.predicates_of(hasil)
     assert EMAIL in predikat and STATUS not in predikat
+
+
+# ── penyuntingan append-only untuk pemetaan milik ASCAM ─────────────────────────
+def test_add_is_append_only_and_preserves_file():
+    hasil = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
+    assert hasil.startswith(MAPPING.rstrip('\n'))            # berkas asli tidak ditulis ulang
+    assert '# Mapping bansos (header dipertahankan)' in hasil
+    assert '<#MapPenerima> rr:predicateObjectMap [' in hasil
+    assert '# ascam:mulai pom %s pada penerima_manfaat' % EMAIL in hasil
+    graf = Graph()
+    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)   # tetap Turtle yang sah
+    assert EMAIL in r2rml.predicates_of(hasil)
+    # triple tambahan menyatu dengan TriplesMap yang sama, bukan membuat TriplesMap baru
+    assert len(set(graf.subjects(RR.logicalTable, None))) == 2
+
+
+def test_ascam_owned_mapping_is_removed_as_text():
+    ditambah = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
+    dihapus, jumlah = r2rml.remove_predicate_object_map(ditambah, EMAIL, table='penerima_manfaat')
+    assert jumlah == 1
+    assert dihapus.rstrip('\n') == MAPPING.rstrip('\n')      # kembali persis seperti semula
+    tanpa_tabel, jumlah2 = r2rml.remove_predicate_object_map(ditambah, EMAIL)
+    assert jumlah2 == 1 and EMAIL not in r2rml.predicates_of(tanpa_tabel)
+
+
+def test_human_written_mapping_removal_falls_back_to_rewrite():
+    hasil, jumlah = r2rml.remove_predicate_object_map(MAPPING, STATUS)
+    assert jumlah == 1 and STATUS not in r2rml.predicates_of(hasil)
+    assert '@prefix bansos:' in hasil                        # prefix asal dipertahankan
+    assert hasil.startswith('# Mapping bansos')
+
+
+def test_datatype_is_written_when_given():
+    hasil = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'usia', EMAIL,
+                                           datatype_iri='http://www.w3.org/2001/XMLSchema#integer')
+    assert 'rr:datatype xsd:integer' in hasil
+    graf = Graph()
+    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
+    assert (None, RR.datatype, None) in graf

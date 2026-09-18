@@ -66,6 +66,14 @@ def statement_set_name_in_source(table: str, column: str, name_in_source: str) -
             f"OPTIONS (SET NAMEINSOURCE '{aman}');")
 
 
+def _indentasi(teks: str) -> str:
+    """Indentasi baris DDL yang sudah ada, agar pernyataan baru menyatu rapi."""
+    for baris in teks.splitlines():
+        if baris.strip():
+            return baris[:len(baris) - len(baris.lstrip())]
+    return ''
+
+
 def append_statements(xml: str, model: str, statements: list[str],
                       new_version: str | None = None) -> str:
     """Menambahkan pernyataan ALTER ke metadata model, opsional menaikkan versi VDB."""
@@ -73,11 +81,13 @@ def append_statements(xml: str, model: str, statements: list[str],
         raise VdbError('tidak ada pernyataan untuk ditambahkan')
     document = _document(xml)
     node = _metadata_text_node(_model(document, model))
-    blok = '\n' + '\n'.join(statements) + '\n'
+    spasi = _indentasi(node.data)
+    blok = '\n' + '\n'.join(spasi + item for item in statements) + '\n' + spasi
     node.data = node.data.rstrip() + '\n' + blok
     if new_version is not None:
         document.documentElement.setAttribute('version', str(new_version))
-    return document.toxml()
+    # toxml(encoding=...) mempertahankan deklarasi XML lengkap termasuk encoding
+    return document.toxml(encoding='UTF-8').decode('utf-8').replace('?><vdb', '?>\n<vdb', 1)
 
 
 def next_version(xml: str) -> str:

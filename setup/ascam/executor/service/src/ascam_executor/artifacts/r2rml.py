@@ -8,8 +8,11 @@ versi tetap tersimpan di Knowledge (ADR-0012). Trade-off ini dicatat pada ADR-00
 """
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 
+from .turtle_text import append_block, ensure_prefixes, has_block, prefix_map, remove_block, shorten
+
 RR = Namespace('http://www.w3.org/ns/r2rml#')
 BASE = 'urn:ascam:mapping'
+PREFIXES = {'rr': str(RR), 'xsd': 'http://www.w3.org/2001/XMLSchema#'}
 
 
 class MappingError(Exception):
@@ -38,8 +41,22 @@ def _header(text: str) -> str:
 
 
 def _serialize(graph: Graph, text_asal: str) -> str:
+    """Penulisan ulang penuh: dipakai hanya bila suntingan menyentuh bagian tulisan manusia."""
+    for namespace, prefix in prefix_map(text_asal).items():          # pertahankan nama prefix asal
+        graph.namespace_manager.bind(prefix, namespace, replace=True, override=True)
     isi = graph.serialize(format='turtle', base=BASE)
     return _header(text_asal) + isi
+
+
+def _kunci_pom(predicate_iri: str, table: str) -> str:
+    return f'pom {predicate_iri} pada {table}'
+
+
+def _referensi(iri: str, prefixes: dict[str, str]) -> str:
+    """Bentuk rujukan TriplesMap seperti pada berkas asal (mis. <#MapPenerima>)."""
+    if iri.startswith(BASE + '#'):
+        return f'<#{iri[len(BASE) + 1:]}>'
+    return shorten(iri, prefixes)
 
 
 def triples_map_for_table(graph: Graph, table: str) -> URIRef | None:
@@ -58,7 +75,12 @@ def triples_map_for_table(graph: Graph, table: str) -> URIRef | None:
 
 def add_predicate_object_map(text: str, table: str, column: str, predicate_iri: str,
                              datatype_iri: str | None = None) -> str:
-    """Menambahkan pemetaan kolom -> predikat pada TriplesMap tabel tersebut (pola P-001)."""
+    """Menambahkan pemetaan kolom -> predikat (pola P-001).
+
+    Ditulis sebagai blok terkelola di akhir berkas: dalam Turtle, triple tambahan untuk subjek
+    yang sama menyatu dengan deklarasi sebelumnya, sehingga berkas asli tidak perlu ditulis
+    ulang dan komentarnya tetap utuh.
+    """
     graph = _graph(text)
     tm = triples_map_for_table(graph, table)
     if tm is None:
@@ -66,21 +88,42 @@ def add_predicate_object_map(text: str, table: str, column: str, predicate_iri: 
     for pom in graph.objects(tm, RR.predicateObjectMap):
         if (pom, RR.predicate, URIRef(predicate_iri)) in graph:
             return text                              # sudah ada: idempoten
-    pom = BNode()
-    object_map = BNode()
-    graph.add((tm, RR.predicateObjectMap, pom))
-    graph.add((pom, RDF.type, RR.PredicateObjectMap))
-    graph.add((pom, RR.predicate, URIRef(predicate_iri)))
-    graph.add((pom, RR.objectMap, object_map))
-    graph.add((object_map, RR.column, Literal(column)))
+
+    # hanya prefix yang benar-benar dipakai blok baru yang ditambahkan
+    dibutuhkan = {'rr': str(RR)}
     if datatype_iri:
-        graph.add((object_map, RR.datatype, URIRef(datatype_iri)))
-    return _serialize(graph, text)
+        dibutuhkan['xsd'] = 'http://www.w3.org/2001/XMLSchema#'
+    hasil = ensure_prefixes(text, dibutuhkan)
+    prefixes = prefix_map(hasil)
+    objek = 'rr:column "%s"' % column
+    if datatype_iri:
+        objek += ' ; rr:datatype %s' % shorten(datatype_iri, prefixes)
+    blok = '\n'.join([
+        '%s rr:predicateObjectMap [' % _referensi(str(tm), prefixes),
+        '    rr:predicate %s ;' % shorten(predicate_iri, prefixes),
+        '    rr:objectMap [ %s ]' % objek,
+        '] .',
+    ])
+    return append_block(hasil, _kunci_pom(predicate_iri, table), blok)
 
 
 def remove_predicate_object_map(text: str, predicate_iri: str,
                                 table: str | None = None) -> tuple[str, int]:
-    """Menghapus predicate-object map untuk predikat tertentu (pola P-002)."""
+    """Menghapus predicate-object map untuk predikat tertentu (pola P-002).
+
+    Blok yang dulu ditulis ASCAM dihapus sebagai teks (berkas lain tidak tersentuh). Pemetaan
+    yang ditulis manusia hanya dapat dihapus dengan menulis ulang berkas dari graf RDF.
+    """
+    if table is not None and has_block(text, _kunci_pom(predicate_iri, table)):
+        return remove_block(text, _kunci_pom(predicate_iri, table))
+    if table is None:
+        terkelola, jumlah = text, 0
+        for tabel_kandidat in _tabel_terkelola(text, predicate_iri):
+            terkelola, dihapus = remove_block(terkelola, _kunci_pom(predicate_iri, tabel_kandidat))
+            jumlah += dihapus
+        if jumlah:
+            return terkelola, jumlah
+
     graph = _graph(text)
     sasaran = URIRef(predicate_iri)
     terhapus = 0
@@ -98,6 +141,13 @@ def remove_predicate_object_map(text: str, predicate_iri: str,
     if terhapus == 0:
         return text, 0
     return _serialize(graph, text), terhapus
+
+
+def _tabel_terkelola(text: str, predicate_iri: str) -> list[str]:
+    """Tabel-tabel yang blok POM-nya untuk predikat ini ditulis ASCAM."""
+    awalan = f'# ascam:mulai pom {predicate_iri} pada '
+    return [baris.strip()[len(awalan):] for baris in text.splitlines()
+            if baris.strip().startswith(awalan)]
 
 
 def predicates_of(text: str) -> set[str]:

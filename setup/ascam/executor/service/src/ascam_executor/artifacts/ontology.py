@@ -12,6 +12,8 @@ Property baru ditulis dengan kosakata umum: `rdfs:label`, `rdfs:comment`, `rdfs:
 """
 from datetime import datetime, timezone
 
+from .turtle_text import PENANDA_BLOK, append_block, ensure_prefixes, prefix_map, shorten
+
 PREFIXES = {
     'owl': 'http://www.w3.org/2002/07/owl#',
     'rdfs': 'http://www.w3.org/2000/01/rdf-schema#',
@@ -19,57 +21,20 @@ PREFIXES = {
     'dcterms': 'http://purl.org/dc/terms/',
     'skos': 'http://www.w3.org/2004/02/skos/core#',
 }
-PENANDA = '# ─── blok terkelola ASCAM (jangan disunting manual) ───'
+PENANDA = PENANDA_BLOK
 
 
 class OntologyError(Exception):
     pass
 
 
-def _prefix_map(text: str) -> dict[str, str]:
-    mapping = {}
-    for baris in text.splitlines():
-        potongan = baris.strip()
-        if potongan.lower().startswith('@prefix'):
-            bagian = potongan.split()
-            if len(bagian) >= 3:
-                mapping[bagian[2].strip('<>')] = bagian[1].rstrip(':')
-    return mapping
 
 
-def _singkat(iri: str, prefixes: dict[str, str]) -> str:
-    for namespace, prefix in prefixes.items():
-        if iri.startswith(namespace):
-            sisa = iri[len(namespace):]
-            if sisa and all(c.isalnum() or c in '_-' for c in sisa):
-                return f'{prefix}:{sisa}'
-    return f'<{iri}>'
-
-
-def ensure_prefixes(text: str, dibutuhkan: dict[str, str]) -> str:
-    """Menambahkan deklarasi @prefix yang belum ada, tepat setelah deklarasi terakhir."""
-    ada = _prefix_map(text)
-    tambahan = [f'@prefix {prefix}: <{namespace}> .'
-                for prefix, namespace in dibutuhkan.items() if namespace not in ada]
-    if not tambahan:
-        return text
-    baris = text.splitlines()
-    terakhir = max((i for i, b in enumerate(baris) if b.strip().lower().startswith('@prefix')),
-                   default=-1)
-    baris[terakhir + 1:terakhir + 1] = tambahan
-    return '\n'.join(baris) + ('\n' if text.endswith('\n') else '')
-
-
-def _append(text: str, blok: str) -> str:
-    dasar = text if text.endswith('\n') else text + '\n'
-    if PENANDA not in dasar:
-        dasar += f'\n{PENANDA}\n'
-    return dasar + blok
 
 
 def is_declared(text: str, iri: str) -> bool:
-    prefixes = _prefix_map(text)
-    pendek = _singkat(iri, prefixes)
+    prefixes = prefix_map(text)
+    pendek = shorten(iri, prefixes)
     for baris in text.splitlines():
         potongan = baris.strip()
         if potongan.startswith((pendek + ' ', pendek + '\t')) and 'owl:DatatypeProperty' in potongan:
@@ -85,16 +50,16 @@ def add_datatype_property(text: str, iri: str, *, domain: str | None, range_iri:
         return text
     waktu = waktu or datetime.now(timezone.utc)
     hasil = ensure_prefixes(text, PREFIXES)
-    prefixes = _prefix_map(hasil)
-    baris = [f'\n{_singkat(iri, prefixes)} a owl:DatatypeProperty ;']
+    prefixes = prefix_map(hasil)
+    baris = [f'\n{shorten(iri, prefixes)} a owl:DatatypeProperty ;']
     if domain:
-        baris.append(f'    rdfs:domain {_singkat(domain, prefixes)} ;')
-    baris.append(f'    rdfs:range {_singkat(range_iri, prefixes)} ;')
+        baris.append(f'    rdfs:domain {shorten(domain, prefixes)} ;')
+    baris.append(f'    rdfs:range {shorten(range_iri, prefixes)} ;')
     baris.append(f'    rdfs:label "{label}" ;')
     baris.append(f'    rdfs:comment "{komentar}" ;')
     baris.append(f'    dcterms:created "{waktu.isoformat()}"^^xsd:dateTime ;')
     baris.append(f'    skos:changeNote "{catatan_perubahan or komentar}" .')
-    return _append(hasil, '\n'.join(baris) + '\n')
+    return append_block(hasil, f'property {iri}', '\n'.join(baris))
 
 
 def deprecate_property(text: str, iri: str, *, alasan: str,
@@ -102,17 +67,17 @@ def deprecate_property(text: str, iri: str, *, alasan: str,
     """Menandai property sebagai deprecated (pola P-002), tanpa menghapus deklarasinya."""
     waktu = waktu or datetime.now(timezone.utc)
     hasil = ensure_prefixes(text, PREFIXES)
-    prefixes = _prefix_map(hasil)
-    pendek = _singkat(iri, prefixes)
+    prefixes = prefix_map(hasil)
+    pendek = shorten(iri, prefixes)
     blok = (f'\n{pendek} owl:deprecated true ;\n'
             f'    dcterms:modified "{waktu.isoformat()}"^^xsd:dateTime ;\n'
             f'    skos:changeNote "{alasan}" .\n')
-    return _append(hasil, blok)
+    return append_block(hasil, f'deprecate {iri}', blok)
 
 
 def is_deprecated(text: str, iri: str) -> bool:
-    prefixes = _prefix_map(text)
-    pendek = _singkat(iri, prefixes)
+    prefixes = prefix_map(text)
+    pendek = shorten(iri, prefixes)
     for baris in text.splitlines():
         potongan = baris.strip()
         if potongan.startswith(pendek) and 'owl:deprecated' in potongan and 'true' in potongan:

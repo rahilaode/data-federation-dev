@@ -82,3 +82,12 @@ def test_repeated_adaptation_accumulates_statements():
                                        'table': 'penerima_manfaat', 'column': 'nik'}],
                                new_version='3')
     assert dua.count('ALTER FOREIGN TABLE') == 2 and vdb.version_of(dua) == '3'
+
+
+def test_xml_declaration_and_indentation_are_preserved():
+    hasil = vdb.append_statements(VDB, 'kemensos', [vdb.statement_drop_column('t', 'c')])
+    assert hasil.startswith('<?xml version="1.0" encoding="UTF-8"?>\n<vdb ')
+    baris_alter = [b for b in hasil.splitlines() if 'ALTER FOREIGN TABLE' in b][0]
+    baris_create = [b for b in hasil.splitlines() if 'CREATE FOREIGN TABLE' in b][0]
+    spasi = lambda b: len(b) - len(b.lstrip())            # noqa: E731
+    assert spasi(baris_alter) == spasi(baris_create)      # sejajar dengan DDL yang ada

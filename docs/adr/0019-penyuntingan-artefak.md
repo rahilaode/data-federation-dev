@@ -24,14 +24,17 @@ sebagiannya saat kolom hilang.
    penghapusan diganti dengan `owl:deprecated` (OWL 2) agar kueri lama tidak langsung rusak.
    Metadata memakai kosakata umum: `rdfs:label`, `rdfs:comment`, `dcterms:created`,
    `dcterms:modified`, dan `skos:changeNote`.
-3. **Mapping: ditulis ulang dari graf RDF.** Menghapus predicate-object map tidak mungkin
-   dilakukan secara append-only, sehingga berkas diserialisasi ulang dengan rdflib. Komentar
-   pembuka berkas dipertahankan; komentar di dalam badan mapping **hilang**. Konsekuensi ini
-   diterima karena: (a) isi lengkap setiap versi tersimpan di Knowledge dan dapat dibandingkan
-   (ADR-0012), (b) agen menyimpan cadangan berkas sebelum setiap penulisan (ADR-0018), dan
-   (c) ℳ setelah adaptasi pertama memang menjadi artefak yang dikelola mesin (ADR-0010).
-   Penyuntingan yang mempertahankan format (mis. lewat concrete syntax tree) dicatat sebagai
-   pekerjaan lanjutan.
+3. **Mapping: append-only bila mungkin, tulis ulang bila terpaksa.** Menambahkan
+   predicate-object map ditulis sebagai **blok terkelola** di akhir berkas: dalam Turtle, triple
+   tambahan untuk subjek yang sama menyatu dengan deklarasi sebelumnya, sehingga TriplesMap yang
+   ada bertambah pemetaan tanpa berkasnya ditulis ulang. Setiap blok diapit penanda berisi kunci
+   (predikat dan tabel), sehingga ASCAM dapat menghapusnya kembali sebagai teks dan berkas kembali
+   persis seperti semula. Pemetaan yang **ditulis manusia** hanya dapat dihapus dengan
+   menyerialisasi ulang graf memakai rdflib; dalam kasus itu komentar di badan berkas hilang,
+   sedangkan komentar pembuka dan nama prefix asal dipertahankan. Risikonya diredam karena:
+   (a) isi lengkap setiap versi tersimpan di Knowledge (ADR-0012), (b) agen mencadangkan berkas
+   sebelum setiap penulisan (ADR-0018). Penyuntingan yang mempertahankan format sepenuhnya
+   (mis. lewat concrete syntax tree) dicatat sebagai pekerjaan lanjutan.
 4. **Penghapusan mapping dapat dibatasi per tabel**, karena satu predikat dapat dipakai beberapa
    TriplesMap. Tanpa pembatasan ini, DROP satu kolom akan menghapus pemetaan di tabel lain.
 5. **Penyunting adalah fungsi murni** (teks masuk, teks keluar) tanpa akses berkas maupun
@@ -39,18 +42,22 @@ sebagiannya saat kolom hilang.
 
 ## Bukti
 
-18 uji penyunting: penambahan `ALTER` mempertahankan CDATA dan DDL lama, versi dinaikkan satu
+23 uji penyunting: penambahan `ALTER` mempertahankan CDATA dan DDL lama, versi dinaikkan satu
 kali meski beberapa model disunting, identifier kata kunci tetap dikutip, pemetaan tipe dari
 Knowledge dipakai, galat dilaporkan eksplisit (model tak dikenal, XML rusak, tipe tak diketahui,
 tindakan tak dikenal, versi non-numerik), dan adaptasi berulang menumpuk pernyataan; ontologi
 tetap valid Turtle dengan komentar utuh, prefix ditambahkan hanya bila belum ada, penambahan
-property idempoten, deprecation tidak menghapus deklarasi; mapping menambah dan menghapus
-predicate-object map dengan benar, penambahan idempoten, penghapusan dapat dibatasi per tabel,
-dan sasaran yang tidak ada dilaporkan. Ketiganya juga diuji terhadap artefak OBDF yang
+property idempoten, deprecation tidak menghapus deklarasi; mapping menambah pemetaan sebagai blok
+terkelola tanpa mengubah baris lain dan tetap menyatu ke TriplesMap yang sama, penambahan
+idempoten, blok milik ASCAM dihapus sebagai teks sehingga berkas kembali identik, pemetaan
+tulisan manusia dihapus lewat penulisan ulang dengan prefix asal dipertahankan, penghapusan
+dapat dibatasi per tabel, dan sasaran yang tidak ada dilaporkan. Ketiganya juga diuji terhadap artefak OBDF yang
 sebenarnya (`experiments/f4/preview_edits.py`).
 
 ## Konsekuensi
 
 - Berkas VDB memanjang seiring adaptasi; pemadatan dicatat sebagai pekerjaan lanjutan (ADR-0002).
 - Ontologi memuat blok terkelola ASCAM yang tidak boleh disunting manual.
-- Perubahan mapping perlu ditinjau lewat diff versi di UI, karena tata letaknya dapat berubah.
+- Diff pada artefak nyata: penambahan kolom menghasilkan 14 baris perubahan pada VDB dan 13 baris
+  pada mapping; penghapusan pemetaan tulisan manusia masih menghasilkan ±345 baris karena berkas
+  ditulis ulang, sehingga perubahan itu perlu ditinjau lewat diff versi di UI.

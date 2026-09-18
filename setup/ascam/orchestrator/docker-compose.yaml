@@ -1,0 +1,33 @@
+# Orchestrator ASCAM: konsumsi event DDL dari Kafka, normalisasi, kirim ke Knowledge
+# (docs/adr/0017-orchestrator.md). Identitas OBDF, daftar topik, dan alamat Kafka diambil
+# dari Knowledge, sehingga tidak ada konfigurasi yang terduplikasi di sini.
+services:
+  orchestrator:
+    build: {context: ./service}
+    image: ascam-orchestrator:dev
+    container_name: ascam-orchestrator
+    restart: unless-stopped
+    environment:
+      ASCAM_ORCH_KNOWLEDGE_URL: http://ascam-knowledge-service:8000
+      ASCAM_ORCH_TOKEN_FILE: /run/secrets/knowledge_api_tokens
+      ASCAM_ORCH_TOKEN_CLIENT: orchestrator
+      ASCAM_ORCH_OBDF: bansos
+      ASCAM_ORCH_GROUP_ID: ascam-orchestrator
+    secrets: [knowledge_api_tokens]
+    ports:
+      - '127.0.0.1:18200:8000'
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [ascam-networks]
+
+secrets:
+  knowledge_api_tokens:
+    file: ../knowledge/secrets/knowledge_api_tokens
+
+networks:
+  ascam-networks:
+    external: true

@@ -2,7 +2,9 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import UUID4, BaseModel, ConfigDict, Field, SecretStr, model_validator
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 Name = Field(pattern=r'^[a-z0-9][a-z0-9_.-]{0,62}$', description='huruf kecil, angka, _ . -')
 Dbms = Literal['postgresql', 'mysql']
@@ -327,9 +329,15 @@ class ImpactOut(BaseModel):
 
 # ── event skema dan rencana adaptasi ─────────────────────────────────────────────
 class EventIn(BaseModel):
-    """Event skema terformalisasi (D7). `event_uid` menjamin idempotensi."""
-    event_uid: UUID4 | None = None
-    operation: Literal['add', 'drop', 'rename']
+    """Event skema terformalisasi (D7). `event_uid` menjamin idempotensi.
+
+    UUID versi apa pun diterima; Orchestrator memakai UUID deterministik (versi 5) dari
+    topik, partisi, dan offset agar pengiriman ulang tidak menghasilkan rencana ganda.
+    `operation = other` dipakai untuk DDL yang tidak didukung, agar tetap terlihat
+    administrator alih-alih hilang diam-diam.
+    """
+    event_uid: UUID | None = None
+    operation: Literal['add', 'drop', 'rename', 'other']
     source: str
     schema_name: str | None = Field(default=None, alias='schema')
     table: str
@@ -371,7 +379,7 @@ class PlanOut(Out):
 
 class EventOut(Out):
     id: int
-    event_uid: UUID4
+    event_uid: UUID
     source_system_id: int | None
     structured: dict[str, Any] | None
     status: str

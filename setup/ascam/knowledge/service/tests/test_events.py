@@ -112,3 +112,18 @@ def test_event_uses_source_column_name_not_teiid_name(api, obdf):
     nama_teiid = kirim(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
                        column='tanggal_lahir', new_column='x')
     assert nama_teiid['event']['status'] == 'ignored'
+
+
+def test_deterministic_uuid_and_unsupported_operation(api, obdf):
+    """UUID versi 5 (deterministik) diterima; DDL tak didukung tetap masuk antrean HITL."""
+    import uuid as _uuid
+    uid = str(_uuid.uuid5(_uuid.NAMESPACE_URL, 'ascam:topik:0:42:0'))
+    first = kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
+                  table='penerima_manfaat', column='status_ekonomi',
+                  raw={'ddl_command': 'ALTER TABLE penerima_manfaat ALTER COLUMN x TYPE text'})
+    assert first['event']['status'] == 'planned'
+    plan = first['plan']
+    assert plan['decision'] == 'hitl' and plan['pattern'] is None and plan['actions'] == []
+    assert any('tidak didukung' in r for r in plan['reasons'])
+    assert kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
+                 table='penerima_manfaat')['duplicate'] is True

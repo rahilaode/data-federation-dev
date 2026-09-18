@@ -64,6 +64,10 @@ curl -X POST -H "Content-Type: application/json" \
 docker compose -f ./setup/ascam/ontop-agent/docker-compose.yaml down -v
 docker compose -f ./setup/ascam/ontop-agent/docker-compose.yaml up --build --detach
 
+# ascam orchestrator (konsumsi event DDL -> Knowledge; ADR-0017)
+docker compose -f ./setup/ascam/orchestrator/docker-compose.yaml down -v
+docker compose -f ./setup/ascam/orchestrator/docker-compose.yaml up --build --detach
+
 # ascam adaptive engine (iterasi 1) TIDAK dijalankan lagi: mesin tersebut mengubah mapping
 # .obda, sedangkan ℳ kini berupa R2RML (ADR-0005, ADR-0010). Penggantinya (Orchestrator dan
 # Executor) sedang dibangun; lihat setup/ascam/adaptive-engine/README.md.

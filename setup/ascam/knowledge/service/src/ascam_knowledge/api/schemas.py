@@ -36,9 +36,16 @@ class SourceIn(BaseModel):
     database_name: str
     kafka_topic: str | None = None
     identifier_case: IdentifierCase | None = None
+    default_schema: str | None = Field(
+        default=None, description='skema bawaan koneksi; kosong = public (PostgreSQL) / nama basis data (MySQL)')
 
     def resolved_case(self) -> str:
         return self.identifier_case or DEFAULT_IDENTIFIER_CASE[self.dbms]
+
+    def resolved_schema(self) -> str:
+        if self.default_schema:
+            return self.default_schema
+        return 'public' if self.dbms == 'postgresql' else self.database_name
 
 
 class SourceOut(Out):
@@ -48,6 +55,7 @@ class SourceOut(Out):
     database_name: str
     kafka_topic: str | None
     identifier_case: str
+    default_schema: str | None
 
 
 # ── kredensial ───────────────────────────────────────────────────────────────────

@@ -93,7 +93,7 @@ def apply_config(db: Session, doc: sc.ConfigDocument, box: SecretBox, actor: str
     for src in doc.sources:
         _upsert(db, registry.SourceSystem, {'obdf_id': obdf.id, 'logical_name': src.logical_name},
                 {'dbms': src.dbms, 'database_name': src.database_name, 'kafka_topic': src.kafka_topic,
-                 'identifier_case': src.resolved_case()},
+                 'identifier_case': src.resolved_case(), 'default_schema': src.resolved_schema()},
                 f'source:{src.logical_name}', summary, actor, obdf.id, 'source')
 
     credentials: dict[str, registry.Credential] = {}

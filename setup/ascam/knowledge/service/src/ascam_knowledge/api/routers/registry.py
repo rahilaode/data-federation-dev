@@ -48,6 +48,7 @@ def create_source(obdf_id: int, body: SourceIn, db: Session = Depends(get_db),
     svc.get_obdf(db, obdf_id)
     data = body.model_dump()
     data['identifier_case'] = body.resolved_case()
+    data['default_schema'] = body.resolved_schema()
     obj = registry.SourceSystem(obdf_id=obdf_id, **data)
     db.add(obj)
     db.flush()

@@ -127,7 +127,9 @@ def _key(schema: str, name: str) -> str:
 
 
 def build(metadata: dict[str, list[dict]], vdb_info: dict,
-          identifier_case_by_model: dict[str, str]) -> SigmaSnapshot:
+          identifier_case_by_model: dict[str, str],
+          default_schema_by_model: dict[str, str | None] | None = None) -> SigmaSnapshot:
+    default_schema_by_model = default_schema_by_model or {}
     vdb_row = (metadata.get('virtual_databases') or [{}])[0]
     vdb = {'name': vdb_info.get('vdb-name') or vdb_row.get('Name'),
            'version': str(vdb_info.get('vdb-version') or vdb_row.get('Version') or ''),
@@ -169,7 +171,8 @@ def build(metadata: dict[str, list[dict]], vdb_info: dict,
         src_schema, src_table = split_name_in_source(row.get('NameInSource'))
         tables.append({'model': schema, 'name': name, 'kind': kind, 'uid': row.get('UID'),
                        'name_in_source': row.get('NameInSource'),
-                       'source_schema': normalize(src_schema, case),
+                       # tabel tanpa NAMEINSOURCE memakai skema bawaan koneksi sumber
+                       'source_schema': normalize(src_schema or default_schema_by_model.get(schema), case),
                        'source_table': normalize(src_table or name, case)})
         if row.get('UID'):
             uid_index[row['UID']] = ('table', key, None)

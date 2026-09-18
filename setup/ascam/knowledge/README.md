@@ -11,7 +11,7 @@ knowledge/
 ├── scripts/init-secrets.sh   membuat berkas rahasia di secrets/ (tidak di-commit)
 └── service/
     ├── src/ascam_knowledge/  model, API (FastAPI), keamanan, uji koneksi, sync, CLI
-    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial; 0003 hasil uji koneksi JSONB; 0004 sidik jari isi versi
+    ├── migrations/           0001 skema awal + integritas; 0002 nama kredensial; 0003 hasil uji koneksi JSONB; 0004 sidik jari isi versi; 0005 skema bawaan sumber
     ├── tests/                uji migrasi, integritas, dan API
     └── scripts/test.sh       uji terhadap PostgreSQL sementara
 ```

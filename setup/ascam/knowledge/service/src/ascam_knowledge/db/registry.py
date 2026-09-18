@@ -64,6 +64,8 @@ class SourceSystem(Base):
     database_name: Mapped[str] = mapped_column(Text)
     kafka_topic: Mapped[str | None] = mapped_column(Text)
     identifier_case: Mapped[str] = mapped_column(Text, comment='aturan normalisasi nama identifier')
+    default_schema: Mapped[str | None] = mapped_column(
+        Text, comment='skema bawaan koneksi sumber; dipakai bila tabel Teiid tanpa NAMEINSOURCE')
 
 
 class Setting(Base):

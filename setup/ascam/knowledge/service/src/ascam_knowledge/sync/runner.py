@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..db import ops, registry, spec
 from ..security.crypto import SecretBox
-from . import sigma
+from . import sigma, store
 from .clients import OntopAgentClient, TeiidAdminClient, TeiidMetadataClient
 
 ARTIFACT_KINDS = {'r2rml': 'r2rml', 'ontology': 'ontology'}
@@ -67,7 +67,7 @@ def _identifier_cases(db: Session, obdf_id: int, models: list[dict]) -> tuple[di
     """Memetakan model Teiid ke sumber terdaftar berdasarkan nama sumber pada VDB."""
     sources = {s.logical_name: s for s in db.execute(
         select(registry.SourceSystem).filter_by(obdf_id=obdf_id)).scalars()}
-    cases, source_ids, issues = {}, {}, []
+    cases, source_ids, defaults, issues = {}, {}, {}, []
     for model in models:
         matched = None
         for src in model['sources']:
@@ -77,16 +77,20 @@ def _identifier_cases(db: Session, obdf_id: int, models: list[dict]) -> tuple[di
         if matched:
             cases[model['name']] = matched.identifier_case
             source_ids[model['name']] = matched.id
+            defaults[model['name']] = matched.default_schema
         elif model['model_type'] == 'physical':
             issues.append({'code': 'source_system_unresolved', 'severity': 'warning',
                            'subject_kind': 'teiid_model', 'subject_ref': model['name'],
                            'message': f"model fisik {model['name']} tidak terpetakan ke sumber terdaftar"})
-    return cases, source_ids, issues
+    return cases, source_ids, defaults, issues
 
 
-def _triples(content: str, artifact_id: int, version_id: int) -> list[spec.RdfTriple]:
+BASE_IRI = {'r2rml': 'urn:ascam:mapping', 'ontology': 'urn:ascam:ontology'}
+
+
+def _triples(content: str, artifact_id: int, version_id: int, kind: str) -> list[spec.RdfTriple]:
     graph = Graph()
-    graph.parse(data=content, format='turtle')
+    graph.parse(data=content, format='turtle', publicID=BASE_IRI.get(kind, 'urn:ascam:artifact'))
     rows = []
     for s, p, o in graph:
         if isinstance(o, Literal):
@@ -136,14 +140,14 @@ def _sync(db, obdf_id, box, actor, run, clients) -> SyncResult:
         raise SyncError('VDB tidak teridentifikasi dari SYS.VirtualDatabases')
     vdb_info = admin.get_vdb(vdb_name, vdb_version)
 
-    cases, source_ids, source_issues = _identifier_cases(db, obdf_id, [
+    cases, source_ids, default_schemas, source_issues = _identifier_cases(db, obdf_id, [
         {'name': m.get('model-name'),
          'model_type': (m.get('model-type') or 'PHYSICAL').lower(),
          'sources': [{'source_name': s.get('source-name')} for s in (m.get('source-mappings') or [])]}
         for m in vdb_info.get('models', [])])
     issues += source_issues
 
-    snapshot = sigma.build(metadata, vdb_info, cases)
+    snapshot = sigma.build(metadata, vdb_info, cases, default_schemas)
     for model in snapshot.models:
         for err in model['validity_errors']:
             issues.append({'code': 'vdb_validity_error', 'severity': 'error',
@@ -293,7 +297,9 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
                                  kind=routine['kind'], name=routine['name'],
                                  table_name=routine['table_name'], body=routine['body']))
 
+    index = store.build_index(db, vid)
     triple_count = 0
+    structure: dict[str, int] = {}
     for art in artifacts:
         row = spec.Artifact(spec_version_id=vid, kind=art['kind'], name=art['name'],
                             media_type=art['media_type'], content=art['content'], sha256=art['sha256'])
@@ -301,7 +307,7 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
         db.flush()
         if art['kind'] in ('r2rml', 'ontology'):
             try:
-                triples = _triples(art['content'], row.id, vid)
+                triples = _triples(art['content'], row.id, vid, art['kind'])
             except Exception as exc:                    # noqa: BLE001 — artefak tak terurai
                 issues.append({'code': 'artifact_unparsed', 'severity': 'error',
                                'subject_kind': 'artifact', 'subject_ref': art['kind'],
@@ -309,9 +315,19 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
                 continue
             db.add_all(triples)
             triple_count += len(triples)
+            try:
+                if art['kind'] == 'r2rml':
+                    structure.update(store.store_mapping(db, vid, row.id, art['content'], index, issues))
+                else:
+                    structure.update(store.store_ontology(db, vid, row.id, art['content'], issues))
+            except Exception as exc:                # noqa: BLE001 — struktur gagal dibangun
+                issues.append({'code': 'artifact_structure_failed', 'severity': 'error',
+                               'subject_kind': 'artifact', 'subject_ref': art['kind'],
+                               'message': f'{type(exc).__name__}: {str(exc)[:300]}'})
     db.flush()
 
     return {'models': len(snapshot.models), 'tables': len(snapshot.tables),
             'columns': len(snapshot.columns), 'views': len(snapshot.views),
             'dependencies': len(snapshot.dependencies), 'routines': len(snapshot.routines),
-            'artifacts': len(artifacts), 'triples': triple_count, 'issues': len(issues)}
+            'artifacts': len(artifacts), 'triples': triple_count, **structure,
+            'issues': len(issues)}

@@ -22,6 +22,7 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0015](0015-analisis-dampak-d11.md) | Analisis dampak dan keputusan D11 di Knowledge | Analyze, Plan | F1.6 |
 | [0016](0016-event-dan-siklus-rencana.md) | Penerimaan event skema dan siklus hidup rencana adaptasi | Monitor, Analyze, Plan | F3a |
 | [0017](0017-orchestrator.md) | Orchestrator sebagai penormal event, bukan pengambil keputusan | Monitor, Analyze | F3b |
+| [0018](0018-penulisan-artefak-dan-reload.md) | Penulisan artefak OBDA, pencadangan, dan muat ulang Ontop | Execute | F4a |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

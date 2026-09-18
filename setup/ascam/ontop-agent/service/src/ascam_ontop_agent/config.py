@@ -21,6 +21,7 @@ class AgentConfig:
     ontop_container: str = 'vkg-system-ontop-teiid'
     ontop_image: str = 'ontop/ontop-endpoint:4.1.1'
     ontop_input_dir: str = '/opt/ontop/input'          # path di dalam kontainer Ontop
+    sparql_path: str = '/sparql'
     tokens_file: str | None = None
     names: dict[str, str] = field(default_factory=dict)
 
@@ -49,5 +50,6 @@ def from_env() -> AgentConfig:
         ontop_container=os.getenv('ASCAM_AGENT_ONTOP_CONTAINER', 'vkg-system-ontop-teiid'),
         ontop_image=os.getenv('ASCAM_AGENT_ONTOP_IMAGE', 'ontop/ontop-endpoint:4.1.1'),
         ontop_input_dir=os.getenv('ASCAM_AGENT_ONTOP_INPUT_DIR', '/opt/ontop/input'),
+        sparql_path=os.getenv('ASCAM_AGENT_SPARQL_PATH', '/sparql'),
         tokens_file=os.getenv('ASCAM_AGENT_API_TOKENS_FILE'),
     )

@@ -11,9 +11,13 @@ berkas ke host tersebut (D9). Keputusan dan buktinya: ADR-0011.
 | `GET /health` | Tanpa token; status agen dan keberadaan artefak |
 | `GET /api/v1/artifacts` | Daftar ℳ dan 𝒯 beserta SHA-256, ukuran, dan waktu ubah |
 | `GET /api/v1/artifacts/{kind}` | Isi artefak (`r2rml`, `ontology`) |
+| `PUT /api/v1/artifacts/{kind}` | Menulis artefak secara atomik; isi lama dicadangkan. `expected_sha256` menolak penulisan bila isi sudah berubah |
+| `GET /api/v1/backups` | Daftar cadangan |
+| `POST /api/v1/artifacts/restore` | Mengembalikan artefak dari cadangan |
+| `POST /api/v1/reload` | Memuat ulang Ontop dan menunggu endpoint SPARQL menjawab |
 | `POST /api/v1/validate` | Menjalankan `ontop validate`; `db_url` opsional untuk menguji terhadap versi VDB tertentu (ADR-0005) |
 
-Penerapan artefak dan reload Ontop dibangun bersama Executor (F4).
+Cadangan disimpan di `setup/vkg-system/config/ascam-backups/` (tidak di-commit).
 
 **Berkas properti Ontop tidak pernah diekspos**, karena memuat kredensial JDBC.
 

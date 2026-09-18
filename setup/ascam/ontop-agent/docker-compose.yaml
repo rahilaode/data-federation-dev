@@ -14,9 +14,9 @@ services:
       ASCAM_AGENT_API_TOKENS_FILE: /run/secrets/ontop_agent_api_tokens
     secrets: [ontop_agent_api_tokens]
     volumes:
-      # Artefak OBDA milik host Ontop. Dipasang read-only pada tahap ini (hanya dibaca);
-      # penerapan artefak oleh Executor (F4) akan mengubahnya menjadi baca-tulis.
-      - ../../vkg-system/config:/artifacts:ro
+      # Artefak OBDA milik host Ontop. Baca-tulis sejak F4a: agen menulis ℳ dan 𝒯 secara
+      # atomik dan menyimpan cadangan di ../../vkg-system/config/ascam-backups (ADR-0018).
+      - ../../vkg-system/config:/artifacts
       # Diperlukan untuk menjalankan CLI Ontop sekali jalan dan (F4) memuat ulang Ontop.
       - /var/run/docker.sock:/var/run/docker.sock
     ports:

@@ -4,3 +4,6 @@ __pycache__/
 # Lingkungan Python lokal
 .venv/
 results/
+
+# cadangan artefak OBDA yang dibuat Ontop Agent (ADR-0018)
+setup/vkg-system/config/ascam-backups/

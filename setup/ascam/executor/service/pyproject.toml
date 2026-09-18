@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ascam-executor"
+version = "0.1.0"
+description = "Executor ASCAM: menyunting artefak OBDF dan menerapkannya secara blue-green"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6,<3",
+    "httpx>=0.27",
+    "rdflib>=7,<8",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+ascam-executor = "ascam_executor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

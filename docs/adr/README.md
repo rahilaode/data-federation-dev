@@ -23,6 +23,7 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0016](0016-event-dan-siklus-rencana.md) | Penerimaan event skema dan siklus hidup rencana adaptasi | Monitor, Analyze, Plan | F3a |
 | [0017](0017-orchestrator.md) | Orchestrator sebagai penormal event, bukan pengambil keputusan | Monitor, Analyze | F3b |
 | [0018](0018-penulisan-artefak-dan-reload.md) | Penulisan artefak OBDA, pencadangan, dan muat ulang Ontop | Execute | F4a |
+| [0019](0019-penyuntingan-artefak.md) | Cara menyunting VDB, ontologi, dan mapping | Execute | F4b |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

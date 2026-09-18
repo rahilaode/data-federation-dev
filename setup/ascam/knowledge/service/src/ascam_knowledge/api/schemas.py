@@ -283,3 +283,43 @@ class SyncRunOut(Out):
     error: dict[str, Any] | None
     started_at: datetime
     finished_at: datetime | None
+
+
+# ── analisis dampak (D11) ────────────────────────────────────────────────────────
+class ImpactIn(BaseModel):
+    operation: Literal['add', 'drop', 'rename']
+    source: str = Field(description='logical_name sumber terdaftar')
+    schema_name: str | None = Field(default=None, alias='schema',
+                                    description='kosong = skema bawaan sumber')
+    table: str
+    column: str | None = None
+    new_column: str | None = Field(default=None, description='untuk operasi rename')
+    column_type: str | None = Field(default=None, description='tipe asli sumber untuk operasi add')
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
+        data['schema'] = data.pop('schema_name', None)
+        return data
+
+
+class TargetOutcome(BaseModel):
+    column_id: int
+    model: str
+    table: str
+    column: str
+    source_column: str | None
+    in_primary_key: bool
+    usages: list[dict[str, Any]]
+
+
+class ImpactOut(BaseModel):
+    obdf_id: int
+    spec_version_id: int | None
+    operation: str
+    pattern: str | None
+    decision: str
+    reasons: list[str]
+    actions: list[dict[str, Any]]
+    targets: list[TargetOutcome]

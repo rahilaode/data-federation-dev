@@ -52,6 +52,17 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/api/v1/versions
 Sync mengambil Σ_S dari Teiid (ODBC + management API) dan artefak ℳ/𝒯 dari Ontop Agent,
 lalu menyimpannya sebagai satu versi spesifikasi bila isinya berubah (ADR-0012).
 
+## Analisis dampak (D11)
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"operation":"drop","source":"kemensos","table":"penerima_manfaat","column":"status_ekonomi"}' \
+  http://127.0.0.1:18000/api/v1/obdf/1/impact
+```
+
+Read-only: mengembalikan kolom Teiid terdampak, pemakaiannya, keputusan `auto`/`hitl`/`ignored`
+beserta alasannya, dan rencana tindakan per artefak (ADR-0015).
+
 ## Konfigurasi deklaratif
 
 Dokumen `config/*.yaml` (versi 1) memuat OBDF, sumber, kredensial (hanya `secret_file`),

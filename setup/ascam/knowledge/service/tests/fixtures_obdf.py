@@ -41,7 +41,8 @@ ONTOLOGY_TTL = """@prefix owl: <http://www.w3.org/2002/07/owl#> .
 <http://bansos.go.id/ontology> a owl:Ontology ; owl:versionInfo "1.0.1" .
 bansos:Penduduk a owl:Class .
 bansos:PenerimaBansos a owl:Class .
-bansos:nik a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "NIK"@id .
+bansos:nik a owl:DatatypeProperty ; rdfs:domain bansos:Penduduk ; rdfs:range xsd:string ;
+    rdfs:label "NIK"@id .
 bansos:tanggalLahir a owl:DatatypeProperty ; rdfs:domain bansos:Penduduk ; rdfs:range xsd:date .
 bansos:statusEkonomi a owl:DatatypeProperty ; rdfs:domain bansos:PenerimaBansos ;
     rdfs:range xsd:string ; owl:deprecated true .

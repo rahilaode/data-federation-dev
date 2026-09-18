@@ -14,7 +14,7 @@ from .. import registry_service as svc
 from ..db.session import make_session_factory
 from ..security.auth import TokenRegistry
 from ..security.crypto import SecretBox
-from .routers import checks, config, health, registry, sync
+from .routers import checks, config, health, impact, registry, sync
 from .schemas import ConfigDocument
 
 log = logging.getLogger('ascam.knowledge')
@@ -61,6 +61,7 @@ def create_app(*, session_factory=None, secret_box=None, tokens=None,
     app.include_router(config.router)
     app.include_router(checks.router)
     app.include_router(sync.router)
+    app.include_router(impact.router)
 
     @app.exception_handler(svc.NotFound)
     async def _not_found(_: Request, exc: svc.NotFound):

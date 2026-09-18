@@ -103,21 +103,28 @@ class SigmaSnapshot:
     routines: list[dict]
 
     def digest(self) -> str:
-        """Sidik jari isi Σ_S; dipakai untuk mendeteksi perubahan tanpa membandingkan baris."""
+        """Sidik jari isi Σ_S.
+
+        Harus mencakup SELURUH atribut yang ikut disimpan; atribut yang terlewat membuat
+        perubahan tidak terdeteksi dan versi baru tidak pernah dibuat.
+        """
         payload = {
             'vdb': {k: str(v) for k, v in self.vdb.items() if k in ('name', 'version', 'connection_type')},
             'models': sorted((m['name'], m['model_type'], m['visible'],
                               tuple(sorted((s['source_name'], s['translator'], s['jndi_name'])
                                            for s in m['sources']))) for m in self.models),
-            'tables': sorted((t['model'], t['name'], t['kind'], t['name_in_source'] or '') for t in self.tables),
+            'tables': sorted((t['model'], t['name'], t['kind'], t['name_in_source'] or '',
+                              t['source_schema'] or '', t['source_table'] or '') for t in self.tables),
             'columns': sorted((c['model'], c['table'], c['name'], c['name_in_source'] or '',
-                               c['data_type'], bool(c['nullable']), c['position'],
+                               c['source_column'] or '', c['data_type'], bool(c['nullable']),
+                               c['position'], c['length'], c['precision'], c['scale'],
                                bool(c['in_primary_key'])) for c in self.columns),
             'views': sorted((k, v.parse_status, v.uses_star, tuple(sorted(v.column_kinds.items())))
                             for k, v in self.views.items()),
             'dependencies': sorted((d['dependent'], d['dependent_column'] or '', d['used'],
                                     d['used_column'] or '', d['derived_role']) for d in self.dependencies),
-            'routines': sorted((r['model'], r['kind'], r['name']) for r in self.routines),
+            'routines': sorted((r['model'], r['kind'], r['name'], r['table_name'] or '')
+                               for r in self.routines),
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 

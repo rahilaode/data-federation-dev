@@ -31,7 +31,7 @@ def test_first_sync_creates_active_version(api):
     counts = result['counts']
     assert counts['models'] == 3 and counts['tables'] == 3 and counts['columns'] == 6
     assert counts['views'] == 1 and counts['artifacts'] == 3 and counts['triples'] > 0
-    assert counts['triples_maps'] == 3 and counts['entities'] == 7
+    assert counts['triples_maps'] == 4 and counts['entities'] == 7
 
     detail = api.get(f"/api/v1/versions/{result['spec_version_id']}").json()
     assert detail['version']['status'] == 'active'
@@ -173,7 +173,7 @@ def test_mapping_structure_is_stored(api):
     with api.factory() as db:
         maps = {m.iri.rsplit('#', 1)[-1]: m for m in db.execute(
             select(spec.TriplesMap).filter_by(spec_version_id=vid)).scalars()}
-        assert set(maps) == {'MapPenduduk', 'MapPenerima', 'MapRingkas'}
+        assert set(maps) == {'MapPenduduk', 'MapPenerima', 'MapRingkas', 'MapView'}
         assert maps['MapPenduduk'].logical_table_kind == 'sql_query'
         assert maps['MapPenduduk'].sql_parse_status == 'ok'
         assert maps['MapPenerima'].logical_table_kind == 'table'
@@ -276,3 +276,112 @@ def test_unparsable_sql_is_reported_but_sync_succeeds(api):
     result = api.post(f'/api/v1/obdf/{oid}/sync').json()
     assert result['changed']
     assert 'sql_unparsed' in {i['code'] for i in result['issues']}
+
+
+def test_digest_covers_every_stored_attribute(api):
+    """Regresi: atribut yang disimpan tetapi tidak masuk sidik jari membuat perubahan tak terdeteksi."""
+    base = sigma.build(fx.metadata(), fx.vdb_info(), {'dukcapil': 'insensitive'})
+    with_schema = sigma.build(fx.metadata(), fx.vdb_info(), {'dukcapil': 'insensitive'},
+                              {'dukcapil': 'dukcapil', 'kemensos': 'public'})
+    assert base.digest() != with_schema.digest()          # source_schema ikut diperhitungkan
+
+    longer = fx.metadata()
+    longer['columns'][0]['Length'] = 32
+    assert sigma.build(longer, fx.vdb_info(), {'dukcapil': 'insensitive'}).digest() != base.digest()
+
+
+def test_content_version_forces_new_version(api, monkeypatch):
+    """Perubahan bentuk data yang disimpan (versi format isi) harus memicu versi baru."""
+    from ascam_knowledge.sync import runner
+    oid = new_obdf_with_sources(api)
+    set_clients(api)
+    first = api.post(f'/api/v1/obdf/{oid}/sync').json()
+    assert first['changed']
+    monkeypatch.setattr(runner, 'CONTENT_VERSION', runner.CONTENT_VERSION + 1)
+    second = api.post(f'/api/v1/obdf/{oid}/sync').json()
+    assert second['changed'] and second['version_no'] == 2
+
+
+def test_default_schema_is_used_when_name_in_source_absent(api):
+    """Tabel tanpa NAMEINSOURCE memakai skema bawaan koneksi sumber."""
+    oid = new_obdf_with_sources(api)
+    set_clients(api)
+    vid = api.post(f'/api/v1/obdf/{oid}/sync').json()['spec_version_id']
+    with api.factory() as db:
+        rows = dict(db.execute(
+            select(spec.TeiidTable.name, spec.TeiidTable.source_schema)
+            .where(spec.TeiidTable.spec_version_id == vid)).all())
+    assert rows['penerima_manfaat'] == 'public'           # PostgreSQL
+    assert rows['master_penduduk'] == 'dukcapil'          # MySQL: NAMEINSOURCE menyebut basis data
+
+
+# ── lineage kolom ───────────────────────────────────────────────────────────────
+def usages(db, vid):
+    """(model.tabel.kolom, TriplesMap, peran, predikat, weakest_link)"""
+    rows = db.execute(
+        select(spec.TeiidModel.name, spec.TeiidTable.name, spec.TeiidColumn.name,
+               spec.TriplesMap.iri, spec.ColumnUsage.role, spec.ColumnUsage.predicate_iri,
+               spec.ColumnUsage.weakest_link, spec.ColumnUsage.path)
+        .join(spec.TeiidColumn, spec.TeiidColumn.id == spec.ColumnUsage.foreign_column_id)
+        .join(spec.TeiidTable, spec.TeiidTable.id == spec.TeiidColumn.table_id)
+        .join(spec.TeiidModel, spec.TeiidModel.id == spec.TeiidTable.model_id)
+        .join(spec.TriplesMap, spec.TriplesMap.id == spec.ColumnUsage.triples_map_id)
+        .where(spec.ColumnUsage.spec_version_id == vid)).all()
+    return [(f'{m}.{t}.{c}', tm.rsplit('#', 1)[-1], role,
+             (pred or '').rsplit('/', 1)[-1], weakest, path) for m, t, c, tm, role, pred, weakest, path in rows]
+
+
+def test_lineage_roles_and_predicates(api):
+    _, vid = synced(api)
+    with api.factory() as db:
+        rows = usages(db, vid)
+
+    literal = {(r[0], r[3]) for r in rows if r[2] == 'literal_value'}
+    assert ('dukcapil.master_penduduk.tanggal_lahir', 'tanggalLahir') in literal
+    assert ('kemensos.penerima_manfaat.status_ekonomi', 'statusEkonomi') in literal
+    # kolom pembentuk IRI subjek
+    assert ('dukcapil.master_penduduk.nik', 'MapPenduduk', 'iri_template', '', 'passthrough', []) in rows
+    # kolom pada rr:joinCondition
+    assert any(r[2] == 'join_key' and r[0] == 'kemensos.penerima_manfaat.nik' for r in rows)
+    # kolom WHERE pada logical table
+    assert any(r[2] == 'sql_predicate' and r[0] == 'dukcapil.master_penduduk.tanggal_lahir'
+               and r[1] == 'MapPenduduk' for r in rows)
+    # kolom ekspresi ditandai lebih lemah
+    assert any(r[2] == 'literal_value' and r[4] == 'expression' and r[3] == 'nikUpper' for r in rows)
+    # SELECT * ditandai star
+    assert any(r[1] == 'MapRingkas' and r[4] == 'star' for r in rows)
+
+
+def test_lineage_follows_view_path(api):
+    _, vid = synced(api)
+    with api.factory() as db:
+        rows = [r for r in usages(db, vid) if r[1] == 'MapView']
+    literal = [r for r in rows if r[2] == 'literal_value']
+    assert literal and literal[0][0] == 'dukcapil.master_penduduk.nik'
+    assert literal[0][4] == 'passthrough'                      # kolom view pass-through
+    assert literal[0][5][0]['name'] == 'nik'                   # jalur melewati kolom view
+    # kolom yang hanya dipakai WHERE di dalam view tetap terdeteksi, dengan tepi terlemah
+    lewat_view = [r for r in rows if r[0] == 'dukcapil.master_penduduk.tanggal_lahir']
+    assert lewat_view and lewat_view[0][2] == 'sql_predicate' and lewat_view[0][4] == 'predicate'
+
+
+def test_vocabulary_checks(api):
+    oid, vid = synced(api)
+    codes = {(i['code'], i['subject_ref'].rsplit('/', 1)[-1]) for i in
+             api.get(f'/api/v1/versions/{vid}').json()['issues']}
+    # predikat mapping yang tidak ada di ontologi (celah yang tidak ditangkap ontop validate)
+    assert ('predicate_undeclared', 'nikUpper') in codes
+    # property deprecated tetapi masih dipakai mapping
+    assert ('predicate_deprecated_in_use', 'statusEkonomi') in codes
+    # DatatypeProperty yang tidak dipakai mapping mana pun
+    assert ('unused_property', 'nikLama') in codes
+
+
+def test_object_property_used_for_literal_is_flagged(api):
+    oid = new_obdf_with_sources(api)
+    broken = fx.MAPPING_TTL.replace('rr:predicate bansos:nik ;',
+                                    'rr:predicate bansos:memilikDataKependudukan ;', 1)
+    set_clients(api, agent=fx.FakeAgent(mapping=broken))
+    result = api.post(f'/api/v1/obdf/{oid}/sync').json()
+    issues = [i for i in result['issues'] if i['code'] == 'predicate_kind_mismatch']
+    assert issues and 'object_property' in issues[0]['message']

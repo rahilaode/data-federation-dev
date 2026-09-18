@@ -18,6 +18,7 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0011](0011-ontop-agent.md) | Ontop Agent sebagai satu-satunya jalur ke artefak OBDA | Knowledge, Execute | F1.4d |
 | [0012](0012-sync-dan-versioning-spesifikasi.md) | Proses sync dan pembentukan versi spesifikasi | Knowledge | F1.5a |
 | [0013](0013-penguraian-mapping-dan-ontologi.md) | Penguraian ℳ dan 𝒯 menjadi struktur di Knowledge | Knowledge, Analyze | F1.5b |
+| [0014](0014-lineage-kolom.md) | Lineage kolom sebagai dasar analisis dampak | Knowledge, Analyze, Plan | F1.5c |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

@@ -20,10 +20,14 @@ from sqlalchemy.orm import Session
 
 from ..db import ops, registry, spec
 from ..security.crypto import SecretBox
-from . import sigma, store
+from . import lineage, sigma, store
 from .clients import OntopAgentClient, TeiidAdminClient, TeiidMetadataClient
 
 ARTIFACT_KINDS = {'r2rml': 'r2rml', 'ontology': 'ontology'}
+
+# Versi format isi versi spesifikasi. DINAIKKAN setiap kali bentuk data yang disimpan berubah
+# (mis. penambahan struktur ℳ/𝒯), agar sync membentuk versi baru meski OBDF tidak berubah.
+CONTENT_VERSION = 3
 
 
 @dataclass
@@ -182,7 +186,7 @@ def _sync(db, obdf_id, box, actor, run, clients) -> SyncResult:
         artifacts.append({'kind': ARTIFACT_KINDS.get(art.kind, art.kind), 'name': art.name,
                           'media_type': art.media_type, 'content': art.content, 'sha256': art.sha256})
 
-    digest = hashlib.sha256(('|'.join([snapshot.digest()] +
+    digest = hashlib.sha256(('|'.join([f'content-v{CONTENT_VERSION}', snapshot.digest()] +
                                       [f"{a['kind']}:{a['sha256']}" for a in sorted(artifacts,
                                                                                     key=lambda a: a['kind'])]
                                       )).encode()).hexdigest()
@@ -325,6 +329,12 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
                                'subject_kind': 'artifact', 'subject_ref': art['kind'],
                                'message': f'{type(exc).__name__}: {str(exc)[:300]}'})
     db.flush()
+
+    try:
+        structure.update(lineage.build(db, vid, issues))
+    except Exception as exc:                        # noqa: BLE001 — lineage gagal dibangun
+        issues.append({'code': 'lineage_failed', 'severity': 'error', 'subject_kind': 'spec_version',
+                       'subject_ref': str(vid), 'message': f'{type(exc).__name__}: {str(exc)[:300]}'})
 
     return {'models': len(snapshot.models), 'tables': len(snapshot.tables),
             'columns': len(snapshot.columns), 'views': len(snapshot.views),

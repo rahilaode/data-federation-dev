@@ -21,6 +21,11 @@ MAPPING_TTL = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
         rr:objectMap [ rr:parentTriplesMap <#MapPenduduk> ;
                        rr:joinCondition [ rr:child "nik" ; rr:parent "nik" ] ] ] .
 
+<#MapView> a rr:TriplesMap ;
+    rr:logicalTable [ rr:tableName "v.penduduk_ringkas" ] ;
+    rr:subjectMap [ rr:template "http://bansos.go.id/resource/vp/{nik}" ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:nik ; rr:objectMap [ rr:column "nik" ] ] .
+
 <#MapRingkas> a rr:TriplesMap ;
     rr:logicalTable [ rr:sqlQuery "SELECT * FROM kemensos.penerima_manfaat" ] ;
     rr:subjectMap [ rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}" ] ;

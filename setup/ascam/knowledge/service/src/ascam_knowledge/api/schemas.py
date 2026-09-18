@@ -396,3 +396,52 @@ class EventResultOut(BaseModel):
 
 class DecisionIn(BaseModel):
     note: str | None = None
+
+
+# ── eksekusi rencana ─────────────────────────────────────────────────────────────
+class ExecutionStartIn(BaseModel):
+    candidate_spec_version_id: int | None = None
+
+
+class StepIn(BaseModel):
+    seq: int
+    name: Literal['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'rollback', 'sync']
+    status: Literal['running', 'succeeded', 'failed', 'skipped']
+    detail: dict[str, Any] = Field(default_factory=dict)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class ValidationIn(BaseModel):
+    validator: Literal['teiid_status', 'ontop_validate', 'ascam_vocabulary', 'sparql_regression']
+    passed: bool
+    details: dict[str, Any] = Field(default_factory=dict)
+    spec_version_id: int | None = None
+
+
+class FinishIn(BaseModel):
+    status: Literal['succeeded', 'failed', 'rolled_back']
+    timings: dict[str, Any] = Field(default_factory=dict)
+    failure: dict[str, Any] | None = None
+    candidate_spec_version_id: int | None = None
+
+
+class StepOut(Out):
+    seq: int
+    name: str
+    status: str
+    detail: dict[str, Any]
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class ExecutionOut(Out):
+    id: int
+    plan_id: int
+    candidate_spec_version_id: int | None
+    status: str
+    timings: dict[str, Any]
+    failure: dict[str, Any] | None
+    started_at: datetime
+    finished_at: datetime | None
+    steps: list[StepOut] = Field(default_factory=list)

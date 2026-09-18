@@ -1,0 +1,40 @@
+# Executor ASCAM: menjalankan rencana adaptasi berstatus approved (ADR-0020).
+# Alamat target diambil dari Knowledge; rahasia berasal dari Docker secret di sini.
+services:
+  executor:
+    build: {context: ./service}
+    image: ascam-executor:dev
+    container_name: ascam-executor
+    restart: unless-stopped
+    environment:
+      ASCAM_EXEC_KNOWLEDGE_URL: http://ascam-knowledge-service:8000
+      ASCAM_EXEC_TOKEN_FILE: /run/secrets/knowledge_api_tokens
+      ASCAM_EXEC_TOKEN_CLIENT: executor
+      ASCAM_EXEC_OBDF: bansos
+      ASCAM_EXEC_TEIID_PASSWORD_FILE: /run/secrets/obdf_teiid_mgmt_password
+      ASCAM_EXEC_AGENT_TOKEN_FILE: /run/secrets/obdf_ontop_agent_token
+      ASCAM_EXEC_TEIID_JDBC_HOST: teiid
+      # Setel 'false' untuk menjalankan layanan tanpa mengeksekusi rencana (mode pengamatan).
+      ASCAM_EXEC_ENABLED: 'true'
+    secrets:
+      - knowledge_api_tokens
+      - obdf_teiid_mgmt_password
+      - obdf_ontop_agent_token
+    ports:
+      - '127.0.0.1:18300:8000'
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [ascam-networks]
+
+secrets:
+  knowledge_api_tokens: {file: ../knowledge/secrets/knowledge_api_tokens}
+  obdf_teiid_mgmt_password: {file: ../knowledge/secrets/obdf_teiid_mgmt_password}
+  obdf_ontop_agent_token: {file: ../knowledge/secrets/obdf_ontop_agent_token}
+
+networks:
+  ascam-networks:
+    external: true

@@ -11,8 +11,25 @@ Tahap ini (F4b) berisi **penyunting artefak** sebagai fungsi murni (ADR-0019):
 | `artifacts/ontology.py` | Menambahkan DatatypeProperty dan menandai property usang, secara append-only |
 | `artifacts/r2rml.py` | Menambahkan dan menghapus predicate-object map |
 
-Orkestrasi penerapan (blue-green Teiid, validasi, muat ulang Ontop, verifikasi, revert)
-dibangun pada F4c.
+Sejak F4c tersedia pula mesin eksekusinya (ADR-0020):
+
+| Langkah | Isi |
+|---|---|
+| `deploy_vdb` | Σ′_S di-deploy sebagai **versi VDB baru** di samping versi yang melayani |
+| `validate` | ℳ′ dan 𝒯′ ditulis lewat agen, lalu `ontop validate` dijalankan terhadap versi baru |
+| `switch` | Koneksi dipindahkan ke versi baru (`connection type ANY`) |
+| `reload_ontop` | Ontop dimuat ulang lewat agen |
+| `verify` | Jawaban OBDF diperiksa dengan sidik jari graf sesuai pola adaptasi |
+| `rollback` | Bila verifikasi gagal: koneksi dikembalikan, artefak dipulihkan, Ontop dimuat ulang |
+
+## Menjalankan
+
+```bash
+docker compose -f setup/ascam/executor/docker-compose.yaml up -d --build
+curl -s http://127.0.0.1:18300/health
+```
+
+Setel `ASCAM_EXEC_ENABLED=false` untuk menjalankan layanan tanpa mengeksekusi rencana.
 
 ## Menguji
 

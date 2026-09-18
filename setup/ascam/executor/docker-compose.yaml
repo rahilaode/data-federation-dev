@@ -14,8 +14,8 @@ services:
       ASCAM_EXEC_TEIID_PASSWORD_FILE: /run/secrets/obdf_teiid_mgmt_password
       ASCAM_EXEC_AGENT_TOKEN_FILE: /run/secrets/obdf_ontop_agent_token
       ASCAM_EXEC_TEIID_JDBC_HOST: teiid
-      # Setel 'false' untuk menjalankan layanan tanpa mengeksekusi rencana (mode pengamatan).
-      ASCAM_EXEC_ENABLED: 'true'
+      # Mode pengamatan: jalankan dengan ASCAM_EXEC_ENABLED=false docker compose up -d
+      ASCAM_EXEC_ENABLED: '${ASCAM_EXEC_ENABLED:-true}'
     secrets:
       - knowledge_api_tokens
       - obdf_teiid_mgmt_password

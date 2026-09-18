@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import UUID4, BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 Name = Field(pattern=r'^[a-z0-9][a-z0-9_.-]{0,62}$', description='huruf kecil, angka, _ . -')
 Dbms = Literal['postgresql', 'mysql']
@@ -323,3 +323,68 @@ class ImpactOut(BaseModel):
     reasons: list[str]
     actions: list[dict[str, Any]]
     targets: list[TargetOutcome]
+
+
+# ── event skema dan rencana adaptasi ─────────────────────────────────────────────
+class EventIn(BaseModel):
+    """Event skema terformalisasi (D7). `event_uid` menjamin idempotensi."""
+    event_uid: UUID4 | None = None
+    operation: Literal['add', 'drop', 'rename']
+    source: str
+    schema_name: str | None = Field(default=None, alias='schema')
+    table: str
+    column: str | None = None
+    new_column: str | None = None
+    column_type: str | None = None
+    captured_at: datetime | None = None
+    raw: dict[str, Any] = Field(default_factory=dict, description='pesan asli dari monitor')
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    def structured(self) -> dict[str, Any]:
+        data = self.model_dump(exclude={'raw', 'event_uid', 'captured_at'})
+        data['schema'] = data.pop('schema_name', None)
+        return data
+
+
+class PlanActionOut(Out):
+    seq: int
+    artifact: str
+    operation: str
+    params: dict[str, Any]
+
+
+class PlanOut(Out):
+    id: int
+    event_id: int
+    base_spec_version_id: int
+    pattern: str | None
+    decision: str
+    status: str
+    impact: dict[str, Any]
+    reasons: list[Any]
+    created_at: datetime
+    decided_by: str | None
+    decided_at: datetime | None
+    actions: list[PlanActionOut] = Field(default_factory=list)
+
+
+class EventOut(Out):
+    id: int
+    event_uid: UUID4
+    source_system_id: int | None
+    structured: dict[str, Any] | None
+    status: str
+    ignore_reason: str | None
+    captured_at: datetime | None
+    received_at: datetime
+
+
+class EventResultOut(BaseModel):
+    event: EventOut
+    duplicate: bool = False
+    plan: PlanOut | None = None
+
+
+class DecisionIn(BaseModel):
+    note: str | None = None

@@ -20,6 +20,7 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0013](0013-penguraian-mapping-dan-ontologi.md) | Penguraian ℳ dan 𝒯 menjadi struktur di Knowledge | Knowledge, Analyze | F1.5b |
 | [0014](0014-lineage-kolom.md) | Lineage kolom sebagai dasar analisis dampak | Knowledge, Analyze, Plan | F1.5c |
 | [0015](0015-analisis-dampak-d11.md) | Analisis dampak dan keputusan D11 di Knowledge | Analyze, Plan | F1.6 |
+| [0016](0016-event-dan-siklus-rencana.md) | Penerimaan event skema dan siklus hidup rencana adaptasi | Monitor, Analyze, Plan | F3a |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

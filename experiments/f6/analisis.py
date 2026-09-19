@@ -51,12 +51,16 @@ def bedah_jawaban(run: dict) -> list[str]:
     """Kueri mana yang berbeda, dan seperti apa bedanya."""
     sebelum, sesudah = run.get('jawaban_sebelum') or {}, run.get('jawaban_sesudah') or {}
     catatan = []
+    if not sesudah:
+        return ['jawaban sesudah tidak terekam (run tidak selesai)']
     for kunci in sorted(set(sebelum) | set(sesudah)):
         a, b = sebelum.get(kunci), sesudah.get(kunci)
         if a == b:
             continue
-        if isinstance(a, dict) or isinstance(b, dict):
-            catatan.append(f'{kunci}: kueri gagal ({a if isinstance(a, dict) else b})')
+        if a is None or b is None or isinstance(a, dict) or isinstance(b, dict):
+            # dict = kueri gagal dijalankan, None = cuplikan tidak terambil
+            catatan.append(f'{kunci}: tidak dapat dibandingkan (sebelum={type(a).__name__}, '
+                           f'sesudah={type(b).__name__}) {a if isinstance(a, dict) else b}')
             continue
         hanya_sebelum = [x for x in a if x not in b]
         hanya_sesudah = [x for x in b if x not in a]

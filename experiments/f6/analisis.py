@@ -11,6 +11,9 @@ dipisahkan agar dapat dilaporkan apa adanya.
 Dijalankan dari host:
   python3 experiments/f6/analisis.py                      # direktori hasil terbaru
   python3 experiments/f6/analisis.py results/f6/2026...   # direktori tertentu
+
+Simpan keluarannya di luar results/f6 agar tidak tertukar dengan direktori hasil, misalnya:
+  python3 experiments/f6/analisis.py > results/analisis-evaluasi.md
 """
 import json
 import statistics
@@ -71,7 +74,7 @@ def main() -> int:
         if not direktori.is_absolute():
             direktori = ROOT / direktori
     else:
-        kandidat = sorted((ROOT / 'results/f6').glob('*'))
+        kandidat = sorted(p for p in (ROOT / 'results/f6').glob('*') if p.is_dir())
         if not kandidat:
             print('tidak ada hasil evaluasi di results/f6')
             return 1

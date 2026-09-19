@@ -16,6 +16,7 @@ Dijalankan dari host: `python3 experiments/reset_obdf.py`
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -25,7 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 KNOWLEDGE = 'http://127.0.0.1:18000'
 AGENT = 'http://127.0.0.1:18100'
-TEIID = 'http://localhost:9990/management'
+# Port manajemen WildFly dipetakan ke 19990 pada host (setup/data-federation/docker-compose.yaml)
+TEIID = os.getenv('ASCAM_TEIID_MGMT', 'http://localhost:19990/management')
 SECRETS = ROOT / 'setup/ascam/knowledge/secrets'
 ARTEFAK = ['setup/vkg-system/config/mapping.ttl', 'setup/vkg-system/config/ontology_file.ttl']
 
@@ -88,6 +90,7 @@ def main() -> int:
     parser.add_argument('--vdb', default='government')
     parser.add_argument('--versi-dasar', default='1')
     parser.add_argument('--tanpa-sumber', action='store_true')
+    parser.add_argument('--pengguna', default=os.getenv('ASCAM_TEIID_USER', 'admin'))
     args = parser.parse_args()
 
     ui = rahasia('knowledge_api_tokens', 'ui')
@@ -100,25 +103,28 @@ def main() -> int:
                               capture_output=True, text=True).stdout.strip() or 'bersih')
 
     judul('2) versi VDB dikembalikan')
-    daftar = teiid({'operation': 'read-attribute', 'address': [{'subsystem': 'teiid'}],
-                    'name': 'vdb-names'}, 'admin', sandi_teiid)
     versi = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
-                  'admin', sandi_teiid)
+                  args.pengguna, sandi_teiid)
+    if versi.get('outcome') != 'success':
+        print(f'  TIDAK dapat menghubungi Teiid di {TEIID}: '
+              f"{str(versi.get('failure-description') or versi)[:200]}")
+        print('  setel ASCAM_TEIID_MGMT bila port manajemen berbeda')
+        return 1
     aktif = [(v.get('name'), str(v.get('version')), v.get('connection-type'), v.get('status'))
              for v in (versi.get('result') or []) if v.get('name') == args.vdb]
-    print('  sebelum:', aktif or daftar)
+    print('  sebelum:', aktif)
     teiid({'operation': 'change-vdb-connection-type', 'address': [{'subsystem': 'teiid'}],
            'vdb-name': args.vdb, 'vdb-version': args.versi_dasar, 'connection-type': 'ANY'},
-          'admin', sandi_teiid)
+          args.pengguna, sandi_teiid)
     for nama, nomor, _, _ in aktif:
         if nomor != args.versi_dasar:
             deployment = f'{nama}-{nomor}-vdb.xml'
             for operasi in ('undeploy', 'remove'):
                 teiid({'operation': operasi, 'address': [{'deployment': deployment}]},
-                      'admin', sandi_teiid)
+                      args.pengguna, sandi_teiid)
             print(f'  versi {nomor} dihapus ({deployment})')
     versi = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
-                  'admin', sandi_teiid)
+                  args.pengguna, sandi_teiid)
     print('  sesudah:', [(v.get('name'), str(v.get('version')), v.get('connection-type'),
                           v.get('status')) for v in (versi.get('result') or [])])
 

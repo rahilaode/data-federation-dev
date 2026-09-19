@@ -35,6 +35,7 @@ def test_drop_plan_runs_blue_green_and_succeeds():
     assert agent.validate_calls == ['jdbc:teiid:government@mm://teiid:31000;version=2']
     assert agent.reloads == 1 and not agent.restored
     assert hasil['status'] == 'succeeded' and knowledge.synced == 1
+    assert agent.pruned == 20                        # cadangan lama dipangkas setelah berhasil
     assert knowledge.finished['candidate_spec_version_id'] == 8
     assert set(knowledge.finished['timings']) >= {'deploy_vdb', 'validate', 'switch',
                                                   'reload_ontop', 'verify', 'total_ms'}

@@ -153,6 +153,9 @@ class AgentClient:
     def reload(self) -> dict:
         return self._request('POST', '/api/v1/reload')
 
+    def prune_backups(self, keep: int = 20) -> dict:
+        return self._request('POST', '/api/v1/backups/prune', params={'keep': keep})
+
 
 class SparqlClient:
     """Verifikasi jawaban OBDF setelah adaptasi."""

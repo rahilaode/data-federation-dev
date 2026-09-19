@@ -278,6 +278,10 @@ class Executor:
 
     def _selesai(self, konteks: Konteks, mulai_total: float) -> dict:
         self.admin.set_connection_type(konteks.vdb_name, konteks.versi_lama, 'NONE')
+        try:                                        # kebersihan, bukan bagian dari keberhasilan
+            self.agent.prune_backups(keep=20)
+        except Exception:                           # noqa: BLE001
+            pass
         mulai = time.perf_counter()
         hasil_sync = self.knowledge.sync(self.obdf_id)
         self._step(konteks, 6, 'sync', 'succeeded', mulai,

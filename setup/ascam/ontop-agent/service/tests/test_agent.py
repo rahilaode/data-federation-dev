@@ -247,3 +247,12 @@ def test_reload_endpoint_uses_injected_docker(agent, artifacts_dir, monkeypatch)
                         .ReloadResult(True, 800, 5200, 6000))
     body = agent.post('/api/v1/reload').json()
     assert body == {'ok': True, 'stop_ms': 800, 'ready_ms': 5200, 'total_ms': 6000, 'error': None}
+
+
+def test_prune_endpoint_keeps_latest(agent, artifacts_dir):
+    for i in range(4):
+        agent.put('/api/v1/artifacts/r2rml', json={'content': MAPPING + f'# versi {i}\n'})
+    assert len(agent.get('/api/v1/backups').json()) == 4
+    hasil = agent.post('/api/v1/backups/prune', params={'keep': 2}).json()
+    assert hasil == {'removed': 2, 'keep': 2}
+    assert len(agent.get('/api/v1/backups').json()) == 2

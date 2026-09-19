@@ -47,6 +47,11 @@ class BackupOut(BaseModel):
     sha256: str
 
 
+class PruneOut(BaseModel):
+    removed: int
+    keep: int
+
+
 class RestoreIn(BaseModel):
     backup_id: str
 
@@ -128,6 +133,12 @@ def create_app(cfg: AgentConfig | None = None, tokens: TokenRegistry | None = No
             raise HTTPException(404, f'cadangan {body.backup_id} tidak ditemukan')
         size = app.state.cfg.path_of(kind).stat().st_size
         return WriteOut(kind=kind, sha256=sha, backup_id=body.backup_id, size=size)
+
+    @app.post('/api/v1/backups/prune', response_model=PruneOut, tags=['artefak'])
+    def prune_backups(keep: int = 20, _: str = Depends(current_client)):
+        """Menyisakan sejumlah cadangan terbaru per jenis artefak."""
+        keep = max(1, min(keep, 200))
+        return PruneOut(removed=writer.prune(app.state.cfg, keep=keep), keep=keep)
 
     @app.post('/api/v1/reload', response_model=ReloadOut, tags=['operasi'])
     def reload(_: str = Depends(current_client)):

@@ -156,6 +156,10 @@ class FakeAgent:
                 'output': 'Validation completed' if self.validate_ok else 'ERROR: mapping ditolak',
                 'duration_ms': 5000}
 
+    def prune_backups(self, keep=20):
+        self.pruned = keep
+        return {'removed': 0, 'keep': keep}
+
     def reload(self):
         self.reloads += 1
         return {'ok': self.reload_ok, 'stop_ms': 800, 'ready_ms': 8000, 'total_ms': 8800,

@@ -211,3 +211,18 @@ def test_drop_action_names_the_triples_map(api, obdf):
     hapus = [a for a in out['actions'] if a['operation'] == 'remove_predicate_object_map']
     assert hapus and all(a['triples_map_iri'].rsplit('#', 1)[-1] in ('MapPenerima', 'MapRingkas')
                          for a in hapus)
+
+
+def test_drop_rewrites_explicit_logical_table(api, obdf):
+    """Regresi A002: kolom yang disebut eksplisit pada rr:sqlQuery harus ikut dikeluarkan."""
+    out = impact(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
+                 column='tgl_lahir_ktp')
+    tulis_ulang = [a for a in out['actions'] if a['operation'] == 'rewrite_logical_table']
+    assert tulis_ulang and tulis_ulang[0]['column'] == 'tanggal_lahir'
+    assert tulis_ulang[0]['triples_map_iri'].endswith('#MapPenduduk')
+
+
+def test_drop_of_star_column_needs_no_rewrite(api, obdf):
+    out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='status_ekonomi')
+    assert not [a for a in out['actions'] if a['operation'] == 'rewrite_logical_table']

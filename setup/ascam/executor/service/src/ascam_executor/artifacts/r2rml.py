@@ -6,7 +6,9 @@ sehingga berkas ditulis ulang dari graf RDF (rdflib). Konsekuensinya komentar di
 hilang; header berkas (komentar pembuka dan urutan prefix) dipertahankan, dan isi asli setiap
 versi tetap tersimpan di Knowledge (ADR-0012). Trade-off ini dicatat pada ADR-0019.
 """
+import sqlglot
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
+from sqlglot import exp
 
 from .turtle_text import append_block, ensure_prefixes, has_block, prefix_map, remove_block, shorten
 
@@ -167,6 +169,41 @@ def _sasaran_terkelola(text: str, predicate_iri: str) -> list[str]:
             if baris.strip().startswith(awalan)]
 
 
+def rewrite_logical_table(text: str, triples_map_iri: str, drop_column: str) -> tuple[str, bool]:
+    """Mengeluarkan satu kolom dari daftar proyeksi `rr:sqlQuery` (pola P-002).
+
+    Diperlukan ketika logical table menyebut kolom secara eksplisit: menghapus
+    predicate-object map saja tidak cukup, karena kueri masih merujuk kolom yang sudah hilang
+    sehingga `ontop validate` menolak (temuan evaluasi skenario A002).
+    """
+    graph = _graph(text)
+    tm = URIRef(triples_map_iri)
+    logical = graph.value(tm, RR.logicalTable)
+    if logical is None:
+        raise MappingError(f'TriplesMap {triples_map_iri} tidak ada pada mapping')
+    kueri = graph.value(logical, RR.sqlQuery)
+    if kueri is None:
+        return text, False                      # rr:tableName ikut berubah sendiri
+    try:
+        pohon = sqlglot.parse_one(str(kueri))
+        select = pohon if isinstance(pohon, exp.Select) else pohon.find(exp.Select)
+        if select is None:
+            raise ValueError('bukan SELECT')
+    except Exception as exc:                    # noqa: BLE001
+        raise MappingError(f'kueri logical table tidak dapat diurai: {exc}') from exc
+
+    sisa = [item for item in select.expressions
+            if (item.alias_or_name or '').lower() != drop_column.lower()]
+    if len(sisa) == len(select.expressions):
+        return text, False                      # kolom memang tidak diproyeksikan
+    if not sisa:
+        raise MappingError(f'kueri logical table {triples_map_iri} hanya memproyeksikan '
+                           f'{drop_column}; tidak dapat disunting otomatis')
+    select.set('expressions', sisa)
+    graph.set((logical, RR.sqlQuery, Literal(select.sql())))
+    return _serialize(graph, text), True
+
+
 def predicates_of(text: str) -> set[str]:
     graph = _graph(text)
     return {str(o) for o in graph.objects(None, RR.predicate)}
@@ -180,6 +217,9 @@ def apply_actions(text: str, actions: list[dict]) -> str:
             hasil = add_predicate_object_map(hasil, action.get('table'), action['column'],
                                              action['predicate_iri'], action.get('datatype_iri'),
                                              action.get('triples_map_iri'))
+        elif operation == 'rewrite_logical_table':
+            hasil, diubah = rewrite_logical_table(hasil, action['triples_map_iri'],
+                                                  action['column'])
         elif operation == 'remove_predicate_object_map':
             hasil, jumlah = remove_predicate_object_map(hasil, action['predicate_iri'],
                                                         action.get('table'),

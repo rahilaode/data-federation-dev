@@ -29,6 +29,10 @@ sudah berada di Knowledge.
      `projection_only` dan tepi terlemahnya bukan `expression`/`predicate`. HITL bila kolom
      bagian kunci primer, dipakai sebagai template IRI, kunci join, klausa SQL, atau predikat
      dinamis, dan bila jalurnya melewati ekspresi view atau klausa view (F0.7 v2–v4).
+     Bila logical table menyebut kolom itu **secara eksplisit** pada `rr:sqlQuery`, rencana
+     memuat tindakan `rewrite_logical_table` untuk mengeluarkannya dari daftar proyeksi;
+     tanpa itu kueri masih merujuk kolom yang sudah hilang dan `ontop validate` menolak
+     (temuan evaluasi skenario A002). `SELECT *` tidak memerlukan tindakan ini.
    - **ADD** → otomatis sesuai kebijakan `adaptation.add_column`; HITL bila nama kolom sudah ada
      di tabel Teiid, atau kebijakan penamaan/namespace belum diatur.
 4. **Property bersama tidak di-deprecate.** Bila predikat yang terdampak masih dipakai kolom
@@ -57,7 +61,7 @@ sudah berada di Knowledge.
 
 ## Bukti
 
-19 uji dampak (total 112 pada Knowledge Service), mencakup: RENAME otomatis beserta tindakan
+21 uji dampak (total 114 pada Knowledge Service), mencakup: RENAME otomatis beserta tindakan
 `SET NAMEINSOURCE` dan nama Teiid yang tidak berubah; RENAME bentrok nama → HITL; DROP
 `literal_value` otomatis beserta penghapusan predicate-object map dan deprecation property;
 DROP predikat bersama → `keep_property`; DROP kolom kunci primer dan template IRI → HITL; DROP
@@ -67,7 +71,8 @@ mengikuti kebijakan `hitl`; ADD nama kolom yang sudah ada → HITL; bentrok doma
 kebijakan berbeda; sumber, tabel, dan kolom tak dikenal → `ignored`; SQL tak terurai → HITL; pemilihan TriplesMap
 hanya pada yang mengekspos kolom baru (regresi F4c), HITL bila tidak ada, penolakan IRI yang sudah
 dipakai object property beserta penerapan kebijakan bentrok nama, dan penyebutan TriplesMap pada
-tindakan penghapusan.
+tindakan penghapusan; penulisan ulang logical table untuk kolom yang diproyeksikan eksplisit dan
+ketiadaannya untuk kolom hasil `SELECT *`.
 
 ## Konsekuensi
 

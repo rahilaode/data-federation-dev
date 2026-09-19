@@ -40,12 +40,16 @@ sebagiannya saat kolom hilang.
    cadangan. Satu tabel dapat dibaca beberapa TriplesMap dengan logical table berbeda, sehingga
    penebakan berdasarkan nama tabel pernah menempelkan pemetaan ke TriplesMap yang salah.
    Kunci blok terkelola pun memakai IRI TriplesMap agar penghapusan tepat sasaran.
-5. **Penyunting adalah fungsi murni** (teks masuk, teks keluar) tanpa akses berkas maupun
+5. **Kueri logical table dapat ditulis ulang** untuk mengeluarkan kolom yang dihapus dari
+   daftar proyeksi `rr:sqlQuery` (memakai sqlglot). Penyuntingan ini menyentuh triple tulisan
+   manusia, sehingga berkas ditulis ulang seperti pada penghapusan pemetaan. Penulisan ulang
+   ditolak bila kueri tidak dapat diurai atau bila kolom itu satu-satunya yang diproyeksikan.
+6. **Penyunting adalah fungsi murni** (teks masuk, teks keluar) tanpa akses berkas maupun
    jaringan, sehingga dapat diuji tanpa OBDF yang berjalan.
 
 ## Bukti
 
-26 uji penyunting: penambahan `ALTER` mempertahankan CDATA dan DDL lama, versi dinaikkan satu
+30 uji penyunting: penambahan `ALTER` mempertahankan CDATA dan DDL lama, versi dinaikkan satu
 kali meski beberapa model disunting, identifier kata kunci tetap dikutip, pemetaan tipe dari
 Knowledge dipakai, galat dilaporkan eksplisit (model tak dikenal, XML rusak, tipe tak diketahui,
 tindakan tak dikenal, versi non-numerik), dan adaptasi berulang menumpuk pernyataan; ontologi
@@ -54,7 +58,9 @@ property idempoten, deprecation tidak menghapus deklarasi; mapping menambah peme
 terkelola tanpa mengubah baris lain dan tetap menyatu ke TriplesMap yang sama, penambahan
 idempoten, blok milik ASCAM dihapus sebagai teks sehingga berkas kembali identik, pemetaan
 tulisan manusia dihapus lewat penulisan ulang dengan prefix asal dipertahankan, penghapusan
-dapat dibatasi per tabel, dan sasaran yang tidak ada dilaporkan. Ketiganya juga diuji terhadap artefak OBDF yang
+dapat dibatasi per tabel, dan sasaran yang tidak ada dilaporkan; kueri logical table kehilangan kolom yang dihapus tanpa
+mengubah kolom lain maupun sumbernya, `SELECT *` tidak disentuh, dan kueri yang akan menjadi
+kosong ditolak. Ketiganya juga diuji terhadap artefak OBDF yang
 sebenarnya (`experiments/f4/preview_edits.py`).
 
 ## Konsekuensi

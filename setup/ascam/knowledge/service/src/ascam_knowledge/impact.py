@@ -146,6 +146,23 @@ def _table_flags(db: Session, version_id: int, targets: list[TargetColumn]) -> l
     return reasons
 
 
+def _explicit_projections(db: Session, version_id: int, column_id: int) -> list[tuple[str, str, str]]:
+    """Logical table `rr:sqlQuery` yang memproyeksikan kolom ini secara eksplisit.
+
+    `SELECT *` tidak termasuk, karena ikut menyesuaikan sendiri saat kolom hilang.
+    """
+    rows = db.execute(
+        select(spec.TriplesMap.iri, spec.LogicalColumn.name, spec.TriplesMap.sql_parse_status)
+        .join(spec.LogicalColumn, spec.LogicalColumn.triples_map_id == spec.TriplesMap.id)
+        .join(spec.LogicalColumnSource,
+              spec.LogicalColumnSource.logical_column_id == spec.LogicalColumn.id)
+        .where(spec.TriplesMap.spec_version_id == version_id,
+               spec.LogicalColumnSource.teiid_column_id == column_id,
+               spec.TriplesMap.logical_table_kind == 'sql_query',
+               spec.LogicalColumn.expression_kind == 'passthrough')).all()
+    return [(iri, nama, status) for iri, nama, status in rows]
+
+
 def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dict]:
     """TriplesMap yang akan otomatis memuat kolom baru pada tabel tersebut.
 
@@ -264,6 +281,18 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
                     f"{usage['weakest_link']}")
         report.actions.append({'artifact': 'vdb', 'operation': 'drop_column',
                                'model': target.model, 'table': target.table, 'column': target.column})
+
+    # Logical table yang menyebut kolom secara eksplisit harus ikut ditulis ulang; tanpa itu
+    # kueri masih merujuk kolom yang sudah hilang dan `ontop validate` menolak (temuan A002).
+    for target in targets:
+        for triples_map_iri, nama_logis, status in _explicit_projections(db, version.id,
+                                                                        target.column_id):
+            if status == 'failed':
+                report.reasons.append(
+                    f'logical table {triples_map_iri} memakai SQL yang tidak dapat diurai')
+                continue
+            report.actions.append({'artifact': 'r2rml', 'operation': 'rewrite_logical_table',
+                                   'triples_map_iri': triples_map_iri, 'column': nama_logis})
 
     predicates: dict[str, set[str]] = {}
     for target in targets:

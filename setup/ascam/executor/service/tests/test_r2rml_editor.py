@@ -163,3 +163,61 @@ def test_removal_is_scoped_to_the_named_triples_map():
     sebagian, jumlah = r2rml.remove_predicate_object_map(dua, EMAIL, triples_map_iri=LINK)
     assert jumlah == 1 and sebagian.count('# ascam:mulai pom') == 1
     assert 'MapPenerima' in sebagian.split('# ascam:mulai')[1]
+
+
+# ── penulisan ulang logical table saat kolom dihapus (regresi A002) ─────────────
+MAPPING_EKSPLISIT = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix bansos: <http://bansos.go.id/ontology/> .
+
+<#MapProgram> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos" ] ;
+    rr:subjectMap [ rr:template "http://bansos.go.id/resource/program/{program_id}" ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:tipeProgram ;
+                            rr:objectMap [ rr:column "tipe_program" ] ] .
+"""
+TIPE = 'http://bansos.go.id/ontology/tipeProgram'
+MAP_PROGRAM = 'urn:ascam:mapping#MapProgram'
+
+
+def kueri_logical(teks: str) -> str:
+    graf = Graph()
+    graf.parse(data=teks, format='turtle', publicID=r2rml.BASE)
+    logical = graf.value(__import__('rdflib').URIRef(MAP_PROGRAM), RR.logicalTable)
+    return str(graf.value(logical, RR.sqlQuery))
+
+
+def test_dropped_column_is_removed_from_explicit_select():
+    hasil, diubah = r2rml.rewrite_logical_table(MAPPING_EKSPLISIT, MAP_PROGRAM, 'tipe_program')
+    assert diubah
+    kueri = kueri_logical(hasil).lower()
+    assert 'tipe_program' not in kueri
+    assert all(k in kueri for k in ('program_id', 'nama_program', 'nominal'))
+    assert 'kemensos.program_bansos' in kueri
+
+
+def test_rewrite_is_noop_when_column_not_projected():
+    _, diubah = r2rml.rewrite_logical_table(MAPPING_EKSPLISIT, MAP_PROGRAM, 'kolom_lain')
+    assert diubah is False
+    bintang = MAPPING_EKSPLISIT.replace(
+        'SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos',
+        'SELECT * FROM kemensos.program_bansos')
+    _, diubah = r2rml.rewrite_logical_table(bintang, MAP_PROGRAM, 'tipe_program')
+    assert diubah is False                      # SELECT * ikut menyesuaikan sendiri
+
+
+def test_rewrite_refuses_when_nothing_would_remain():
+    satu = MAPPING_EKSPLISIT.replace(
+        'SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos',
+        'SELECT tipe_program FROM kemensos.program_bansos')
+    with pytest.raises(r2rml.MappingError, match='tidak dapat disunting otomatis'):
+        r2rml.rewrite_logical_table(satu, MAP_PROGRAM, 'tipe_program')
+
+
+def test_drop_plan_rewrites_query_and_removes_mapping():
+    hasil = r2rml.apply_actions(MAPPING_EKSPLISIT, [
+        {'operation': 'remove_predicate_object_map', 'predicate_iri': TIPE,
+         'triples_map_iri': MAP_PROGRAM},
+        {'operation': 'rewrite_logical_table', 'triples_map_iri': MAP_PROGRAM,
+         'column': 'tipe_program'}])
+    assert TIPE not in r2rml.predicates_of(hasil)
+    assert 'tipe_program' not in kueri_logical(hasil).lower()

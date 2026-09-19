@@ -27,6 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from preflight import periksa, uji_rantai                          # noqa: E402
 from skenario import SKENARIO                                      # noqa: E402
 
 KNOWLEDGE = 'http://127.0.0.1:18000'
@@ -208,9 +209,22 @@ def main() -> int:
     parser.add_argument('--skenario', action='append', choices=sorted(SKENARIO))
     parser.add_argument('--ulangan', type=int, default=3)
     parser.add_argument('--batas', type=float, default=180.0, help='batas tunggu per tahap (detik)')
+    parser.add_argument('--lewati-periksa', action='store_true',
+                        help='lewati pemeriksaan awal (tidak disarankan)')
     args = parser.parse_args()
     UI = token('ui')
     daftar = args.skenario or sorted(SKENARIO)
+
+    if not args.lewati_periksa:
+        print('===== pemeriksaan awal =====')
+        siap, masalah = periksa()
+        rantai_ok, keterangan = uji_rantai()
+        if not siap or not rantai_ok:
+            print('\nEvaluasi dibatalkan; rantai belum siap:')
+            for m in masalah + ([] if rantai_ok else [f'rantai event terputus: {keterangan}']):
+                print(f'  - {m}')
+            print('\nJalankan: python3 experiments/f6/preflight.py untuk rinciannya')
+            return 1
 
     keluaran = ROOT / 'results/f6' / datetime.now().strftime('%Y%m%dT%H%M%S')
     keluaran.mkdir(parents=True, exist_ok=True)

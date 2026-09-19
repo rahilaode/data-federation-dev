@@ -110,14 +110,15 @@ def main() -> int:
               f"{str(versi.get('failure-description') or versi)[:200]}")
         print('  setel ASCAM_TEIID_MGMT bila port manajemen berbeda')
         return 1
-    aktif = [(v.get('name'), str(v.get('version')), v.get('connection-type'), v.get('status'))
-             for v in (versi.get('result') or []) if v.get('name') == args.vdb]
+    # Kunci hasil list-vdbs adalah vdb-name dan vdb-version (lihat connectors.py Knowledge)
+    aktif = [(v.get('vdb-name'), str(v.get('vdb-version')), v.get('connection-type'), v.get('status'))
+             for v in (versi.get('result') or []) if isinstance(v, dict)]
     print('  sebelum:', aktif)
     teiid({'operation': 'change-vdb-connection-type', 'address': [{'subsystem': 'teiid'}],
            'vdb-name': args.vdb, 'vdb-version': args.versi_dasar, 'connection-type': 'ANY'},
           args.pengguna, sandi_teiid)
     for nama, nomor, _, _ in aktif:
-        if nomor != args.versi_dasar:
+        if nama == args.vdb and nomor != args.versi_dasar:
             deployment = f'{nama}-{nomor}-vdb.xml'
             for operasi in ('undeploy', 'remove'):
                 teiid({'operation': operasi, 'address': [{'deployment': deployment}]},
@@ -125,8 +126,9 @@ def main() -> int:
             print(f'  versi {nomor} dihapus ({deployment})')
     versi = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
                   args.pengguna, sandi_teiid)
-    print('  sesudah:', [(v.get('name'), str(v.get('version')), v.get('connection-type'),
-                          v.get('status')) for v in (versi.get('result') or [])])
+    print('  sesudah:', [(v.get('vdb-name'), str(v.get('vdb-version')), v.get('connection-type'),
+                          v.get('status')) for v in (versi.get('result') or [])
+                         if isinstance(v, dict)])
 
     if not args.tanpa_sumber:
         judul('3) kolom uji pada sumber dihapus')

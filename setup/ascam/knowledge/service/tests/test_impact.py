@@ -156,3 +156,58 @@ def test_unparsable_sql_forces_hitl(api, obdf):
     out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
                  table='penerima_manfaat', column='status_ekonomi')
     assert out['decision'] == 'hitl' and any('tidak dapat diurai' in r for r in out['reasons'])
+
+
+# ── pemilihan TriplesMap untuk kolom baru (regresi F4c) ─────────────────────────
+def test_add_targets_only_triples_maps_that_expose_new_columns(api, obdf):
+    """Regresi: pemetaan sempat ditempelkan ke TriplesMap dengan SELECT eksplisit,
+    sehingga `ontop validate` menolak artefak."""
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['decision'] == 'auto'
+    sasaran = {a['triples_map_iri'].rsplit('#', 1)[-1] for a in out['actions']
+               if a['artifact'] == 'r2rml'}
+    assert sasaran == {'MapPenerima', 'MapRingkas'}       # rr:tableName dan SELECT *
+    assert 'MapLinkPenerima' not in sasaran               # SELECT dengan daftar kolom eksplisit
+
+
+def test_add_is_hitl_when_no_mapping_exposes_new_columns(api, obdf):
+    broken = fx.MAPPING_TTL.replace('SELECT * FROM kemensos.penerima_manfaat',
+                                    'SELECT penerima_id, nik FROM kemensos.penerima_manfaat')
+    broken = broken.replace('rr:logicalTable [ rr:tableName "kemensos.penerima_manfaat" ]',
+                            'rr:logicalTable [ rr:sqlQuery "SELECT penerima_id FROM '
+                            'kemensos.penerima_manfaat" ]')
+    set_clients(api, agent=fx.FakeAgent(mapping=broken))
+    api.post(f'/api/v1/obdf/{obdf}/sync')
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['decision'] == 'hitl'
+    assert any('daftar kolom eksplisit' in r for r in out['reasons'])
+
+
+def test_add_refuses_iri_already_used_as_object_property(api, obdf):
+    """Nama yang dipakai object property tidak boleh jadi data property (punning)."""
+    api.put(f'/api/v1/obdf/{obdf}/naming-policy',
+            json={'property_iri_template': '{namespace}memilikDataKependudukan',
+                  'on_collision': 'hitl', 'namespace': 'http://bansos.go.id/ontology/'})
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['decision'] == 'hitl'
+    assert any('object_property' in r for r in out['reasons'])
+
+    api.put(f'/api/v1/obdf/{obdf}/naming-policy',
+            json={'property_iri_template': '{namespace}memilikDataKependudukan',
+                  'on_collision': 'qualify_with_class', 'namespace': 'http://bansos.go.id/ontology/'})
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['decision'] == 'auto'
+    iri = [a for a in out['actions'] if a['artifact'] == 'ontology'][0]['iri']
+    assert iri.endswith('_PenerimaBansos')
+
+
+def test_drop_action_names_the_triples_map(api, obdf):
+    out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='status_ekonomi')
+    hapus = [a for a in out['actions'] if a['operation'] == 'remove_predicate_object_map']
+    assert hapus and all(a['triples_map_iri'].rsplit('#', 1)[-1] in ('MapPenerima', 'MapRingkas')
+                         for a in hapus)

@@ -35,14 +35,17 @@ sebagiannya saat kolom hilang.
    (a) isi lengkap setiap versi tersimpan di Knowledge (ADR-0012), (b) agen mencadangkan berkas
    sebelum setiap penulisan (ADR-0018). Penyuntingan yang mempertahankan format sepenuhnya
    (mis. lewat concrete syntax tree) dicatat sebagai pekerjaan lanjutan.
-4. **Penghapusan mapping dapat dibatasi per tabel**, karena satu predikat dapat dipakai beberapa
-   TriplesMap. Tanpa pembatasan ini, DROP satu kolom akan menghapus pemetaan di tabel lain.
+4. **Sasaran penyuntingan mapping adalah TriplesMap, bukan tabel.** IRI TriplesMap diambil dari
+   rencana (ditentukan Knowledge dari lineage); pencocokan nama tabel hanya dipakai sebagai
+   cadangan. Satu tabel dapat dibaca beberapa TriplesMap dengan logical table berbeda, sehingga
+   penebakan berdasarkan nama tabel pernah menempelkan pemetaan ke TriplesMap yang salah.
+   Kunci blok terkelola pun memakai IRI TriplesMap agar penghapusan tepat sasaran.
 5. **Penyunting adalah fungsi murni** (teks masuk, teks keluar) tanpa akses berkas maupun
    jaringan, sehingga dapat diuji tanpa OBDF yang berjalan.
 
 ## Bukti
 
-23 uji penyunting: penambahan `ALTER` mempertahankan CDATA dan DDL lama, versi dinaikkan satu
+26 uji penyunting: penambahan `ALTER` mempertahankan CDATA dan DDL lama, versi dinaikkan satu
 kali meski beberapa model disunting, identifier kata kunci tetap dikutip, pemetaan tipe dari
 Knowledge dipakai, galat dilaporkan eksplisit (model tak dikenal, XML rusak, tipe tak diketahui,
 tindakan tak dikenal, versi non-numerik), dan adaptasi berulang menumpuk pernyataan; ontologi

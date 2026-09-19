@@ -31,7 +31,7 @@ def test_first_sync_creates_active_version(api):
     counts = result['counts']
     assert counts['models'] == 3 and counts['tables'] == 3 and counts['columns'] == 6
     assert counts['views'] == 1 and counts['artifacts'] == 3 and counts['triples'] > 0
-    assert counts['triples_maps'] == 4 and counts['entities'] == 7
+    assert counts['triples_maps'] == 5 and counts['entities'] == 7
 
     detail = api.get(f"/api/v1/versions/{result['spec_version_id']}").json()
     assert detail['version']['status'] == 'active'
@@ -173,7 +173,8 @@ def test_mapping_structure_is_stored(api):
     with api.factory() as db:
         maps = {m.iri.rsplit('#', 1)[-1]: m for m in db.execute(
             select(spec.TriplesMap).filter_by(spec_version_id=vid)).scalars()}
-        assert set(maps) == {'MapPenduduk', 'MapPenerima', 'MapRingkas', 'MapView'}
+        assert set(maps) == {'MapPenduduk', 'MapPenerima', 'MapRingkas', 'MapView',
+                             'MapLinkPenerima'}
         assert maps['MapPenduduk'].logical_table_kind == 'sql_query'
         assert maps['MapPenduduk'].sql_parse_status == 'ok'
         assert maps['MapPenerima'].logical_table_kind == 'table'

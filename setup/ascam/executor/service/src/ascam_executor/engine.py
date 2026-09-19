@@ -113,18 +113,17 @@ class Executor:
         for action in _actions(plan, 'r2rml'):
             salinan = dict(action)
             if action['operation'] == 'add_predicate_object_map':
+                # TriplesMap sasaran berasal dari rencana (lineage Knowledge); nama tabel hanya
+                # cadangan bila rencana lama belum memuatnya
                 salinan.setdefault('table', (plan['impact']['targets'] or [{}])[0].get('table')
                                    or _tabel_dari_vdb(plan))
-                salinan['datatype_iri'] = _xsd_for(
-                    type_mappings, _column_type(plan))
-            elif action['operation'] == 'remove_predicate_object_map':
-                salinan.setdefault('table', (plan['impact']['targets'] or [{}])[0].get('table'))
+                salinan['datatype_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
             aksi_mapping.append(salinan)
         aksi_ontologi = []
         for action in _actions(plan, 'ontology'):
             salinan = dict(action)
             if action['operation'] == 'add_datatype_property':
-                salinan['range_iri'] = _xsd_for(type_mappings, _column_type(plan))
+                salinan['range_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
             aksi_ontologi.append(salinan)
         return {
             'vdb_xml': xml_baru, 'vdb_statements': statements, 'vdb_version': versi_baru,
@@ -288,6 +287,16 @@ class Executor:
         return self.knowledge.finish_execution(
             konteks.execution_id, status='succeeded', timings=konteks.timings,
             candidate_spec_version_id=hasil_sync.get('spec_version_id'))
+
+
+XSD = 'http://www.w3.org/2001/XMLSchema#'
+
+
+def _expand(datatype: str | None) -> str | None:
+    """'xsd:string' -> IRI penuh, agar artefak tidak memuat IRI berskema 'xsd'."""
+    if datatype and datatype.startswith('xsd:'):
+        return XSD + datatype[4:]
+    return datatype
 
 
 def _predikat(plan: dict) -> str | None:

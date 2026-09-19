@@ -90,7 +90,7 @@ def test_add_is_append_only_and_preserves_file():
     assert hasil.startswith(MAPPING.rstrip('\n'))            # berkas asli tidak ditulis ulang
     assert '# Mapping bansos (header dipertahankan)' in hasil
     assert '<#MapPenerima> rr:predicateObjectMap [' in hasil
-    assert '# ascam:mulai pom %s pada penerima_manfaat' % EMAIL in hasil
+    assert '# ascam:mulai pom %s pada %s#MapPenerima' % (EMAIL, r2rml.BASE) in hasil
     graf = Graph()
     graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)   # tetap Turtle yang sah
     assert EMAIL in r2rml.predicates_of(hasil)
@@ -121,3 +121,45 @@ def test_datatype_is_written_when_given():
     graf = Graph()
     graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
     assert (None, RR.datatype, None) in graf
+
+
+# ── penargetan TriplesMap dari rencana (regresi F4c) ────────────────────────────
+LINK = 'urn:ascam:mapping#MapLink'
+MAPPING_DUA = MAPPING + """
+<#MapLink> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, nik FROM kemensos.penerima_manfaat" ] ;
+    rr:subjectMap [ rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:memilik ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/penduduk/{nik}" ;
+                       rr:termType rr:IRI ] ] .
+"""
+
+
+def test_triples_map_iri_from_plan_is_used():
+    """Dua TriplesMap membaca tabel yang sama; rencana menentukan yang benar."""
+    hasil = r2rml.add_predicate_object_map(MAPPING_DUA, None, 'email', EMAIL,
+                                           triples_map_iri='urn:ascam:mapping#MapPenerima')
+    assert '<#MapPenerima> rr:predicateObjectMap [' in hasil
+    assert '<#MapLink> rr:predicateObjectMap [' not in hasil.split('# ascam:mulai')[1]
+    graf = Graph()
+    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
+    pemilik = {str(s) for s in graf.subjects(RR.predicateObjectMap, None)
+               for p in graf.objects(s, RR.predicateObjectMap)
+               if (p, RR.predicate, __import__('rdflib').URIRef(EMAIL)) in graf}
+    assert pemilik == {'urn:ascam:mapping#MapPenerima'}
+
+
+def test_unknown_triples_map_is_reported():
+    with pytest.raises(r2rml.MappingError, match='tidak ada pada mapping'):
+        r2rml.add_predicate_object_map(MAPPING_DUA, None, 'email', EMAIL,
+                                       triples_map_iri='urn:ascam:mapping#TidakAda')
+
+
+def test_removal_is_scoped_to_the_named_triples_map():
+    dua = r2rml.add_predicate_object_map(MAPPING_DUA, None, 'email', EMAIL,
+                                         triples_map_iri='urn:ascam:mapping#MapPenerima')
+    dua = r2rml.add_predicate_object_map(dua, None, 'email', EMAIL, triples_map_iri=LINK)
+    assert dua.count('# ascam:mulai pom') == 2
+    sebagian, jumlah = r2rml.remove_predicate_object_map(dua, EMAIL, triples_map_iri=LINK)
+    assert jumlah == 1 and sebagian.count('# ascam:mulai pom') == 1
+    assert 'MapPenerima' in sebagian.split('# ascam:mulai')[1]

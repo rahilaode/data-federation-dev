@@ -26,6 +26,13 @@ MAPPING_TTL = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
     rr:subjectMap [ rr:template "http://bansos.go.id/resource/vp/{nik}" ] ;
     rr:predicateObjectMap [ rr:predicate bansos:nik ; rr:objectMap [ rr:column "nik" ] ] .
 
+<#MapLinkPenerima> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, nik FROM kemensos.penerima_manfaat" ] ;
+    rr:subjectMap [ rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:memilikDataKependudukan ;
+        rr:objectMap [ rr:template "http://bansos.go.id/resource/penduduk/{nik}" ;
+                       rr:termType rr:IRI ] ] .
+
 <#MapRingkas> a rr:TriplesMap ;
     rr:logicalTable [ rr:sqlQuery "SELECT * FROM kemensos.penerima_manfaat" ] ;
     rr:subjectMap [ rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}" ] ;

@@ -146,6 +146,33 @@ def _table_flags(db: Session, version_id: int, targets: list[TargetColumn]) -> l
     return reasons
 
 
+def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dict]:
+    """TriplesMap yang akan otomatis memuat kolom baru pada tabel tersebut.
+
+    Hanya logical table berupa `rr:tableName` atau kueri `SELECT *` yang ikut bertambah kolom;
+    logical table dengan daftar kolom eksplisit tidak, sehingga tidak boleh dipilih (bukti:
+    pemetaan yang ditempelkan ke TriplesMap salah membuat `ontop validate` menolak artefak).
+    """
+    rows = db.execute(
+        select(spec.TriplesMap.id, spec.TriplesMap.iri, spec.TriplesMap.logical_table_kind)
+        .join(spec.LogicalSource, spec.LogicalSource.triples_map_id == spec.TriplesMap.id)
+        .join(spec.TeiidTable, spec.TeiidTable.id == spec.LogicalSource.teiid_table_id)
+        .where(spec.TriplesMap.spec_version_id == version_id,
+               spec.TeiidTable.name == table)).all()
+    keluaran = []
+    for triples_map_id, iri, kind in rows:
+        star = db.execute(
+            select(func.count()).select_from(spec.LogicalColumn)
+            .where(spec.LogicalColumn.triples_map_id == triples_map_id,
+                   spec.LogicalColumn.expression_kind == 'star')).scalar()
+        if kind != 'table' and not star:
+            continue
+        classes = db.execute(select(spec.SubjectClass.class_iri)
+                             .filter_by(triples_map_id=triples_map_id)).scalars().all()
+        keluaran.append({'id': triples_map_id, 'iri': iri, 'classes': list(classes)})
+    return keluaran
+
+
 def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
     operation = (event.get('operation') or '').lower()
     version = active_version(db, obdf_id)
@@ -238,11 +265,16 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
         report.actions.append({'artifact': 'vdb', 'operation': 'drop_column',
                                'model': target.model, 'table': target.table, 'column': target.column})
 
-    predicates = {u['predicate_iri'] for t in targets for u in t.usages
-                  if u['role'] == 'literal_value' and u['predicate_iri']}
+    predicates: dict[str, set[str]] = {}
+    for target in targets:
+        for usage in target.usages:
+            if usage['role'] == 'literal_value' and usage['predicate_iri']:
+                predicates.setdefault(usage['predicate_iri'], set()).add(usage['triples_map'])
     for predicate in sorted(predicates):
-        report.actions.append({'artifact': 'r2rml', 'operation': 'remove_predicate_object_map',
-                               'predicate_iri': predicate})
+        for triples_map in sorted(predicates[predicate]):
+            # TriplesMap ditentukan dari lineage, bukan ditebak Executor dari nama tabel
+            report.actions.append({'artifact': 'r2rml', 'operation': 'remove_predicate_object_map',
+                                   'predicate_iri': predicate, 'triples_map_iri': triples_map})
         if _predicate_shared(db, version.id, predicate, column_ids):
             report.actions.append({'artifact': 'ontology', 'operation': 'keep_property',
                                    'predicate_iri': predicate,
@@ -268,6 +300,14 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
         report.decision = 'hitl'
         return report
 
+    exposing = _exposing_triples_maps(db, version.id, target_table.table)
+    if not exposing:
+        report.reasons.append(
+            f'tidak ada TriplesMap yang otomatis mengekspos kolom baru pada {target_table.table} '
+            '(logical table memakai daftar kolom eksplisit)')
+        report.decision = 'hitl'
+        return report
+
     naming = db.get(registry.NamingPolicy, obdf_id)
     namespace = _setting(db, obdf_id, 'ontology.namespace', None)
     if naming is None or not namespace:
@@ -284,14 +324,18 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
     existing_entity = db.execute(
         select(spec.OntEntity).where(spec.OntEntity.spec_version_id == version.id,
                                      spec.OntEntity.iri == iri)).scalars().first()
-    classes = db.execute(
-        select(spec.SubjectClass.class_iri).join(
-            spec.TriplesMap, spec.TriplesMap.id == spec.SubjectClass.triples_map_id)
-        .join(spec.LogicalSource, spec.LogicalSource.triples_map_id == spec.TriplesMap.id)
-        .join(spec.TeiidTable, spec.TeiidTable.id == spec.LogicalSource.teiid_table_id)
-        .where(spec.TriplesMap.spec_version_id == version.id,
-               spec.TeiidTable.name == target_table.table)).scalars().all()
-    if existing_entity is not None:
+    classes = sorted({c for tm in exposing for c in tm['classes']})
+    if existing_entity is not None and existing_entity.kind != 'datatype_property':
+        # OWL 2 QL dan Ontop menolak nama yang dipakai sebagai object property sekaligus
+        # data property ("name sets are not disjoint")
+        report.reasons.append(f'IRI {iri} sudah dipakai sebagai {existing_entity.kind}')
+        if naming.on_collision == 'qualify_with_class' and classes:
+            iri = f"{iri}_{classes[0].rsplit('/', 1)[-1]}"
+            report.reasons.append(f'kebijakan bentrok nama memakai IRI {iri}')
+        else:
+            report.decision = 'hitl'
+            return report
+    elif existing_entity is not None:
         domains = db.execute(select(spec.OntDomain.class_expression)
                              .filter_by(entity_id=existing_entity.id)).scalars().all()
         if set(domains) - set(classes):
@@ -304,7 +348,10 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
                 return report
     report.actions.append({'artifact': 'ontology', 'operation': 'add_datatype_property',
                            'iri': iri, 'domain': classes[:1], 'column': event.get('column')})
-    report.actions.append({'artifact': 'r2rml', 'operation': 'add_predicate_object_map',
-                           'predicate_iri': iri, 'column': event.get('column')})
+    for triples_map in exposing:
+        report.actions.append({'artifact': 'r2rml', 'operation': 'add_predicate_object_map',
+                               'predicate_iri': iri, 'column': event.get('column'),
+                               'table': target_table.table,
+                               'triples_map_iri': triples_map['iri']})
     report.decision = 'hitl' if any('sudah ada pada tabel Teiid' in r for r in report.reasons) else 'auto'
     return report

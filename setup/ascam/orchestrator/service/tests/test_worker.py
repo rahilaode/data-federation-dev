@@ -149,3 +149,25 @@ def test_token_is_selected_by_client_name(tmp_path):
     assert Settings(token_file=str(polos)).bearer() == 'token-polos'
     with pytest.raises(RuntimeError, match='tidak ada'):
         Settings(token_file=str(berkas), token_client='tidak-ada').bearer()
+
+
+def test_worker_retries_preparation_until_knowledge_is_available():
+    """Regresi: Knowledge yang sedang restart membuat pekerja mati permanen."""
+    class KnowledgeTerlambat(FakeKnowledge):
+        def __init__(self, gagal):
+            super().__init__()
+            self.gagal = gagal
+
+        def sources(self, obdf_id):
+            if self.gagal:
+                self.gagal -= 1
+                raise ConnectionRefusedError('Knowledge belum siap')
+            return super().sources(obdf_id)
+
+    knowledge = KnowledgeTerlambat(gagal=2)
+    batch = {('p', 0): [Message(TOPIC, 0, 1, pesan(PG_ROW))]}
+    worker, consumer = build([batch], knowledge)
+    worker.run()
+    assert worker.stats.state == 'stopped'
+    assert len(knowledge.posted) == 1                  # pesan tetap diproses setelah pulih
+    assert worker.stats.last_error is None

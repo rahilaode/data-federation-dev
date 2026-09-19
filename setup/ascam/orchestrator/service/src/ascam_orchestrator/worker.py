@@ -87,10 +87,31 @@ class Orchestrator:
                          plan.get('decision'), plan.get('status'))
 
     def run(self) -> None:
-        knowledge, obdf_id, by_topic = self.prepare()
-        bootstrap = self.settings.bootstrap or knowledge.kafka_bootstrap(obdf_id)
-        consumer = self._consumer(sorted(by_topic), bootstrap)
+        """Penyiapan diulang sampai berhasil.
+
+        Knowledge dapat sedang restart saat Orchestrator start; penyiapan yang hanya dicoba
+        sekali membuat pekerja mati permanen meski Knowledge kemudian sehat.
+        """
+        while not self._stop.is_set():
+            try:
+                knowledge, obdf_id, by_topic = self.prepare()
+                bootstrap = self.settings.bootstrap or knowledge.kafka_bootstrap(obdf_id)
+                consumer = self._consumer(sorted(by_topic), bootstrap)
+                break
+            except Exception as exc:                # noqa: BLE001
+                self.stats.state = 'retrying'
+                self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
+                log.warning('penyiapan gagal (%s); mencoba lagi dalam %.0f detik',
+                            self.stats.last_error, self.settings.retry_seconds)
+                if self._stop.wait(self.settings.retry_seconds):
+                    self.stats.state = 'stopped'
+                    return
+        else:
+            self.stats.state = 'stopped'
+            return
+
         self.stats.state = 'running'
+        self.stats.last_error = None
         log.info('mendengarkan topik %s pada %s', self.stats.topics, bootstrap)
         try:
             while not self._stop.is_set():

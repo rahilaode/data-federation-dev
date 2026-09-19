@@ -94,8 +94,24 @@ class ExecutorWorker:
         return len(plans)
 
     def run(self) -> None:
-        knowledge, obdf_id, executor = self.build()
+        """Penyiapan diulang sampai berhasil (Knowledge dapat sedang restart saat start)."""
+        while not self._stop.is_set():
+            try:
+                knowledge, obdf_id, executor = self.build()
+                break
+            except Exception as exc:                # noqa: BLE001
+                self.stats.state = 'retrying'
+                self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
+                log.warning('penyiapan gagal (%s); mencoba lagi', self.stats.last_error)
+                if self._stop.wait(self.settings.poll_seconds):
+                    self.stats.state = 'stopped'
+                    return
+        else:
+            self.stats.state = 'stopped'
+            return
+
         self.stats.state = 'running'
+        self.stats.last_error = None
         while not self._stop.is_set():
             try:
                 self.process_once(knowledge, obdf_id, executor)

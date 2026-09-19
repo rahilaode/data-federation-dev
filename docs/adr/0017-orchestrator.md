@@ -36,7 +36,10 @@ Bukti dari pemeriksaan pesan nyata (F3-probe) dan dari definisi monitor:
 6. **Penyaringan relevansi dilakukan Knowledge**, bukan Orchestrator. Penanda `is_regulated` dari
    sumber tetap disimpan pada `raw`, tetapi keputusan relevansi memakai registri Knowledge agar
    konsisten dengan sisa sistem.
-7. **`/health`** menampilkan status pekerja, topik, dan pencacah (pesan, event terkirim, rencana,
+7. **Penyiapan diulang sampai berhasil.** Knowledge dapat sedang restart ketika Orchestrator
+   start; penyiapan yang hanya dicoba sekali membuat pekerja mati permanen meski Knowledge
+   kemudian sehat (ditemukan pada F6). Hal yang sama berlaku untuk Executor.
+8. **`/health`** menampilkan status pekerja, topik, dan pencacah (pesan, event terkirim, rencana,
    diabaikan, duplikat, kegagalan) untuk healthcheck dan dasbor UI.
 
 ## Bukti
@@ -47,7 +50,8 @@ menjadi `other` beserta teksnya; DDL tak terurai jatuh ke baris log; uid determi
 berversi 5; pesan bukan INSERT, tanpa `after`, atau rusak diabaikan; envelope Debezium dengan
 pembungkus `schema` tetap terbaca; pengiriman berhasil menaikkan offset; kegagalan tidak
 menaikkan offset dan memundurkan konsumen ke pesan yang gagal; topik asing dilewati; sumber tanpa
-topik ditolak saat penyiapan; pemilihan token per klien dari berkas token bersama; `/health`
+topik ditolak saat penyiapan; pemilihan token per klien dari berkas token bersama; penyiapan
+yang gagal diulang sampai Knowledge tersedia dan pesan tetap diproses setelah pulih; `/health`
 melaporkan statistik.
 
 ## Konsekuensi

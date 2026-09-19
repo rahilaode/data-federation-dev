@@ -101,3 +101,31 @@ def test_health_reports_state():
     with TestClient(create_app(Settings(), worker=worker, run_worker=False)) as client:
         body = client.get('/health').json()
     assert body['status'] == 'ok' and body['state'] == 'disabled'
+
+
+def test_worker_retries_build_until_knowledge_is_available():
+    """Regresi: penyiapan yang gagal sekali membuat pekerja mati permanen."""
+    class KnowledgeTerlambat(fx.FakeKnowledge):
+        def __init__(self):
+            super().__init__()
+            self.sisa = 2
+
+        def obdf_id(self, name):
+            if self.sisa:
+                self.sisa -= 1
+                raise ConnectionRefusedError('Knowledge belum siap')
+            return 1
+
+        def approved_plans(self, obdf_id):
+            return []
+
+    knowledge = KnowledgeTerlambat()
+    worker = ExecutorWorker(Settings(poll_seconds=0), knowledge=knowledge,
+                            executor_factory=lambda k, o: ExecutorPalsu([]))
+    import threading
+    henti = threading.Timer(0.5, worker.stop)
+    henti.start()
+    worker.run()
+    henti.cancel()
+    assert knowledge.sisa == 0 and worker.stats.state == 'stopped'
+    assert worker.stats.obdf_id == 1                   # penyiapan akhirnya berhasil

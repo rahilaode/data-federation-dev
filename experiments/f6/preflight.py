@@ -90,7 +90,8 @@ def periksa(diam: bool = False) -> tuple[bool, list[str]]:
     lapor(f"  orchestrator: {orch.get('state')} topik={len(orch.get('topics') or [])} "
           f"gagal={orch.get('failures')}")
     if orch.get('state') != 'running':
-        masalah.append(f"orchestrator tidak berjalan ({orch.get('state') or orch})")
+        masalah.append(f"orchestrator tidak berjalan ({orch.get('state') or orch}); "
+                       f"galat terakhir: {orch.get('last_error')}")
 
     exe = http(EXECUTOR, '/health')
     lapor(f"  executor: {exe.get('state')}")
@@ -147,7 +148,7 @@ def main() -> int:
             print(f'  - {m}')
         print('\nPerbaikan umum:')
         print('  docker compose -f setup/ascam/schema-monitor/docker-compose.yaml up -d')
-        print('  docker compose -f setup/ascam/orchestrator/docker-compose.yaml up -d')
+        print('  docker compose -f setup/ascam/orchestrator/docker-compose.yaml restart')
         print('  experiments/f3/verify_orchestrator.sh --no-ddl   # mendaftarkan ulang konektor')
         return 1
     print('\nSemua siap untuk evaluasi.')

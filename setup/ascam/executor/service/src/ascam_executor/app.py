@@ -43,7 +43,7 @@ def create_app(settings: Settings | None = None, worker: ExecutorWorker | None =
     @app.get('/health', tags=['kesehatan'])
     def health():
         stats = worker.stats.snapshot()
-        sehat = stats['state'] in ('running', 'starting', 'disabled')
+        sehat = stats['state'] in ('running', 'starting', 'disabled', 'retrying')
         return {'status': 'ok' if sehat else 'degraded', **stats}
 
     return app

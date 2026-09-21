@@ -171,3 +171,14 @@ def test_worker_retries_preparation_until_knowledge_is_available():
     assert worker.stats.state == 'stopped'
     assert len(knowledge.posted) == 1                  # pesan tetap diproses setelah pulih
     assert worker.stats.last_error is None
+
+
+def test_skipped_messages_are_counted_with_reason():
+    knowledge = FakeKnowledge()
+    batch = {('p', 0): [Message(TOPIC, 0, 5, {'op': 'u', 'after': PG_ROW})]}
+    worker, consumer = build([batch], knowledge)
+    worker.run()
+    assert knowledge.posted == [] and worker.stats.skipped == 1
+    assert worker.stats.last_skipped['offset'] == 5
+    assert "'u'" in worker.stats.last_skipped['alasan']
+    assert consumer.commits == 1                        # dilewati bukan gagal: offset tetap maju

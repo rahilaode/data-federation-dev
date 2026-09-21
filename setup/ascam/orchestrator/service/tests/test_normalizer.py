@@ -97,3 +97,15 @@ def test_non_insert_or_malformed_messages_are_skipped(value):
 def test_debezium_envelope_with_schema_wrapper():
     envelope = {'schema': {'type': 'struct'}, 'payload': pesan(PG_ROW)}
     assert len(normalize('t', 0, 1, envelope, 'kemensos')) == 1
+
+
+@pytest.mark.parametrize('value, bagian', [
+    (None, 'tombstone'),
+    ('{"payload": {}}', 'bukan objek JSON'),
+    ({'op': 'u', 'after': PG_ROW}, "operasi Debezium 'u'"),
+    ({'op': 'c', 'after': None}, 'tidak ada baris after'),
+])
+def test_skip_reason_explains_dropped_messages(value, bagian):
+    from ascam_orchestrator.normalizer import skip_reason
+    assert normalize('t', 0, 1, value, 'kemensos') == []
+    assert bagian in skip_reason(value)

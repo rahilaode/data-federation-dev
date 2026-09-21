@@ -17,7 +17,7 @@ from kafka import KafkaConsumer, TopicPartition
 
 from .config import Settings
 from .knowledge_client import KnowledgeClient
-from .normalizer import normalize
+from .normalizer import normalize, skip_reason
 
 log = logging.getLogger('ascam.orchestrator')
 
@@ -32,6 +32,8 @@ class Stats:
     events_ignored: int = 0
     duplicates: int = 0
     failures: int = 0
+    skipped: int = 0
+    last_skipped: dict | None = None
     last_error: str | None = None
     last_event_at: str | None = None
 
@@ -72,6 +74,16 @@ class Orchestrator:
         events = normalize(message.topic, message.partition, message.offset, message.value,
                            source['logical_name'], source.get('dbms', 'postgresql'))
         self.stats.messages += 1
+        if not events:
+            # Pesan yang tidak menjadi event dicatat beserta alasannya (temuan F6: setelah
+            # seluruh kontainer dinyalakan ulang, pesan diterima tetapi dibuang tanpa jejak)
+            alasan = skip_reason(message.value)
+            self.stats.skipped += 1
+            self.stats.last_skipped = {'topic': message.topic, 'offset': message.offset,
+                                       'alasan': alasan,
+                                       'cuplikan': str(message.value)[:300]}
+            log.warning('pesan %s@%s dilewati: %s', message.topic, message.offset, alasan)
+            return
         for event in events:
             result = knowledge.post_event(obdf_id, event.payload())
             self.stats.events_sent += 1

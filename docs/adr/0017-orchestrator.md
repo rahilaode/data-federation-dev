@@ -39,7 +39,12 @@ Bukti dari pemeriksaan pesan nyata (F3-probe) dan dari definisi monitor:
 7. **Penyiapan diulang sampai berhasil.** Knowledge dapat sedang restart ketika Orchestrator
    start; penyiapan yang hanya dicoba sekali membuat pekerja mati permanen meski Knowledge
    kemudian sehat (ditemukan pada F6). Hal yang sama berlaku untuk Executor.
-8. **`/health`** menampilkan status pekerja, topik, dan pencacah (pesan, event terkirim, rencana,
+8. **Pesan yang tidak menjadi event dicatat beserta alasannya** (`skipped`, `last_skipped`,
+   dan peringatan di log), bukan dibuang tanpa jejak. Offset tetap maju karena pesan semacam
+   itu bukan kegagalan yang dapat diulang. Temuan F6: setelah seluruh kontainer dinyalakan
+   ulang, Orchestrator menerima pesan tetapi tidak menghasilkan event dan tidak meninggalkan
+   jejak apa pun.
+9. **`/health`** menampilkan status pekerja, topik, dan pencacah (pesan, event terkirim, rencana,
    diabaikan, duplikat, kegagalan) untuk healthcheck dan dasbor UI.
 
 ## Bukti

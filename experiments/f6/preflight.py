@@ -132,7 +132,12 @@ def diagnosis(kolom: str, pesan_awal: int | None) -> list[str]:
     pesan_akhir = pesan_orchestrator()
     if pesan_awal is not None and pesan_akhir is not None and pesan_akhir > pesan_awal:
         temuan.append(f'[orchestrator] menerima {pesan_akhir - pesan_awal} pesan baru, tetapi '
-                      'event tidak tercatat di Knowledge; periksa log Orchestrator')
+                      'event tidak tercatat di Knowledge')
+        kesehatan = http(ORCHESTRATOR, '/health')
+        dilewati = kesehatan.get('last_skipped') if isinstance(kesehatan, dict) else None
+        if dilewati:
+            temuan.append(f"[orchestrator] pesan dilewati: {dilewati.get('alasan')}")
+            temuan.append(f"[orchestrator] cuplikan pesan: {str(dilewati.get('cuplikan'))[:240]}")
     else:
         temuan.append('[debezium/kafka/orchestrator] pesan TIDAK sampai ke Orchestrator. '
                       'Bila konektor RUNNING, kemungkinan konsumen Orchestrator macet: '

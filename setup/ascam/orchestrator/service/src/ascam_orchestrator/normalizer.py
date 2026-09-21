@@ -86,6 +86,25 @@ def _actions(ddl: str, dialect: str) -> list[dict]:
     return out
 
 
+def skip_reason(value: Any) -> str:
+    """Mengapa pesan tidak menghasilkan event; dipakai agar pesan tidak dibuang tanpa jejak."""
+    if value is None:
+        return 'pesan kosong (tombstone)'
+    if isinstance(value, (str, bytes)):
+        return f'isi pesan berupa {type(value).__name__}, bukan objek JSON (kemungkinan converter berubah)'
+    if not isinstance(value, dict):
+        return f'isi pesan bertipe {type(value).__name__}'
+    payload = _unwrap(value)
+    if payload is None:
+        return 'envelope tanpa payload'
+    op = payload.get('op')
+    if op not in INSERT_OPS:
+        return f"operasi Debezium {op!r} bukan INSERT/snapshot (kunci: {sorted(payload)[:8]})"
+    if not isinstance(payload.get('after'), dict):
+        return 'tidak ada baris after'
+    return 'tidak ada pernyataan kolom'
+
+
 def normalize(topic: str, partition: int, offset: int, value: Any, source: str,
               dbms: str = 'postgresql') -> list[Normalized]:
     payload = _unwrap(value)

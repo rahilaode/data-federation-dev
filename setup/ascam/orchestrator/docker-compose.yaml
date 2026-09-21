@@ -12,7 +12,9 @@ services:
       ASCAM_ORCH_TOKEN_FILE: /run/secrets/knowledge_api_tokens
       ASCAM_ORCH_TOKEN_CLIENT: orchestrator
       ASCAM_ORCH_OBDF: bansos
-      ASCAM_ORCH_GROUP_ID: ascam-orchestrator
+      # jalankan.sh memberi grup baru setiap reset dan memulai dari pesan terbaru
+      ASCAM_ORCH_GROUP_ID: '${ASCAM_ORCH_GROUP_ID:-ascam-orchestrator}'
+      ASCAM_ORCH_OFFSET_RESET: '${ASCAM_ORCH_OFFSET_RESET:-earliest}'
     secrets: [knowledge_api_tokens]
     ports:
       - '127.0.0.1:18200:8000'

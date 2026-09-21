@@ -67,7 +67,7 @@ class Orchestrator:
             return self._consumer_factory(topics, bootstrap)
         return KafkaConsumer(*topics, bootstrap_servers=bootstrap,
                              group_id=self.settings.group_id, enable_auto_commit=False,
-                             auto_offset_reset='earliest',
+                             auto_offset_reset=self.settings.offset_reset,
                              value_deserializer=lambda v: json.loads(v.decode()) if v else None)
 
     # ── pemrosesan ──────────────────────────────────────────────────────────────
@@ -130,7 +130,8 @@ class Orchestrator:
 
         self.stats.state = 'running'
         self.stats.last_error = None
-        log.info('mendengarkan topik %s pada %s', self.stats.topics, bootstrap)
+        log.info('mendengarkan topik %s pada %s (grup %s, mulai %s)', self.stats.topics, bootstrap,
+                 self.settings.group_id, self.settings.offset_reset)
         try:
             while not self._stop.is_set():
                 batches = consumer.poll(timeout_ms=self.settings.poll_timeout_ms)

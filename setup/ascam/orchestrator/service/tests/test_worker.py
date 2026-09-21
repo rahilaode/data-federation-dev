@@ -191,3 +191,24 @@ def test_uid_conflict_is_counted():
     worker, _ = build([batch], knowledge)
     worker.run()
     assert worker.stats.conflicts == 1 and worker.stats.duplicates == 1
+
+
+def test_offset_reset_is_passed_to_consumer(monkeypatch):
+    """Setelah Knowledge direset, grup baru mulai dari pesan terbaru agar DDL lama tidak diputar ulang."""
+    import ascam_orchestrator.worker as w
+    diterima = {}
+
+    class KonsumenTiruan:
+        def __init__(self, *topik, **kwargs):
+            diterima.update(kwargs)
+
+    monkeypatch.setattr(w, 'KafkaConsumer', KonsumenTiruan)
+    worker = Orchestrator(Settings(token='t', group_id='ascam-orchestrator-20260922', offset_reset='latest'))
+    worker._consumer(['topik'], 'kafka:9092')
+    assert diterima['auto_offset_reset'] == 'latest'
+    assert diterima['group_id'] == 'ascam-orchestrator-20260922'
+
+
+def test_invalid_offset_reset_is_rejected():
+    with pytest.raises(ValueError, match='earliest atau latest'):
+        Settings(token='t', offset_reset='awal')

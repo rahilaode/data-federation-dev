@@ -193,13 +193,18 @@ def uji_rantai(batas: float = 60.0, diam: bool = False) -> tuple[bool, str]:
 
 
 def main() -> int:
+    # --tanpa-rantai: hanya memeriksa komponen, tanpa DDL uji pada sumber (tabel ascam_probe)
+    tanpa_rantai = '--tanpa-rantai' in sys.argv
     print('===== pemeriksaan komponen =====')
     ok, masalah = periksa()
-    print('\n===== uji rantai DDL -> Kafka -> Orchestrator -> Knowledge =====')
-    rantai_ok, keterangan = uji_rantai()
-    if not rantai_ok:
-        masalah.append(f'rantai event terputus: {keterangan}')
-        print(f'  GAGAL: {keterangan}')
+    if tanpa_rantai:
+        print('\n(uji rantai dilewati: tidak ada DDL yang dijalankan pada sumber)')
+    else:
+        print('\n===== uji rantai DDL -> Kafka -> Orchestrator -> Knowledge =====')
+        rantai_ok, keterangan = uji_rantai()
+        if not rantai_ok:
+            masalah.append(f'rantai event terputus: {keterangan}')
+            print(f'  GAGAL: {keterangan}')
     if masalah:
         print('\nMasalah yang harus diperbaiki sebelum evaluasi:')
         for m in masalah:

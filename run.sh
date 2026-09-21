@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# PERINGATAN: run.sh MEMBANGUN ULANG LAB DARI NOL. Seluruh kontainer dihapus beserta
+# volumenya (down -v), termasuk DATA SUMBER dan topik Kafka. Untuk menjalankan sehari-hari
+# tanpa mengubah OBDF, pakai ./jalankan.sh (hanya ASCAM yang direset).
+#
 # Hentikan skrip segera bila ada perintah yang gagal (mis. build image),
 # agar kegagalan tidak tertutup oleh langkah-langkah berikutnya.
 set -e

@@ -11,9 +11,17 @@ class Settings:
     token_client: str = os.getenv('ASCAM_ORCH_TOKEN_CLIENT', 'orchestrator')
     obdf_name: str = os.getenv('ASCAM_ORCH_OBDF', 'bansos')
     group_id: str = os.getenv('ASCAM_ORCH_GROUP_ID', 'ascam-orchestrator')
+    # Titik awal grup konsumen BARU: 'earliest' membaca seluruh riwayat topik, 'latest' hanya
+    # pesan sesudah Orchestrator tersambung. Setelah Knowledge direset, 'latest' mencegah DDL
+    # lama diperlakukan sebagai perubahan baru.
+    offset_reset: str = os.getenv('ASCAM_ORCH_OFFSET_RESET', 'earliest')
     bootstrap: str | None = os.getenv('ASCAM_ORCH_KAFKA_BOOTSTRAP')
     poll_timeout_ms: int = int(os.getenv('ASCAM_ORCH_POLL_TIMEOUT_MS', '2000'))
     retry_seconds: float = float(os.getenv('ASCAM_ORCH_RETRY_SECONDS', '5'))
+
+    def __post_init__(self) -> None:
+        if self.offset_reset not in ('earliest', 'latest'):
+            raise ValueError(f'ASCAM_ORCH_OFFSET_RESET harus earliest atau latest, bukan {self.offset_reset!r}')
 
     def bearer(self) -> str:
         """Token untuk klien ini.

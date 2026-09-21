@@ -109,10 +109,50 @@ def periksa(diam: bool = False) -> tuple[bool, list[str]]:
     return not masalah, masalah
 
 
+def log_monitor(kolom: str) -> str:
+    """Apakah monitor PostgreSQL mencatat DDL uji di tabel log-nya?"""
+    return pg("SELECT count(*) FROM schema_monitor.ddl_event_log "
+              f"WHERE table_name = '{PROBE}' AND column_name = '{kolom}'")
+
+
+def pesan_orchestrator() -> int | None:
+    kesehatan = http(ORCHESTRATOR, '/health')
+    return kesehatan.get('messages') if isinstance(kesehatan, dict) else None
+
+
+def diagnosis(kolom: str, pesan_awal: int | None) -> list[str]:
+    """Menunjuk mata rantai yang putus: monitor, Debezium/Kafka, atau Orchestrator."""
+    temuan = []
+    tercatat = log_monitor(kolom)
+    if tercatat != '1':
+        temuan.append(f'[monitor] DDL uji TIDAK tercatat di schema_monitor.ddl_event_log '
+                      f'(hasil: {tercatat!r}); periksa event trigger PostgreSQL')
+        return temuan
+    temuan.append('[monitor] DDL uji tercatat di ddl_event_log')
+    pesan_akhir = pesan_orchestrator()
+    if pesan_awal is not None and pesan_akhir is not None and pesan_akhir > pesan_awal:
+        temuan.append(f'[orchestrator] menerima {pesan_akhir - pesan_awal} pesan baru, tetapi '
+                      'event tidak tercatat di Knowledge; periksa log Orchestrator')
+    else:
+        temuan.append('[debezium/kafka/orchestrator] pesan TIDAK sampai ke Orchestrator. '
+                      'Bila konektor RUNNING, kemungkinan konsumen Orchestrator macet: '
+                      'docker compose -f setup/ascam/orchestrator/docker-compose.yaml restart')
+    status = http(CONNECT, '/connectors/postgres-connector/status')
+    for tugas in status.get('tasks', []):
+        if tugas.get('trace'):
+            temuan.append(f"[debezium] galat tugas: {tugas['trace'].splitlines()[0][:200]}")
+    log = subprocess.run(['docker', 'logs', '--tail', '5', 'ascam-orchestrator'],
+                         capture_output=True, text=True)
+    for baris in (log.stdout + log.stderr).strip().splitlines()[-5:]:
+        temuan.append(f'[log orchestrator] {baris[:180]}')
+    return temuan
+
+
 def uji_rantai(batas: float = 60.0, diam: bool = False) -> tuple[bool, str]:
     """DDL nyata pada tabel uji, lalu menunggu event sampai ke Knowledge."""
     lapor = (lambda *a: None) if diam else print
     ui = token('knowledge_api_tokens', 'ui')
+    pesan_awal = pesan_orchestrator()
     sebelum = {e['id'] for e in http(KNOWLEDGE, '/api/v1/obdf/1/events?limit=200', ui)}
     pg(f'CREATE TABLE IF NOT EXISTS public.{PROBE} (id serial primary key)')
     kolom = f'uji_{int(time.time())}'
@@ -130,6 +170,8 @@ def uji_rantai(batas: float = 60.0, diam: bool = False) -> tuple[bool, str]:
                 pg(f'DROP TABLE IF EXISTS public.{PROBE}')
                 return True, f'{jeda} ms'
         time.sleep(1)
+    for temuan in diagnosis(kolom, pesan_awal):
+        lapor(f'  {temuan}')
     pg(f'DROP TABLE IF EXISTS public.{PROBE}')
     return False, f'tidak ada event dalam {int(batas)} s'
 

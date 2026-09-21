@@ -120,6 +120,13 @@ def pesan_orchestrator() -> int | None:
     return kesehatan.get('messages') if isinstance(kesehatan, dict) else None
 
 
+def pencacah_orchestrator() -> dict:
+    kesehatan = http(ORCHESTRATOR, '/health')
+    if not isinstance(kesehatan, dict):
+        return {}
+    return {k: kesehatan.get(k) for k in ('duplicates', 'conflicts', 'skipped', 'failures')}
+
+
 def diagnosis(kolom: str, pesan_awal: int | None) -> list[str]:
     """Menunjuk mata rantai yang putus: monitor, Debezium/Kafka, atau Orchestrator."""
     temuan = []
@@ -134,6 +141,10 @@ def diagnosis(kolom: str, pesan_awal: int | None) -> list[str]:
         temuan.append(f'[orchestrator] menerima {pesan_akhir - pesan_awal} pesan baru, tetapi '
                       'event tidak tercatat di Knowledge')
         kesehatan = http(ORCHESTRATOR, '/health')
+        temuan.append(f'[orchestrator] pencacah: {pencacah_orchestrator()}')
+        if isinstance(kesehatan, dict) and (kesehatan.get('duplicates') or kesehatan.get('conflicts')):
+            temuan.append('[orchestrator] pesan dianggap DUPLIKAT oleh Knowledge; bila topik Kafka '
+                          'pernah dibuat ulang, uid lama berbasis offset dapat bertabrakan')
         dilewati = kesehatan.get('last_skipped') if isinstance(kesehatan, dict) else None
         if dilewati:
             temuan.append(f"[orchestrator] pesan dilewati: {dilewati.get('alasan')}")

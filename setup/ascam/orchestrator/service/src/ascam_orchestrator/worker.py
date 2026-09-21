@@ -33,6 +33,7 @@ class Stats:
     duplicates: int = 0
     failures: int = 0
     skipped: int = 0
+    conflicts: int = 0
     last_skipped: dict | None = None
     last_error: str | None = None
     last_event_at: str | None = None
@@ -88,6 +89,11 @@ class Orchestrator:
             result = knowledge.post_event(obdf_id, event.payload())
             self.stats.events_sent += 1
             self.stats.last_event_at = datetime.now(timezone.utc).isoformat()
+            if result.get('conflict'):
+                # uid sama tetapi isi berbeda: tanda kunci idempotensi bertabrakan
+                self.stats.conflicts += 1
+                log.warning('event_uid %s bertabrakan dengan event lain yang isinya berbeda',
+                            event.event_uid)
             if result.get('duplicate'):
                 self.stats.duplicates += 1
             elif (result.get('event') or {}).get('status') == 'ignored':

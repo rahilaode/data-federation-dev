@@ -133,13 +133,18 @@ def normalize(topic: str, partition: int, offset: int, value: Any, source: str,
                     'column': row.get('column_name')}]
         base_raw['fallback'] = 'dari baris log; ddl_command tidak diurai'
 
+    # Kunci idempotensi diturunkan dari DDL itu sendiri (sumber, id baris log, dan waktu
+    # tangkap), BUKAN dari offset Kafka. Offset kembali ke 0 bila topik dibuat ulang, sehingga
+    # DDL baru mendapat uid yang sama dengan event lama dan dianggap duplikat (temuan F6).
+    identitas = (f"{source}:{row.get('id')}:{captured_at}"
+                 if row.get('id') is not None and captured_at else f'{topic}:{partition}:{offset}')
     events = []
     for index, action in enumerate(actions):
         raw = dict(base_raw)
         if 'unsupported' in action:
             raw['unsupported_statement'] = action['unsupported']
         events.append(Normalized(
-            event_uid=str(uuid.uuid5(NAMESPACE, f'ascam:{topic}:{partition}:{offset}:{index}')),
+            event_uid=str(uuid.uuid5(NAMESPACE, f'ascam:{identitas}:{index}')),
             operation=action['operation'], source=source,
             schema=action.get('schema') or schema, table=action.get('table') or table,
             column=action.get('column'), new_column=action.get('new_column'),

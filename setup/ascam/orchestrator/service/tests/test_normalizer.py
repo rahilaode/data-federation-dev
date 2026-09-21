@@ -81,12 +81,29 @@ def test_unparsable_ddl_falls_back_to_log_row():
     assert 'fallback' in event.raw or 'parse_error' in event.raw
 
 
-def test_uid_is_deterministic_per_offset():
+def test_uid_is_deterministic_for_the_same_ddl():
     a = normalize('topik', 0, 42, pesan(PG_ROW), 'kemensos')[0]
     b = normalize('topik', 0, 42, pesan(PG_ROW), 'kemensos')[0]
-    c = normalize('topik', 0, 43, pesan(PG_ROW), 'kemensos')[0]
-    assert a.event_uid == b.event_uid != c.event_uid
+    assert a.event_uid == b.event_uid
     assert uuid.UUID(a.event_uid).version == 5
+
+
+def test_uid_survives_topic_recreation():
+    """Regresi F6: topik dibuat ulang, offset kembali ke awal, tetapi DDL-nya berbeda."""
+    lama = normalize('topik', 0, 2, pesan(PG_ROW), 'kemensos')[0]
+    baru_row = {**PG_ROW, 'id': 3, 'captured_at': '2026-09-21T21:19:12.849084Z'}
+    baru = normalize('topik', 0, 2, pesan(baru_row), 'kemensos')[0]      # offset sama
+    assert lama.event_uid != baru.event_uid
+    # pesan yang sama dikirim ulang dari offset lain tetap dikenali sebagai duplikat
+    ulang = normalize('topik', 0, 99, pesan(PG_ROW), 'kemensos')[0]
+    assert ulang.event_uid == lama.event_uid
+
+
+def test_uid_falls_back_to_offset_without_row_identity():
+    tanpa_id = {k: v for k, v in PG_ROW.items() if k not in ('id', 'captured_at')}
+    a = normalize('topik', 0, 5, pesan(tanpa_id), 'kemensos')[0]
+    b = normalize('topik', 0, 6, pesan(tanpa_id), 'kemensos')[0]
+    assert a.event_uid != b.event_uid
 
 
 @pytest.mark.parametrize('value', [None, {}, {'op': 'u', 'after': PG_ROW}, {'op': 'c', 'after': None}])

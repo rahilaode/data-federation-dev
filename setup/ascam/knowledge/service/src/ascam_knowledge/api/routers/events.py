@@ -39,8 +39,14 @@ def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
     if existing is not None:
         plan = db.execute(select(ops.AdaptationPlan).filter_by(event_id=existing.id)
                           .order_by(ops.AdaptationPlan.id.desc())).scalars().first()
+        # uid yang sama dengan isi berbeda menandakan kunci idempotensi bertabrakan; ditandai
+        # agar tidak lolos diam-diam sebagai duplikat (temuan F6)
+        conflict = existing.structured != body.structured()
+        if conflict:
+            svc.audit(db, actor, 'event_uid_conflict', obdf_id, 'schema_event', str(existing.id),
+                      event_uid=str(event_uid), baru=body.structured())
         return EventResultOut(event=EventOut.model_validate(existing), duplicate=True,
-                              plan=_plan_out(db, plan) if plan else None)
+                              conflict=conflict, plan=_plan_out(db, plan) if plan else None)
 
     source = db.execute(select(registry.SourceSystem).filter_by(
         obdf_id=obdf_id, logical_name=body.source)).scalar_one_or_none()

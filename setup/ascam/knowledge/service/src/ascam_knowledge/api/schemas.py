@@ -391,6 +391,7 @@ class EventOut(Out):
 class EventResultOut(BaseModel):
     event: EventOut
     duplicate: bool = False
+    conflict: bool = Field(default=False, description='uid sama tetapi isi event berbeda')
     plan: PlanOut | None = None
 
 

@@ -58,5 +58,11 @@ keduanya dilaporkan terpisah.
    yang dapat digeneralisasi adalah proporsi antarlangkah dan perbandingan antarskenario.
 4. **Data uji kecil.** Waktu `validate` dan `reload_ontop` akan bertambah seiring ukuran ℳ dan 𝒯,
    bukan ukuran data; waktu kueri verifikasi bertambah seiring ukuran data.
-5. **Kueri regresi terbatas** (tiga kueri tetap): kesetaraan jawaban diukur pada cakupan kueri
+5. **Reset infrastruktur mengubah identitas pesan.** Menghentikan seluruh kontainer dengan
+   `down -v` membuat ulang topik Kafka dan basis data sumber. Kunci idempotensi yang semula
+   berbasis offset Kafka bertabrakan dengan event lama, sehingga DDL baru diperlakukan sebagai
+   duplikat tanpa jejak. Diperbaiki dengan menurunkan kunci dari DDL itu sendiri (ADR-0017).
+   Evaluasi harus dijalankan pada infrastruktur yang tidak dibuat ulang di tengah jalan, dan
+   pemeriksaan awal wajib dijalankan setelah setiap reset infrastruktur.
+6. **Kueri regresi terbatas** (tiga kueri tetap): kesetaraan jawaban diukur pada cakupan kueri
    tersebut, bukan pada seluruh kemungkinan kueri.

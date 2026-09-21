@@ -137,3 +137,17 @@ def test_plan_can_be_superseded(api, obdf):
     assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json() == []
     assert api.post(f'/api/v1/plans/{plan_id}/supersede').status_code == 409
     assert 'plan_superseded' in [a['action'] for a in api.get(f'/api/v1/obdf/{obdf}/audit').json()]
+
+
+def test_uid_reuse_with_different_content_is_flagged(api, obdf):
+    """Regresi F6: uid lama dipakai ulang untuk DDL lain setelah topik Kafka dibuat ulang."""
+    uid = str(uuid.uuid4())
+    kirim(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
+          table='penerima_manfaat', column='status_ekonomi')
+    sama = kirim(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='status_ekonomi')
+    assert sama['duplicate'] is True and sama['conflict'] is False
+    beda = kirim(api, obdf, event_uid=uid, operation='add', source='kemensos', schema='public',
+                 table='ascam_probe', column='uji')
+    assert beda['duplicate'] is True and beda['conflict'] is True
+    assert 'event_uid_conflict' in [a['action'] for a in api.get(f'/api/v1/obdf/{obdf}/audit').json()]

@@ -27,8 +27,14 @@ Bukti dari pemeriksaan pesan nyata (F3-probe) dan dari definisi monitor:
    kolom menjadi satu event. Pernyataan yang tidak didukung dikirim sebagai operasi `other`
    sehingga muncul di antrean HITL. Bila penguraian gagal, event dibentuk dari baris log apa
    adanya dan RENAME tanpa nama baru akan dieskalasi Knowledge.
-3. **`event_uid` deterministik** (UUID versi 5 dari topik, partisi, offset, dan indeks
-   pernyataan). Pengiriman ulang tidak menghasilkan rencana ganda.
+3. **`event_uid` deterministik yang diturunkan dari DDL itu sendiri**: UUID versi 5 dari nama
+   sumber, `id` baris log monitor, waktu tangkap (`captured_at`), dan indeks pernyataan.
+   Pengiriman ulang tidak menghasilkan rencana ganda. *Revisi F6:* rancangan awal memakai
+   topik, partisi, dan offset Kafka. Ketika seluruh kontainer dinyalakan ulang dengan
+   `down -v`, topik dibuat ulang dan offset kembali ke 0, sehingga DDL baru mendapat uid yang
+   sama dengan event lama dan diperlakukan sebagai duplikat — tanpa galat maupun jejak. Offset
+   hanya dipakai sebagai cadangan bila baris log tidak memuat identitas. Knowledge kini menandai
+   uid yang sama dengan isi berbeda sebagai `conflict` dan mencatatnya di audit.
 4. **Offset di-commit hanya setelah event terkirim** (at-least-once). Bila Knowledge tidak dapat
    dihubungi, konsumen mundur ke offset pesan yang gagal dan mencoba lagi.
 5. **Konfigurasi runtime berasal dari Knowledge**: nama OBDF, daftar sumber beserta topiknya, dan
@@ -49,10 +55,11 @@ Bukti dari pemeriksaan pesan nyata (F3-probe) dan dari definisi monitor:
 
 ## Bukti
 
-20 uji: ADD, DROP, dan RENAME dari pesan PostgreSQL; baris MySQL dengan `db_name` dan dialeknya;
+30 uji: ADD, DROP, dan RENAME dari pesan PostgreSQL; baris MySQL dengan `db_name` dan dialeknya;
 DDL multi-pernyataan menghasilkan beberapa event dengan uid berbeda; pernyataan tak didukung
-menjadi `other` beserta teksnya; DDL tak terurai jatuh ke baris log; uid deterministik dan
-berversi 5; pesan bukan INSERT, tanpa `after`, atau rusak diabaikan; envelope Debezium dengan
+menjadi `other` beserta teksnya; DDL tak terurai jatuh ke baris log; uid deterministik, berversi 5, tetap berbeda
+untuk DDL berbeda meski offset sama setelah topik dibuat ulang, dan tetap sama untuk DDL yang
+dikirim ulang dari offset lain; tabrakan uid dicacah; pesan bukan INSERT, tanpa `after`, atau rusak diabaikan; envelope Debezium dengan
 pembungkus `schema` tetap terbaca; pengiriman berhasil menaikkan offset; kegagalan tidak
 menaikkan offset dan memundurkan konsumen ke pesan yang gagal; topik asing dilewati; sumber tanpa
 topik ditolak saat penyiapan; pemilihan token per klien dari berkas token bersama; penyiapan

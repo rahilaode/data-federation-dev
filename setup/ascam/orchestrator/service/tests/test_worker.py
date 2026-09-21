@@ -182,3 +182,12 @@ def test_skipped_messages_are_counted_with_reason():
     assert worker.stats.last_skipped['offset'] == 5
     assert "'u'" in worker.stats.last_skipped['alasan']
     assert consumer.commits == 1                        # dilewati bukan gagal: offset tetap maju
+
+
+def test_uid_conflict_is_counted():
+    knowledge = FakeKnowledge(results={'add': {'event': {'status': 'planned'}, 'duplicate': True,
+                                               'conflict': True}})
+    batch = {('p', 0): [Message(TOPIC, 0, 1, pesan(PG_ROW))]}
+    worker, _ = build([batch], knowledge)
+    worker.run()
+    assert worker.stats.conflicts == 1 and worker.stats.duplicates == 1

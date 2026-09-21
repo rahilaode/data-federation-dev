@@ -151,3 +151,48 @@ def test_uid_reuse_with_different_content_is_flagged(api, obdf):
                  table='ascam_probe', column='uji')
     assert beda['duplicate'] is True and beda['conflict'] is True
     assert 'event_uid_conflict' in [a['action'] for a in api.get(f'/api/v1/obdf/{obdf}/audit').json()]
+
+
+
+def test_hitl_add_creates_descriptive_notification_and_can_be_acknowledged(api, obdf):
+    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    assert plan['status'] == 'pending_approval' and len(plan['actions']) >= 3
+    belum = api.get(f'/api/v1/obdf/{obdf}/notifications', params={'unread': True}).json()
+    milik = [n for n in belum if n['plan_id'] == plan['id']]
+    assert milik and 'ADD pada kemensos:public.penerima_manfaat.alamat' in milik[0]['message']
+    assert 'menunggu persetujuan' in milik[0]['message']
+
+    dibaca = api.post(f"/api/v1/notifications/{milik[0]['id']}/ack").json()
+    assert dibaca['acknowledged'] is True and dibaca['acknowledged_by'] == 'ui:penguji'
+    sisa = api.get(f'/api/v1/obdf/{obdf}/notifications', params={'unread': True}).json()
+    assert all(n['id'] != milik[0]['id'] for n in sisa)
+    assert api.post('/api/v1/notifications/999999/ack').status_code == 404
+
+
+def test_approval_acknowledges_plan_notification(api, obdf):
+    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    api.post(f"/api/v1/plans/{plan['id']}/approve", json={'note': 'nama property sudah tepat'})
+    semua = api.get(f'/api/v1/obdf/{obdf}/notifications').json()
+    assert all(n['acknowledged'] for n in semua if n['plan_id'] == plan['id'])
+
+
+def test_only_ui_client_may_assert_human_actor(api, obdf):
+    """Persetujuan HITL tercatat atas nama administrator, bukan hanya nama klien token."""
+    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                     headers={'X-ASCAM-User': 'rahil.admin'}).json()
+    assert hasil['decided_by'] == 'ui:rahil.admin'
+
+
+def test_malformed_actor_header_is_ignored(api, obdf):
+    plan = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
+                 column='nik')['plan']
+    hasil = api.post(f"/api/v1/plans/{plan['id']}/reject",
+                     headers={'X-ASCAM-User': 'admin\nPALSU: disetujui'}).json()
+    assert hasil['decided_by'] == 'ui'                  # header berbahaya diabaikan

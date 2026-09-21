@@ -7,7 +7,7 @@ validitas hasilnya. Semua alat berada di `experiments/f6/`.
 
 | Kode | Perubahan pada sumber | DBMS | Pola | Keputusan D11 yang diharapkan | Jawaban SPARQL yang diharapkan |
 |---|---|---|---|---|---|
-| A001 | `ADD COLUMN email` pada `penerima_manfaat` | PostgreSQL | P-001 | otomatis | identik (kolom baru belum berisi data) |
+| A001 | `ADD COLUMN email` pada `penerima_manfaat` | PostgreSQL | P-001 | **HITL** (ADR-0021) | identik (kolom baru belum berisi data) |
 | A002 | `DROP COLUMN tipe_program` pada `program_bansos` | PostgreSQL | P-002 | otomatis | berubah (predikat `tipeProgram` hilang) |
 | A003 | `RENAME COLUMN tanggal_lahir` pada `master_penduduk` | MySQL | P-003 | otomatis | identik (diserap `NAMEINSOURCE`) |
 
@@ -21,7 +21,9 @@ validitas hasilnya. Semua alat berada di `experiments/f6/`.
    Ontop dimuat ulang, Knowledge disinkronkan.
 5. Cuplikan jawaban dasar diambil dari tiga kueri tetap, diulang bila endpoint belum menjawab.
 6. Executor dilanjutkan, lalu perubahan skema skenario diterapkan pada sumber (t₀).
-7. Dicatat: waktu event diterima Knowledge, keputusan D11, dan eksekusi hingga selesai.
+7. Dicatat: waktu event diterima Knowledge, keputusan D11, dan eksekusi hingga selesai. Bila
+   rencana menunggu persetujuan (A001), evaluator menyetujuinya lewat API yang sama dengan
+   konsol, atas nama `evaluator`; satu persetujuan dihitung sebagai N_manual = 1.
 8. Cuplikan jawaban sesudah diambil dan dibandingkan dengan cuplikan dasar.
 
 Pemeriksaan awal (`experiments/f6/preflight.py`) dijalankan sebelum run pertama: seluruh
@@ -38,6 +40,8 @@ kontainer, konektor Debezium, layanan ASCAM, dan satu uji rantai DDL nyata.
 | Kerja adaptasi | Jumlah durasi langkah `deploy_vdb`, `validate`, `switch`, `reload_ontop`, `verify`, `sync` |
 | Jeda penjadwalan | Ujung ke ujung dikurangi deteksi dan kerja adaptasi; terutama interval polling Executor (5 detik) |
 | Ujung ke ujung | t₀ sampai eksekusi selesai |
+| Waktu mesin | Ujung ke ujung dikurangi jeda keputusan manusia (relevan untuk skenario HITL) |
+| N_manual | Jumlah keputusan administrator per siklus; penyuntingan artefak manual tetap nol |
 
 Kerja adaptasi adalah sifat sistem, sedangkan jeda penjadwalan adalah parameter konfigurasi;
 keduanya dilaporkan terpisah.

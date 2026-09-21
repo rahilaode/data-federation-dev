@@ -48,7 +48,8 @@ targets:
     credential: ontop-agent
 
 settings:
-  adaptation.add_column: {mode: auto}          # K4
+  # ADD memerlukan persetujuan administrator lewat UI: menambah kosakata baru ke TBox
+  adaptation.add_column: {mode: hitl}          # K4 (diubah dari auto; lihat ADR-0021)
   adaptation.hitl_default: true                # sel yang tidak otomatis pada matriks D11
   retention.keep_versions: 5
   teiid.keep_previous_vdb_versions: 1          # ADR-0004 langkah 7

@@ -72,6 +72,10 @@ docker compose -f ./setup/ascam/orchestrator/docker-compose.yaml up --build --de
 docker compose -f ./setup/ascam/executor/docker-compose.yaml down -v
 docker compose -f ./setup/ascam/executor/docker-compose.yaml up --build --detach
 
+# konsol administrator ASCAM (ADR-0021): http://127.0.0.1:18400
+docker compose -f ./setup/ascam/ui/docker-compose.yaml down -v
+docker compose -f ./setup/ascam/ui/docker-compose.yaml up --build --detach
+
 # ascam adaptive engine (iterasi 1) TIDAK dijalankan lagi: mesin tersebut mengubah mapping
 # .obda, sedangkan ℳ kini berupa R2RML (ADR-0005, ADR-0010). Penggantinya (Orchestrator dan
 # Executor) sedang dibangun; lihat setup/ascam/adaptive-engine/README.md.

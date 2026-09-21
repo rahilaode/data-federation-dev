@@ -446,3 +446,14 @@ class ExecutionOut(Out):
     started_at: datetime
     finished_at: datetime | None
     steps: list[StepOut] = Field(default_factory=list)
+
+
+class NotificationOut(Out):
+    id: int
+    plan_id: int | None
+    severity: str
+    message: str
+    acknowledged: bool
+    acknowledged_by: str | None
+    acknowledged_at: datetime | None
+    created_at: datetime

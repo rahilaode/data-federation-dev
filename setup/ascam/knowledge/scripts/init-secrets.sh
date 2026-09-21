@@ -36,3 +36,12 @@ fi
 # Pada lingkungan nyata, isi berkas ini dengan kredensial milik pengelola OBDF.
 write obdf_teiid_mgmt_password "Password12345_"
 write obdf_teiid_user_password "Password12345_"
+
+# Konsol administrator ASCAM (setup/ascam/ui): kata sandi admin dan kunci penanda sesi.
+# Kata sandi ditampilkan sekali saat dibuat; simpan di pengelola kata sandi Anda.
+if [ ! -s "$DIR/ui_admin_password" ]; then
+  UI_PASSWORD="$(rand)"
+  write ui_admin_password "$UI_PASSWORD"
+  echo "kata sandi konsol (pengguna admin): $UI_PASSWORD"
+fi
+write ui_session_key "$(rand)"

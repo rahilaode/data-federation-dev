@@ -7,6 +7,7 @@ Aktor yang tercatat di audit = nama klien, ditambah pengguna UI bila klien mengi
 header `X-ASCAM-User`.
 """
 import hashlib
+import re
 import hmac
 
 from fastapi import Depends, HTTPException, Request, status
@@ -43,6 +44,9 @@ class TokenRegistry:
         return found
 
 
+USER_PATTERN = re.compile(r'[A-Za-z0-9._@-]{1,64}')
+
+
 def current_actor(request: Request,
                   creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
     registry: TokenRegistry = request.app.state.tokens
@@ -50,5 +54,9 @@ def current_actor(request: Request,
     if client is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, 'Token tidak valid',
                             headers={'WWW-Authenticate': 'Bearer'})
+    # Hanya klien UI yang boleh menyatakan nama administrator yang bertindak (untuk jejak audit
+    # persetujuan HITL); formatnya dibatasi agar tidak dapat menyusupkan isi ke log.
     user = request.headers.get('X-ASCAM-User')
-    return f'{client}:{user}' if user else client
+    if user and client == 'ui' and USER_PATTERN.fullmatch(user):
+        return f'{client}:{user}'
+    return client

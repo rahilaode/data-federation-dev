@@ -1,0 +1,37 @@
+# Konsol administrator ASCAM (ADR-0021). Hanya terikat ke 127.0.0.1; peramban tidak pernah
+# menerima token layanan, karena permintaan ke Knowledge diteruskan oleh konsol ini.
+services:
+  ui:
+    build: {context: ./service}
+    image: ascam-ui:dev
+    container_name: ascam-ui
+    restart: unless-stopped
+    environment:
+      ASCAM_UI_KNOWLEDGE_URL: http://ascam-knowledge-service:8000
+      ASCAM_UI_ORCHESTRATOR_URL: http://ascam-orchestrator:8000
+      ASCAM_UI_EXECUTOR_URL: http://ascam-executor:8000
+      ASCAM_UI_AGENT_URL: http://ascam-ontop-agent:8000
+      ASCAM_UI_OBDF: bansos
+      ASCAM_UI_ADMIN_USER: admin
+      ASCAM_UI_TOKEN_FILE: /run/secrets/knowledge_api_tokens
+      ASCAM_UI_PASSWORD_FILE: /run/secrets/ui_admin_password
+      ASCAM_UI_SESSION_KEY_FILE: /run/secrets/ui_session_key
+    secrets: [knowledge_api_tokens, ui_admin_password, ui_session_key]
+    ports:
+      - '127.0.0.1:18400:8000'
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [ascam-networks]
+
+secrets:
+  knowledge_api_tokens: {file: ../knowledge/secrets/knowledge_api_tokens}
+  ui_admin_password: {file: ../knowledge/secrets/ui_admin_password}
+  ui_session_key: {file: ../knowledge/secrets/ui_session_key}
+
+networks:
+  ascam-networks:
+    external: true

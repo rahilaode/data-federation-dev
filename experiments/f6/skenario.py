@@ -101,7 +101,7 @@ KUERI_REGRESI = [
 
 SKENARIO = {
     'a001': Skenario(kode='a001', judul='ADD COLUMN email pada penerima_manfaat', pola='P-001',
-                     keputusan='auto', sumber='kemensos', tabel='penerima_manfaat', kolom='email',
+                     keputusan='hitl',            # ADR-0021: ADD memerlukan persetujuan administrator sumber='kemensos', tabel='penerima_manfaat', kolom='email',
                      terapkan=a001_terapkan, pulihkan=a001_pulihkan,
                      predikat='http://bansos.go.id/ontology/email',
                      catatan='kolom baru belum berisi data saat verifikasi',

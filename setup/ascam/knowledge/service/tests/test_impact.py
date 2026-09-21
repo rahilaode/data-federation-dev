@@ -105,7 +105,20 @@ def test_add_respects_policy(api, obdf):
     api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
-    assert out['decision'] == 'hitl' and any('bukan auto' in r for r in out['reasons'])
+    assert out['decision'] == 'hitl'
+    assert any('mewajibkan persetujuan' in r for r in out['reasons'])
+
+
+def test_hitl_add_plan_is_complete(api, obdf):
+    """Regresi: kebijakan HITL memotong analisis sehingga rencana hanya berisi tindakan VDB;
+    setelah disetujui, property dan pemetaan tidak pernah dibuat."""
+    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    lapisan = {(a['artifact'], a['operation']) for a in out['actions']}
+    assert lapisan >= {('vdb', 'add_column'), ('ontology', 'add_datatype_property'),
+                       ('r2rml', 'add_predicate_object_map')}
+    assert out['decision'] == 'hitl' and out['pattern'] == 'P-001'
 
 
 def test_add_existing_column_name_needs_hitl(api, obdf):

@@ -18,7 +18,8 @@ from ... import registry_service as svc
 from ...db import ops, registry
 from ...security.auth import current_actor
 from ..deps import get_db
-from ..schemas import DecisionIn, EventIn, EventOut, EventResultOut, PlanActionOut, PlanOut
+from ..schemas import (DecisionIn, EventIn, EventOut, EventResultOut, NotificationOut,
+                       PlanActionOut, PlanOut)
 
 router = APIRouter(prefix='/api/v1', tags=['event'], dependencies=[Depends(current_actor)])
 
@@ -79,9 +80,14 @@ def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
                               operation=action['operation'], params=params))
     event.status = 'planned'
     if report.decision == 'hitl':
-        db.add(ops.Notification(obdf_id=obdf_id, plan_id=plan.id, severity='warning',
-                                message=f'Rencana {report.pattern} menunggu persetujuan: '
-                                        f"{'; '.join(report.reasons)[:400]}"))
+        struktur = body.structured()
+        objek = '.'.join(x for x in (struktur.get('schema'), struktur.get('table'),
+                                     struktur.get('column')) if x)
+        db.add(ops.Notification(
+            obdf_id=obdf_id, plan_id=plan.id, severity='warning',
+            message=(f"Perubahan {struktur.get('operation', '').upper()} pada {body.source}:{objek} "
+                     f'menunggu persetujuan ({len(report.actions)} tindakan direncanakan). '
+                     f"Alasan: {'; '.join(report.reasons)[:300]}")))
     svc.audit(db, actor, 'plan_created', obdf_id, 'adaptation_plan', str(plan.id),
               decision=report.decision, pattern=report.pattern)
     db.flush()
@@ -181,3 +187,28 @@ def approve_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Dep
 def reject_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Depends(get_db),
                 actor: str = Depends(current_actor)):
     return _decide(db, plan_id, actor, False, body.note if body else None)
+
+
+@router.get('/obdf/{obdf_id}/notifications', response_model=list[NotificationOut])
+def list_notifications(obdf_id: int, unread: bool = False, limit: int = 50,
+                       db: Session = Depends(get_db)):
+    svc.get_obdf(db, obdf_id)
+    query = select(ops.Notification).filter_by(obdf_id=obdf_id)
+    if unread:
+        query = query.filter_by(acknowledged=False)
+    return db.execute(query.order_by(ops.Notification.id.desc())
+                      .limit(max(1, min(limit, 500)))).scalars().all()
+
+
+@router.post('/notifications/{notification_id}/ack', response_model=NotificationOut)
+def acknowledge_notification(notification_id: int, db: Session = Depends(get_db),
+                             actor: str = Depends(current_actor)):
+    notification = db.get(ops.Notification, notification_id)
+    if notification is None:
+        raise svc.NotFound(f'notifikasi {notification_id} tidak ditemukan')
+    if not notification.acknowledged:
+        notification.acknowledged = True
+        notification.acknowledged_by = actor
+        notification.acknowledged_at = datetime.now(timezone.utc)
+        db.flush()
+    return notification

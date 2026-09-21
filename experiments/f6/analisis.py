@@ -113,6 +113,15 @@ def main() -> int:
               f'{len(benar)}/{len(bagian)} | {len(sesuai)}/{len(banding)} | '
               f'{len(berhasil) - len(banding)} |')
 
+    print('\n## Intervensi manual (N_manual) dan jeda keputusan\n')
+    print('| Skenario | N_manual per run | Jeda keputusan (ms) |')
+    print('|---|---:|---:|')
+    for kode in skenario:
+        bagian = [r for r in runs if r['skenario'] == kode and r.get('hasil') == 'succeeded']
+        manual = sorted({r.get('n_manual', 0) for r in bagian})
+        jeda = [r['keputusan_ms'] for r in bagian if r.get('keputusan_ms')]
+        print(f"| {kode} | {', '.join(map(str, manual)) or '-'} | {kuartil(jeda)} |")
+
     print('\n## Waktu, median (kuartil 1–3), milidetik\n')
     print('| Skenario | Deteksi | Kerja adaptasi | Ujung ke ujung | Jeda penjadwalan |')
     print('|---|---:|---:|---:|---:|')

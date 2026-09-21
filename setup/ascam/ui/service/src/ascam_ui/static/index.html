@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Konsol ASCAM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="masuk" id="layar-masuk" hidden>
+    <form id="formulir-masuk" autocomplete="on">
+      <h1>ASCAM</h1>
+      <p class="redup">Masuk untuk memantau adaptasi federasi data dan memutuskan usulan perubahan.</p>
+      <div class="baris">
+        <label for="nama-pengguna">Nama pengguna</label>
+        <input id="nama-pengguna" name="username" autocomplete="username" required>
+      </div>
+      <div class="baris">
+        <label for="kata-sandi">Kata sandi</label>
+        <input id="kata-sandi" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="utama-aksi" type="submit">Masuk</button>
+      <p class="pesan" id="pesan-masuk" role="alert"></p>
+    </form>
+  </main>
+
+  <div class="kerangka" id="konsol" hidden>
+    <nav class="navigasi" aria-label="Navigasi utama">
+      <div class="merek">
+        <strong>ASCAM</strong>
+        <span>Konsol administrator</span>
+      </div>
+      <a href="#/ringkasan" data-rute="ringkasan">Ringkasan</a>
+      <a href="#/persetujuan" data-rute="persetujuan">Persetujuan <span class="jumlah" id="jumlah-menunggu" hidden>0</span></a>
+      <a href="#/perubahan" data-rute="perubahan">Perubahan skema</a>
+      <a href="#/adaptasi" data-rute="adaptasi">Rencana dan eksekusi</a>
+      <a href="#/versi" data-rute="versi">Versi spesifikasi</a>
+      <a href="#/dampak" data-rute="dampak">Analisis dampak</a>
+      <a href="#/konfigurasi" data-rute="konfigurasi">Konfigurasi</a>
+      <a href="#/audit" data-rute="audit">Jejak audit</a>
+      <div class="bawah">
+        <div>Masuk sebagai <strong id="nama-admin"></strong></div>
+        <button class="kecil" id="tombol-keluar" type="button">Keluar</button>
+      </div>
+    </nav>
+    <div class="utama">
+      <header class="bilah-atas">
+        <span class="obdf" id="nama-obdf">OBDF</span>
+        <span class="versi" id="versi-aktif">Memuat versi aktif</span>
+        <div class="kanan">
+          <span class="kecil" id="status-executor">Executor</span>
+          <button class="kecil" id="tombol-executor" type="button" hidden></button>
+        </div>
+      </header>
+      <section class="isi" id="isi" aria-live="polite"></section>
+    </div>
+  </div>
+
+  <div class="kabar" id="kabar" role="status" hidden></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

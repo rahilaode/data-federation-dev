@@ -49,7 +49,8 @@ UI = None
 
 def api(path: str, metode: str = 'GET', body=None, base: str = KNOWLEDGE, bearer=None):
     data = json.dumps(body).encode() if body is not None else None
-    headers = {'Content-Type': 'application/json'}
+    # Evaluator bertindak sebagai administrator bernama; tercatat demikian di jejak audit
+    headers = {'Content-Type': 'application/json', 'X-ASCAM-User': 'evaluator'}
     bearer = UI if bearer is None else bearer
     if bearer:
         headers['Authorization'] = f'Bearer {bearer}'
@@ -185,10 +186,25 @@ def satu_run(kode: str, nomor: int, batas: float) -> dict:
     catatan['pola'] = rencana['pattern'] if rencana else None
     catatan['sesuai_harapan'] = (catatan['keputusan'] == sk.keputusan and catatan['pola'] == sk.pola)
 
+    # HITL (ADR-0021): evaluator menyetujui lewat API yang sama dengan konsol. Satu persetujuan
+    # dihitung sebagai satu intervensi manual (keputusan), bukan penyuntingan artefak; jeda
+    # keputusan dicatat terpisah agar waktu mesin tidak tercampur waktu manusia.
+    catatan['n_manual'] = 0
+    catatan['keputusan_ms'] = 0
+    if rencana and rencana['status'] == 'pending_approval':
+        t_rencana = time.perf_counter()
+        hasil = api(f"/api/v1/plans/{rencana['id']}/approve", 'POST',
+                    {'note': 'persetujuan evaluator (protokol F6)'})
+        catatan['n_manual'] = 1
+        catatan['keputusan_ms'] = int((time.perf_counter() - t_rencana) * 1000)
+        catatan['disetujui_oleh'] = hasil.get('decided_by')
+
     eksekusi = tunggu(lambda: next(
         (e for e in api('/api/v1/obdf/1/executions?limit=5')
          if e['id'] not in eksekusi_awal and e['status'] != 'running'), None), batas)
     catatan['adaptasi_ms'] = int((time.perf_counter() - t0) * 1000) if eksekusi else None
+    if catatan['adaptasi_ms'] is not None:
+        catatan['adaptasi_mesin_ms'] = catatan['adaptasi_ms'] - catatan['keputusan_ms']
     if eksekusi is None:
         catatan['hasil'] = 'eksekusi tidak selesai'
         return catatan
@@ -217,7 +233,8 @@ def satu_run(kode: str, nomor: int, batas: float) -> dict:
 
 def ringkas(semua: list[dict], keluaran: Path) -> None:
     kolom = ['skenario', 'run', 'hasil', 'keputusan', 'pola', 'sesuai_harapan', 'deteksi_ms',
-             'adaptasi_ms', 'jawaban_identik', 'predikat_sebelum', 'predikat_sesudah',
+             'adaptasi_ms', 'adaptasi_mesin_ms', 'keputusan_ms', 'n_manual',
+             'jawaban_identik', 'predikat_sebelum', 'predikat_sesudah',
              *[f'langkah_{n}' for n in LANGKAH]]
     with (keluaran / 'ringkasan.csv').open('w', newline='') as fh:
         penulis = csv.DictWriter(fh, fieldnames=kolom, extrasaction='ignore')

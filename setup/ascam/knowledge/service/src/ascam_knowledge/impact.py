@@ -324,10 +324,10 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
                            'column': event.get('column'), 'column_type': event.get('column_type')})
     if column in existing:
         report.reasons.append(f'nama kolom {column} sudah ada pada tabel Teiid {target_table.table}')
-    if policy.get('mode') != 'auto':
-        report.reasons.append('kebijakan adaptation.add_column bukan auto')
-        report.decision = 'hitl'
-        return report
+    # Kebijakan HITL tidak memotong analisis: administrator harus melihat rencana LENGKAP
+    # (VDB, ontologi, mapping) sebelum memutuskan. Sebelumnya analisis berhenti di sini
+    # sehingga rencana yang disetujui hanya menambah kolom VDB.
+    butuh_persetujuan = policy.get('mode') != 'auto'
 
     exposing = _exposing_triples_maps(db, version.id, target_table.table)
     if not exposing:
@@ -382,5 +382,10 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
                                'predicate_iri': iri, 'column': event.get('column'),
                                'table': target_table.table,
                                'triples_map_iri': triples_map['iri']})
-    report.decision = 'hitl' if any('sudah ada pada tabel Teiid' in r for r in report.reasons) else 'auto'
+    bentrok = any('sudah ada pada tabel Teiid' in r for r in report.reasons)
+    if butuh_persetujuan:
+        report.reasons.append('Penambahan kolom menambah property baru ke ontologi; kebijakan '
+                              'adaptation.add_column mewajibkan persetujuan administrator atas '
+                              'nama, domain, dan range property tersebut')
+    report.decision = 'hitl' if bentrok or butuh_persetujuan else 'auto'
     return report

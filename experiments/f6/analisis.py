@@ -41,6 +41,13 @@ def muat(direktori: Path) -> list[dict]:
     return [json.loads(p.read_text()) for p in sorted(direktori.glob('run-*.json'))]
 
 
+def dapat_dibandingkan(run: dict) -> bool:
+    """Kedua cuplikan jawaban berhasil diambil (tidak berisi galat koneksi)."""
+    semua = list((run.get('jawaban_sebelum') or {}).values()) + \
+        list((run.get('jawaban_sesudah') or {}).values())
+    return bool(semua) and all(isinstance(v, list) for v in semua)
+
+
 def total_langkah(run: dict) -> int | None:
     langkah = run.get('langkah') or {}
     nilai = [v for v in langkah.values() if isinstance(v, int)]
@@ -92,15 +99,19 @@ def main() -> int:
 
     skenario = sorted({r['skenario'] for r in runs})
     print('## Keberhasilan dan ketepatan keputusan\n')
-    print('| Skenario | Run | Berhasil | Keputusan D11 benar | Jawaban sesuai harapan |')
-    print('|---|---:|---:|---:|---:|')
+    print('| Skenario | Run | Berhasil | Keputusan D11 benar | Jawaban sesuai harapan | '
+          'Tak dapat dibandingkan |')
+    print('|---|---:|---:|---:|---:|---:|')
     for kode in skenario:
         bagian = [r for r in runs if r['skenario'] == kode]
         berhasil = [r for r in bagian if r.get('hasil') == 'succeeded']
         benar = [r for r in bagian if r.get('sesuai_harapan')]
-        sesuai = [r for r in berhasil if r.get('jawaban_identik') is IDENTIK_DIHARAPKAN.get(kode)]
+        banding = [r for r in berhasil if r.get('jawaban_identik') is not None
+                   and dapat_dibandingkan(r)]
+        sesuai = [r for r in banding if r.get('jawaban_identik') is IDENTIK_DIHARAPKAN.get(kode)]
         print(f'| {kode} | {len(bagian)} | {len(berhasil)}/{len(bagian)} | '
-              f'{len(benar)}/{len(bagian)} | {len(sesuai)}/{len(berhasil)} |')
+              f'{len(benar)}/{len(bagian)} | {len(sesuai)}/{len(banding)} | '
+              f'{len(berhasil) - len(banding)} |')
 
     print('\n## Waktu, median (kuartil 1–3), milidetik\n')
     print('| Skenario | Deteksi | Kerja adaptasi | Ujung ke ujung | Jeda penjadwalan |')

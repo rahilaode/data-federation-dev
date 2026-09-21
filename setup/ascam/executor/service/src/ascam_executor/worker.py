@@ -28,6 +28,7 @@ class Stats:
     last_status: str | None = None
     last_error: str | None = None
     last_timings: dict = field(default_factory=dict)
+    paused: bool = False
 
     def snapshot(self) -> dict:
         return asdict(self)
@@ -113,6 +114,9 @@ class ExecutorWorker:
         self.stats.state = 'running'
         self.stats.last_error = None
         while not self._stop.is_set():
+            if self.stats.paused:
+                self._stop.wait(0.5)
+                continue
             try:
                 self.process_once(knowledge, obdf_id, executor)
             except Exception as exc:                # noqa: BLE001 — pekerja tetap hidup
@@ -120,6 +124,12 @@ class ExecutorWorker:
                 log.warning('siklus gagal: %s', self.stats.last_error)
             self._stop.wait(self.settings.poll_seconds)
         self.stats.state = 'stopped'
+
+    def pause(self) -> None:
+        self.stats.paused = True
+
+    def resume(self) -> None:
+        self.stats.paused = False
 
     def stop(self) -> None:
         self._stop.set()

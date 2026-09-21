@@ -163,6 +163,12 @@ class Executor:
     def execute(self, plan: dict) -> dict:
         versi_aktif = self.knowledge.active_version(self.obdf_id)
         if plan['base_spec_version_id'] != versi_aktif['id']:
+            # Ditandai usang agar tidak dicoba ulang setiap siklus (temuan evaluasi F6)
+            try:
+                self.knowledge.supersede(plan['id'], f"versi dasar {plan['base_spec_version_id']} "
+                                                     f"bukan versi aktif {versi_aktif['id']}")
+            except Exception:                       # noqa: BLE001
+                pass
             raise ExecutionError('rencana disusun di atas versi spesifikasi lain',
                                  {'base': plan['base_spec_version_id'], 'aktif': versi_aktif['id']})
         execution = self.knowledge.start_execution(plan['id'])

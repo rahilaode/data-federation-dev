@@ -92,6 +92,44 @@ def executor(nyala: bool) -> None:
                         'ASCAM_EXEC_ENABLED': 'true' if nyala else 'false'})
 
 
+def kendali(aksi: str) -> None:
+    """Menjeda atau melanjutkan pengambilan rencana oleh Executor."""
+    api(f'/control/{aksi}', 'POST', {}, base=EXECUTOR, bearer='')
+
+
+def tenang(batas: float = 180.0) -> bool:
+    """Tidak ada eksekusi yang sedang berjalan."""
+    return bool(tunggu(lambda: not any(e['status'] == 'running'
+                                       for e in api('/api/v1/obdf/1/executions?limit=10')),
+                       batas))
+
+
+def netralkan_rencana(sejak_event: set[int]) -> list[int]:
+    """Rencana dari langkah pemulihan antar-run ditandai usang agar tidak dieksekusi."""
+    dinetralkan = []
+    for status in ('approved', 'pending_approval'):
+        for plan in api(f'/api/v1/obdf/1/plans?status={status}&limit=50'):
+            api(f"/api/v1/plans/{plan['id']}/supersede", 'POST',
+                {'note': 'rencana dari langkah pemulihan eksperimen'})
+            dinetralkan.append(plan['id'])
+    return dinetralkan
+
+
+def jawaban_stabil(kueri_list: list[str], percobaan: int = 6, jeda: float = 2.0) -> dict:
+    """Cuplikan jawaban diambil ulang bila endpoint sedang tidak menjawab."""
+    hasil = {}
+    for _ in range(percobaan):
+        hasil = jawaban(kueri_list)
+        if not any(isinstance(v, dict) for v in hasil.values()):
+            return hasil
+        time.sleep(jeda)
+    return hasil
+
+
+def dapat_dibandingkan(a: dict, b: dict) -> bool:
+    return all(isinstance(v, list) for v in list(a.values()) + list(b.values()))
+
+
 def tunggu(kondisi, batas_detik: float, jeda: float = 1.0):
     batas = time.perf_counter() + batas_detik
     while time.perf_counter() < batas:
@@ -107,15 +145,26 @@ def satu_run(kode: str, nomor: int, batas: float) -> dict:
     catatan = {'skenario': kode, 'judul': sk.judul, 'pola_diharapkan': sk.pola, 'run': nomor,
                'mulai': datetime.now(timezone.utc).isoformat()}
 
+    # Langkah pemulihan juga perubahan skema yang akan dideteksi ASCAM. Executor dijeda,
+    # event pemulihan ditunggu sampai tiba, lalu rencana yang timbul darinya dinetralkan,
+    # agar tidak ada adaptasi yang berjalan saat cuplikan dasar diambil (temuan F6).
+    kendali('pause')
+    tenang()
     if sk.siapkan:
         sk.siapkan()
-    sk.pulihkan()
+    sebelum_pulih = {e['id'] for e in api('/api/v1/obdf/1/events?limit=200')}
+    if sk.pulihkan() not in ('bersih', ''):
+        tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
+                             if e['id'] not in sebelum_pulih), None), 20.0)
+        time.sleep(2)
+    catatan['rencana_pemulihan_dinetralkan'] = netralkan_rencana(sebelum_pulih)
     reset()
     sebelum_versi = api('/api/v1/obdf/1/versions?limit=1')
     catatan['versi_sebelum'] = sebelum_versi[0]['version_no'] if sebelum_versi else None
-    catatan['jawaban_sebelum'] = jawaban(sk.kueri)
+    catatan['jawaban_sebelum'] = jawaban_stabil(sk.kueri)
     peristiwa_awal = {e['id'] for e in api('/api/v1/obdf/1/events?limit=200')}
     eksekusi_awal = {e['id'] for e in api('/api/v1/obdf/1/executions?limit=50')}
+    kendali('resume')
 
     t0 = time.perf_counter()
     catatan['ddl'] = sk.terapkan()
@@ -150,10 +199,14 @@ def satu_run(kode: str, nomor: int, batas: float) -> dict:
     catatan['status_langkah'] = {s['name']: s['status'] for s in eksekusi['steps']}
     catatan['hasil'] = eksekusi['status']
 
-    catatan['jawaban_sesudah'] = jawaban(sk.kueri)
-    catatan['jawaban_identik'] = catatan['jawaban_sebelum'] == catatan['jawaban_sesudah']
-    prediket_sebelum = set(json.dumps(x) for x in catatan['jawaban_sebelum']['q1'])
-    prediket_sesudah = set(json.dumps(x) for x in catatan['jawaban_sesudah']['q1'])
+    catatan['jawaban_sesudah'] = jawaban_stabil(sk.kueri)
+    if dapat_dibandingkan(catatan['jawaban_sebelum'], catatan['jawaban_sesudah']):
+        catatan['jawaban_identik'] = catatan['jawaban_sebelum'] == catatan['jawaban_sesudah']
+    else:
+        catatan['jawaban_identik'] = None           # tidak dapat dibandingkan, bukan berbeda
+    q1_a, q1_b = catatan['jawaban_sebelum'].get('q1'), catatan['jawaban_sesudah'].get('q1')
+    prediket_sebelum = set(q1_a) if isinstance(q1_a, list) else set()
+    prediket_sesudah = set(q1_b) if isinstance(q1_b, list) else set()
     catatan['predikat_sebelum'] = len(prediket_sebelum)
     catatan['predikat_sesudah'] = len(prediket_sesudah)
     sesudah_versi = api('/api/v1/obdf/1/versions?limit=1')
@@ -231,6 +284,7 @@ def main() -> int:
     print(f'Hasil akan ditulis ke {keluaran.relative_to(ROOT)}')
 
     executor(True)
+    tunggu(lambda: api('/health', base=EXECUTOR, bearer='').get('state') == 'running', 60)
     semua = []
     try:
         for kode in daftar:
@@ -244,7 +298,14 @@ def main() -> int:
                       f"deteksi={catatan.get('deteksi_ms')} ms "
                       f"adaptasi={catatan.get('adaptasi_ms')} ms "
                       f"identik={catatan.get('jawaban_identik')}")
-            SKENARIO[kode].pulihkan()
+            kendali('pause')
+            tenang()
+            sebelum = {e['id'] for e in api('/api/v1/obdf/1/events?limit=200')}
+            if SKENARIO[kode].pulihkan() not in ('bersih', ''):
+                tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
+                                     if e['id'] not in sebelum), None), 20.0)
+                time.sleep(2)
+            netralkan_rencana(sebelum)
             reset()
     finally:
         executor(False)

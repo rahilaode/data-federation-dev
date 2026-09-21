@@ -143,6 +143,28 @@ def _decide(db: Session, plan_id: int, actor: str, approve: bool, note: str | No
     return _plan_out(db, plan)
 
 
+@router.post('/plans/{plan_id}/supersede', response_model=PlanOut)
+def supersede_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Depends(get_db),
+                   actor: str = Depends(current_actor)):
+    """Menandai rencana usang agar tidak dieksekusi atau dicoba ulang.
+
+    Dipakai Executor ketika versi dasar rencana tidak lagi aktif, dan oleh prosedur eksperimen
+    untuk menetralkan rencana yang timbul dari langkah pemulihan antar-run.
+    """
+    plan = db.get(ops.AdaptationPlan, plan_id)
+    if plan is None:
+        raise svc.NotFound(f'rencana {plan_id} tidak ditemukan')
+    if plan.status not in ('approved', 'pending_approval'):
+        raise HTTPException(409, f'rencana berstatus {plan.status}, tidak dapat ditandai usang')
+    plan.status = 'superseded'
+    plan.decided_by, plan.decided_at = actor, datetime.now(timezone.utc)
+    event = db.get(ops.SchemaEvent, plan.event_id)
+    svc.audit(db, actor, 'plan_superseded', event.obdf_id, 'adaptation_plan', str(plan.id),
+              note=body.note if body else None)
+    db.flush()
+    return _plan_out(db, plan)
+
+
 @router.post('/plans/{plan_id}/approve', response_model=PlanOut)
 def approve_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Depends(get_db),
                  actor: str = Depends(current_actor)):

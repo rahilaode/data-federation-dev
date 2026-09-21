@@ -62,6 +62,9 @@ class KnowledgeClient:
     def finish_execution(self, execution_id: int, **body) -> dict:
         return self._request('POST', f'/api/v1/executions/{execution_id}/finish', json=body)
 
+    def supersede(self, plan_id: int, note: str) -> dict:
+        return self._request('POST', f'/api/v1/plans/{plan_id}/supersede', json={'note': note})
+
     def sync(self, obdf_id: int) -> dict:
         return self._request('POST', f'/api/v1/obdf/{obdf_id}/sync')
 

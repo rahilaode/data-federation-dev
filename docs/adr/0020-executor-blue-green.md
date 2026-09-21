@@ -33,7 +33,11 @@ berhenti bila hasilnya ternyata salah, dan harus dapat dikembalikan bila verifik
    diuraikan per langkah dan eksekusi yang terhenti tetap terlihat.
 8. **Rencana kedaluwarsa ditolak** sebelum apa pun disentuh: versi dasar rencana harus sama
    dengan versi aktif.
-9. **Rahasia tidak diambil dari Knowledge.** Alamat target berasal dari Knowledge, sedangkan
+9. **Rencana yang versi dasarnya usang ditandai `superseded`**, bukan dibiarkan `approved`,
+   agar tidak dicoba ulang setiap siklus (temuan evaluasi F6).
+10. **Jeda dan lanjut** (`/control/pause`, `/control/resume`) menghentikan pengambilan rencana
+    baru tanpa memutus eksekusi yang sedang berjalan; dipakai prosedur eksperimen.
+11. **Rahasia tidak diambil dari Knowledge.** Alamat target berasal dari Knowledge, sedangkan
    kata sandi ManagementRealm dan token agen berasal dari Docker secret milik Executor sendiri,
    karena Knowledge tidak pernah mengembalikan rahasia lewat API (ADR-0008).
 

@@ -129,3 +129,26 @@ def test_worker_retries_build_until_knowledge_is_available():
     henti.cancel()
     assert knowledge.sisa == 0 and worker.stats.state == 'stopped'
     assert worker.stats.obdf_id == 1                   # penyiapan akhirnya berhasil
+
+
+def test_pause_and_resume_endpoints():
+    from fastapi.testclient import TestClient
+    from ascam_executor.app import create_app
+    worker, _, _ = pekerja([], [])
+    with TestClient(create_app(Settings(), worker=worker, run_worker=False)) as client:
+        assert client.post('/control/pause').json() == {'paused': True}
+        assert client.get('/health').json()['paused'] is True
+        assert client.post('/control/resume').json() == {'paused': False}
+        assert client.get('/health').json()['paused'] is False
+
+
+def test_paused_worker_does_not_take_plans():
+    import threading
+    worker, knowledge, executor = pekerja([fx.plan_drop()], [{'status': 'succeeded', 'timings': {}}])
+    worker.settings.poll_seconds = 0
+    worker.pause()
+    henti = threading.Timer(0.4, worker.stop)
+    henti.start()
+    worker.run()
+    henti.cancel()
+    assert executor.dijalankan == []                   # tidak ada rencana yang diambil saat dijeda

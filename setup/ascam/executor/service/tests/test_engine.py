@@ -109,6 +109,7 @@ def test_stale_plan_is_refused_before_any_change():
     with pytest.raises(ExecutionError, match='versi spesifikasi lain'):
         executor.execute(fx.plan_drop(base=999))
     assert knowledge.steps == [] and admin.deployed == [] and agent.files['r2rml'] == fx.MAPPING
+    assert knowledge.superseded[0] == 1                 # tidak akan dicoba ulang setiap siklus
 
 
 def test_write_conflict_is_handled_as_failure():

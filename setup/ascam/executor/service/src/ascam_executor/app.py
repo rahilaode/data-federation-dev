@@ -40,6 +40,21 @@ def create_app(settings: Settings | None = None, worker: ExecutorWorker | None =
     app = FastAPI(title='ASCAM Executor', version='0.1.0', lifespan=lifespan)
     app.state.worker = worker
 
+    @app.post('/control/pause', tags=['kendali'])
+    def pause():
+        """Menjeda pengambilan rencana baru; eksekusi yang sedang berjalan tetap diselesaikan.
+
+        Dipakai prosedur eksperimen agar perubahan skema pada langkah pemulihan antar-run tidak
+        ikut dieksekusi. Port layanan hanya terikat ke 127.0.0.1.
+        """
+        worker.pause()
+        return {'paused': True}
+
+    @app.post('/control/resume', tags=['kendali'])
+    def resume():
+        worker.resume()
+        return {'paused': False}
+
     @app.get('/health', tags=['kesehatan'])
     def health():
         stats = worker.stats.snapshot()

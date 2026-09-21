@@ -127,3 +127,13 @@ def test_deterministic_uuid_and_unsupported_operation(api, obdf):
     assert any('tidak didukung' in r for r in plan['reasons'])
     assert kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
                  table='penerima_manfaat')['duplicate'] is True
+
+
+def test_plan_can_be_superseded(api, obdf):
+    plan_id = kirim(api, obdf, operation='drop', source='kemensos', schema='public',
+                    table='penerima_manfaat', column='status_ekonomi')['plan']['id']
+    hasil = api.post(f'/api/v1/plans/{plan_id}/supersede', json={'note': 'versi dasar usang'}).json()
+    assert hasil['status'] == 'superseded'
+    assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json() == []
+    assert api.post(f'/api/v1/plans/{plan_id}/supersede').status_code == 409
+    assert 'plan_superseded' in [a['action'] for a in api.get(f'/api/v1/obdf/{obdf}/audit').json()]

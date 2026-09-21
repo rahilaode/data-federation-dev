@@ -101,6 +101,10 @@ class FakeKnowledge:
         self.finished = body
         return {'id': execution_id, **body}
 
+    def supersede(self, plan_id, note):
+        self.superseded = (plan_id, note)
+        return {}
+
     def sync(self, obdf_id):
         self.synced += 1
         return {'changed': True, 'spec_version_id': 8, 'version_no': 4}

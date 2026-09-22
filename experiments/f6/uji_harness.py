@@ -1,0 +1,87 @@
+"""
+Swa-uji harness evaluasi, tanpa Docker maupun OBDF.
+
+Memastikan seluruh modul benar-benar dapat DIMUAT (bukan sekadar lolos kompilasi), setiap
+skenario memiliki atribut lengkap, dan analisis berjalan ujung ke ujung atas hasil tiruan yang
+dibentuk memakai fungsi penilaian yang sama dengan evaluasi sungguhan.
+
+Jalankan dari root repository:  python3 experiments/f6/uji_harness.py
+"""
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+F6 = Path(__file__).resolve().parent
+ROOT = F6.parents[1]
+sys.path.insert(0, str(F6))
+
+
+def main() -> int:
+    import analisis  # noqa: F401
+    import evaluate  # noqa: F401
+    import kueri
+    import skenario
+
+    for kode, sk in skenario.SKENARIO.items():
+        for atribut in ('sumber', 'tabel', 'kolom', 'pola', 'keputusan', 'terapkan', 'pulihkan'):
+            assert getattr(sk, atribut), f'{kode}: atribut {atribut} kosong'
+        assert kode in kueri.Q and len(kueri.Q[kode]) >= 3, f'{kode}: himpunan kueri kurang'
+        jenis = {j for j, _ in kueri.Q[kode].values()}
+        assert {'terdampak', 'tetangga', 'kontrol'} <= jenis, f'{kode}: jenis kueri tidak lengkap'
+    print(f'modul termuat; {len(skenario.SKENARIO)} skenario lengkap dengan Q_k')
+
+    konfigurasi = evaluate.periksa_konfigurasi_debezium()
+    assert all(v['hanya_ddl_event_log'] for v in konfigurasi.values()), konfigurasi
+    print('konfigurasi Debezium hanya memantau ddl_event_log')
+
+    def ok(n, isi='x'):
+        return {'status': 200, 'ok': True, 'galat': None, 'n': n,
+                'hasil': [f'{isi}{i}' for i in range(n)], 'durasi_ms': 1}
+
+    def gagal(pesan):
+        return {'status': 500, 'ok': False, 'galat': pesan, 'n': None, 'hasil': None, 'durasi_ms': 1}
+
+    sementara = Path(tempfile.mkdtemp(dir=ROOT / 'results'))
+    try:
+        for kode in skenario.SKENARIO:
+            sebelum = {q: ok(0 if q == 'email' else 4) for q in kueri.Q[kode]}
+            rusak = dict(sebelum)
+            terdampak = next(q for q, (j, _) in kueri.Q[kode].items() if j == 'terdampak')
+            if kode != 'a001':
+                rusak[terdampak] = gagal('kolom tidak ada')
+            (sementara / f'baseline-{kode}-01.json').write_text(json.dumps({
+                'mode': 'baseline', 'skenario': kode, 'judul': kode, 'run': 1,
+                'jawaban_sebelum': sebelum, 'jawaban_sesudah': rusak,
+                'penilaian': kueri.nilai(kode, sebelum, rusak), 'artefak_tidak_berubah': True}))
+            sesudah = dict(sebelum)
+            if kode == 'a001':
+                sesudah['email'] = ok(3, 'e')
+            if kode == 'a002':
+                sesudah['tipe_program'] = ok(0)
+            penilaian = kueri.nilai(kode, sebelum, sesudah)
+            harapan = kueri.sesuai_harapan(kode, sesudah, penilaian)
+            assert all(harapan.values()), (kode, harapan)
+            (sementara / f'run-{kode}-01.json').write_text(json.dumps({
+                'mode': 'perlakuan', 'skenario': kode, 'judul': kode, 'run': 1, 'hasil': 'succeeded',
+                'keputusan': skenario.SKENARIO[kode].keputusan, 'pola': skenario.SKENARIO[kode].pola,
+                'sesuai_harapan': True, 'n_manual': 0, 'keputusan_ms': 0, 'deteksi_ms': 1,
+                'dt_adapt_ms': 1, 'dt_adapt_mesin_ms': 1, 'langkah': {'validate': 1},
+                'jawaban_sebelum': sebelum, 'jawaban_sesudah': sesudah, 'penilaian': penilaian,
+                'harapan': harapan}))
+        hasil = subprocess.run([sys.executable, str(F6 / 'analisis.py'), str(sementara)],
+                               capture_output=True, text=True)
+        assert hasil.returncode == 0, hasil.stderr
+        for bagian in ('## 1.', '## 2.', '## 4.', '## 5.', '## 6.', '## 7.'):
+            assert bagian in hasil.stdout, f'bagian {bagian} tidak muncul'
+        print('analisis berjalan ujung ke ujung atas hasil tiruan; harapan teoretis terpenuhi')
+    finally:
+        shutil.rmtree(sementara, ignore_errors=True)
+    print('\nSwa-uji harness LOLOS.')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

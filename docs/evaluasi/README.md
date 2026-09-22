@@ -11,40 +11,61 @@ validitas hasilnya. Semua alat berada di `experiments/f6/`.
 | A002 | `DROP COLUMN tipe_program` pada `program_bansos` | PostgreSQL | P-002 | otomatis | berubah (predikat `tipeProgram` hilang) |
 | A003 | `RENAME COLUMN tanggal_lahir` pada `master_penduduk` | MySQL | P-003 | otomatis | identik (diserap `NAMEINSOURCE`) |
 
+## Mode evaluasi
+
+Kedua mode memakai himpunan kueri Q_k dan prosedur pemulihan yang sama, sehingga perbedaan
+perilaku sepenuhnya dapat diatributkan pada ASCAM (proposal §3.10.2, hlm. 104).
+
+| Mode | Isi | Rujukan |
+|---|---|---|
+| Baseline B001–B003 | Executor dijeda sepanjang run; DDL diterapkan tanpa adaptasi; Q_k dijalankan sebelum dan sesudah; dicatat status HTTP, pesan galat, dan hasil | §3.10.1, hlm. 101–103 |
+| Perlakuan A001–A003 | Siklus MAPE-K berjalan; A001 disetujui evaluator (ADR-0021); dicatat keputusan D11, Δt_adapt, dekomposisi langkah, PreservationRatio; seluruh pesan Kafka diaudit | §3.10.2–3.11 |
+
+## Himpunan kueri Q_k
+
+Setiap skenario memiliki kueri yang menyentuh kolom terdampak, kueri tetangga pada tabel yang
+sama, dan kueri kontrol pada tabel lain (termasuk satu kueri lintas sumber). Definisinya ada di
+`experiments/f6/kueri.py`.
+
+| Skenario | Terdampak | Tetangga | Kontrol |
+|---|---|---|---|
+| A001 | `bansos:email` (setelah tiga baris diisi) | nama dan status ekonomi penerima | tautan penerima ke penduduk; jumlah per kelas; status transaksi |
+| A002 | `bansos:tipeProgram` | nama dan nominal program | transaksi ke program; jumlah per kelas; status transaksi |
+| A003 | `bansos:tanggalLahir` | nama dan pekerjaan penduduk | penerima ke nama penduduk (lintas sumber); jumlah per kelas; status transaksi |
+
 ## Prosedur satu run
 
-1. Executor dijeda (`POST /control/pause`) dan ditunggu sampai tidak ada eksekusi berjalan.
-2. Kondisi sumber dipulihkan (kolom dikembalikan, data kolom yang dihapus disalin kembali).
-3. Event yang timbul dari pemulihan ditunggu sampai tiba, lalu rencana yang terbentuk darinya
-   ditandai `superseded` (lihat ancaman validitas 1).
-4. OBDF direset (`experiments/reset_obdf.py`): artefak OBDA dari git, VDB kembali ke versi 1,
-   Ontop dimuat ulang, Knowledge disinkronkan.
-5. Cuplikan jawaban dasar diambil dari tiga kueri tetap, diulang bila endpoint belum menjawab.
-6. Executor dilanjutkan, lalu perubahan skema skenario diterapkan pada sumber (t₀).
-7. Dicatat: waktu event diterima Knowledge, keputusan D11, dan eksekusi hingga selesai. Bila
-   rencana menunggu persetujuan (A001), evaluator menyetujuinya lewat API yang sama dengan
-   konsol, atas nama `evaluator`; satu persetujuan dihitung sebagai N_manual = 1.
-8. Cuplikan jawaban sesudah diambil dan dibandingkan dengan cuplikan dasar.
-
-Pemeriksaan awal (`experiments/f6/preflight.py`) dijalankan sebelum run pertama: seluruh
-kontainer, konektor Debezium, layanan ASCAM, dan satu uji rantai DDL nyata.
+1. Executor dijeda dan ditunggu sampai tidak ada eksekusi berjalan.
+2. Kondisi sumber dipulihkan; event yang timbul dari pemulihan ditunggu, lalu rencananya
+   ditandai `superseded` (ancaman validitas 1).
+3. OBDF direset (`experiments/reset_obdf.py`).
+4. Cuplikan dasar Q_k diambil (diulang bila endpoint belum menjawab).
+5. **Baseline:** DDL diterapkan, jeda 15 detik, data diisi bila perlu, Q_k dijalankan sekali.
+   **Perlakuan:** Executor dilanjutkan, DDL diterapkan (t_start), event dan rencana diamati,
+   rencana HITL disetujui evaluator, eksekusi ditunggu sampai selesai, data diisi bila perlu,
+   Q_k dijalankan.
 
 ## Metrik
 
-| Metrik | Definisi |
-|---|---|
-| Keberhasilan | Eksekusi berakhir `succeeded` |
-| Ketepatan D11 | Keputusan dan pola sama dengan harapan skenario |
-| Kesetaraan jawaban | Cuplikan sesudah sama/berbeda sesuai harapan; run yang salah satu cuplikannya gagal diambil dicatat **tidak dapat dibandingkan**, bukan berbeda |
-| Deteksi | t₀ sampai event diterima Knowledge (monitor, Debezium, Kafka, Orchestrator) |
-| Kerja adaptasi | Jumlah durasi langkah `deploy_vdb`, `validate`, `switch`, `reload_ontop`, `verify`, `sync` |
-| Jeda penjadwalan | Ujung ke ujung dikurangi deteksi dan kerja adaptasi; terutama interval polling Executor (5 detik) |
-| Ujung ke ujung | t₀ sampai eksekusi selesai |
-| Waktu mesin | Ujung ke ujung dikurangi jeda keputusan manusia (relevan untuk skenario HITL) |
-| N_manual | Jumlah keputusan administrator per siklus; penyuntingan artefak manual tetap nol |
+| Metrik | Definisi | Rujukan |
+|---|---|---|
+| N_log, N_prod | Pesan Kafka yang membawa baris `ddl_event_log` dan baris tabel produksi, sejak run perlakuan pertama sampai terakhir. Nilai baris produksi tidak pernah disimpan di berkas hasil | pers. 3.13–3.14 |
+| C_safe | N_prod = 0 ∧ N_log > 0, ditambah pemeriksaan `table.include.list` | pers. 3.15 |
+| Δt_adapt | t_end − t_start; t_start saat DDL dieksekusi, t_end saat verifikasi SPARQL pasca-muat-ulang selesai (artefak termodifikasi dan siap dipakai) | pers. 3.16 |
+| Δt_adapt mesin | Δt_adapt dikurangi jeda keputusan administrator (A001) | ADR-0021 |
+| N_manual | Dipisah menjadi keputusan (A001 = 1) dan perbaikan artefak (selalu 0) | pers. 3.17–3.18, direvisi |
+| ResultPreserved | 1 bila kedua eksekusi berhasil dan answer set identik (A003) | pers. 3.19 |
+| ExecutionPreserved | 1 bila respons Ontop sesudah perubahan bukan galat (A001, A002) | pers. 3.20 |
+| PreservationRatio | Rata-rata P_k(q) atas Q_k × 100 % | pers. 3.21 |
 
-Kerja adaptasi adalah sifat sistem, sedangkan jeda penjadwalan adalah parameter konfigurasi;
-keduanya dilaporkan terpisah.
+## Menjalankan
+
+```bash
+python3 experiments/f6/uji_harness.py                         # swa-uji tanpa Docker
+python3 experiments/f6/evaluate.py --mode keduanya --ulangan 1 --ulangan-baseline 1   # uji coba
+python3 experiments/f6/evaluate.py --mode keduanya --ulangan 20 --ulangan-baseline 5  # final
+python3 experiments/f6/analisis.py > results/analisis-final.md
+```
 
 ## Ancaman terhadap validitas
 

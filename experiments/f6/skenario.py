@@ -4,7 +4,7 @@ mengembalikannya. Setiap skenario harus dapat dijalankan berulang kali dengan ha
 sehingga data pada kolom yang dihapus disalin lebih dahulu dan dikembalikan setelah run.
 """
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 PG = ['docker', 'exec', 'datasources-pgsql', 'psql', '-U', 'postgres', '-d', 'kemensos', '-tAc']
@@ -45,12 +45,18 @@ class Skenario:
     siapkan: Callable[[], str] | None = None
     predikat: str | None = None         # predikat yang diharapkan berubah
     catatan: str = ''
-    kueri: list[str] = field(default_factory=list)
+    # Mengisi data pada kolom baru agar "kueri baru mengembalikan hasil" dapat diuji (A001)
+    isi_data: Callable[[], str] | None = None
 
 
 # ── A001: kolom baru pada sumber PostgreSQL ────────────────────────────────────
 def a001_terapkan() -> str:
     return pg('ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)')
+
+
+def a001_isi_data() -> str:
+    return pg("UPDATE public.penerima_manfaat SET email = 'penerima' || penerima_id || '@contoh.id' "
+              "WHERE penerima_id <= 3")
 
 
 def a001_pulihkan() -> str:
@@ -93,30 +99,24 @@ def a003_pulihkan() -> str:
     return 'bersih'
 
 
-KUERI_REGRESI = [
-    'SELECT ?p (COUNT(*) AS ?n) WHERE { ?s ?p ?o } GROUP BY ?p ORDER BY ?p',
-    'SELECT (COUNT(*) AS ?n) WHERE { ?s a <http://bansos.go.id/ontology/PenerimaBansos> }',
-    'SELECT ?nik WHERE { ?s <http://bansos.go.id/ontology/nik> ?nik } ORDER BY ?nik LIMIT 20',
-]
 
 SKENARIO = {
     'a001': Skenario(kode='a001', judul='ADD COLUMN email pada penerima_manfaat', pola='P-001',
-                     keputusan='hitl',            # ADR-0021: ADD memerlukan persetujuan administrator sumber='kemensos', tabel='penerima_manfaat', kolom='email',
+                     # ADR-0021: ADD memerlukan persetujuan administrator
+                     keputusan='hitl', sumber='kemensos', tabel='penerima_manfaat', kolom='email',
                      terapkan=a001_terapkan, pulihkan=a001_pulihkan,
                      predikat='http://bansos.go.id/ontology/email',
-                     catatan='kolom baru belum berisi data saat verifikasi',
-                     kueri=KUERI_REGRESI),
+                     catatan='kolom baru diisi 3 baris setelah perubahan',
+                     isi_data=a001_isi_data),
     'a002': Skenario(kode='a002', judul='DROP COLUMN tipe_program pada program_bansos',
                      pola='P-002', keputusan='auto', sumber='kemensos', tabel='program_bansos',
                      kolom='tipe_program', siapkan=a002_siapkan, terapkan=a002_terapkan,
                      pulihkan=a002_pulihkan,
                      predikat='http://bansos.go.id/ontology/tipeProgram',
-                     catatan='predikat tipeProgram harus hilang dari graf',
-                     kueri=KUERI_REGRESI),
+                     catatan='predikat tipeProgram harus hilang dari graf'),
     'a003': Skenario(kode='a003', judul='RENAME COLUMN tanggal_lahir pada master_penduduk',
                      pola='P-003', keputusan='auto', sumber='dukcapil', tabel='master_penduduk',
                      kolom='tanggal_lahir', terapkan=a003_terapkan, pulihkan=a003_pulihkan,
                      predikat='http://bansos.go.id/ontology/tanggalLahir',
-                     catatan='jawaban harus identik dengan sebelum adaptasi',
-                     kueri=KUERI_REGRESI),
+                     catatan='jawaban harus identik dengan sebelum adaptasi'),
 }

@@ -44,6 +44,10 @@ if [ "$VDB_OK" -ne 1 ]; then
 fi
 
 # vkg-system
+# Sumber data dibangun ulang dari init.sql, sehingga artefak OBDA hasil adaptasi sebelumnya
+# (blok terkelola ASCAM pada mapping dan ontologi) harus ikut dikembalikan ke isi di git;
+# tanpa itu mapping merujuk kolom yang sudah tidak ada dan Ontop gagal.
+git checkout -- ./setup/vkg-system/config/mapping.ttl ./setup/vkg-system/config/ontology_file.ttl
 docker compose -f ./setup/vkg-system/docker-compose.yaml down -v
 docker compose -f ./setup/vkg-system/docker-compose.yaml up --build --detach
 

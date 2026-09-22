@@ -9,7 +9,10 @@ sehingga Ontop membaca skema lama sementara mapping sudah merujuk kolom baru.
 Prasyarat: satu adaptasi ADD sudah berhasil (VDB versi 2 berstatus ANY). Skrip ini MERESTART
 kontainer data-federation-teiid, lalu membandingkan keadaan sebelum dan sesudahnya.
 
-Jalankan dari root repository:  python3 experiments/f5/uji_ketahanan.py [tabel] [kolom]
+Jalankan dari root repository:
+  python3 experiments/f5/uji_ketahanan.py [tabel] [kolom]               # docker restart
+  python3 experiments/f5/uji_ketahanan.py --buat-ulang [tabel] [kolom]  # kontainer dibuat ulang,
+                                                                        # volume dipertahankan
 """
 import json
 import subprocess
@@ -20,6 +23,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+BUAT_ULANG = '--buat-ulang' in sys.argv
+sys.argv = [a for a in sys.argv if not a.startswith('--')]         # sisanya: [tabel] [kolom]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import periksa_vdb as p                                               # noqa: E402
 
@@ -63,9 +69,16 @@ def main() -> int:
         print('\n  Hanya ada satu versi VDB. Jalankan adaptasi ADD sampai berhasil lebih dulu.')
         return 1
 
-    print('\n===== 2) restart kontainer Teiid =====')
-    subprocess.run(['docker', 'restart', 'data-federation-teiid'], check=True,
-                   capture_output=True)
+    if BUAT_ULANG:
+        # Kasus yang lebih berat: kontainer baru dari image, volume konfigurasi dan data tetap
+        print('\n===== 2) kontainer Teiid dibuat ulang (volume dipertahankan) =====')
+        subprocess.run(['docker', 'compose', '-f', 'setup/data-federation/docker-compose.yaml',
+                        'up', '-d', '--force-recreate'], cwd=ROOT, check=True,
+                       capture_output=True)
+    else:
+        print('\n===== 2) restart kontainer Teiid =====')
+        subprocess.run(['docker', 'restart', 'data-federation-teiid'], check=True,
+                       capture_output=True)
     mulai = time.time()
     while time.time() - mulai < 240:
         try:
@@ -91,9 +104,9 @@ def main() -> int:
     sama = sebelum['odbc_tanpa_versi'] == sesudah['odbc_tanpa_versi']
     print(f'  koneksi tanpa versi melihat skema sama: {"ya" if sama else "TIDAK"}')
     if berubah or hilang or not sama:
-        print('  => hipotesis TERBUKTI: adaptasi VDB tidak tahan restart Teiid.')
+        print(f"  => adaptasi VDB TIDAK bertahan {'setelah kontainer dibuat ulang' if BUAT_ULANG else 'setelah restart'}.")
     else:
-        print('  => hipotesis TIDAK terbukti: adaptasi VDB bertahan setelah restart.')
+        print(f"  => adaptasi VDB bertahan {'setelah kontainer dibuat ulang' if BUAT_ULANG else 'setelah restart'}.")
     return 0
 
 

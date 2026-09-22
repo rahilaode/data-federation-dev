@@ -62,3 +62,25 @@ setelah kegagalan, dan mencatat pencacahnya.
   versi lama dicatat sebagai pekerjaan lanjutan.
 - Verifikasi berbasis sidik jari graf bersifat menyeluruh tetapi kasar; kueri regresi khusus per
   skenario dapat ditambahkan pada fase evaluasi.
+
+## Ketahanan terhadap restart Teiid (F5)
+
+Setelah adaptasi ADD pertama lewat konsol, VDB hasil adaptasi tampak "hilang". Penelusuran
+(`experiments/f5/periksa_vdb.py`, garis waktu kontainer dan cadangan agen) menunjukkan bahwa
+adaptasi sebenarnya berhasil, lalu seluruh lingkungan dibangun ulang **bersama volumenya**,
+sehingga Teiid kembali hanya berisi versi 1 dari berkas di disk. Dua hal ditetapkan:
+
+1. **Konten deployment runtime disimpan di volume.** WildFly menyimpan isi deployment yang
+   diunggah lewat management API di `standalone/data`, sedangkan hanya `standalone/configuration`
+   yang semula memakai volume. Volume `teiid-standalone-data` ditambahkan agar VDB hasil
+   adaptasi tidak hilang ketika kontainer dibuat ulang tanpa menghapus volume.
+2. **Connection type bertahan setelah restart.** Dokumentasi Teiid menyebut connection type
+   sebagai properti yang dapat diubah lewat AdminAPI (teiid-documents.pdf, *VDB Versioning*,
+   hlm. 62-63) tetapi tidak menyebut apakah perubahannya bertahan. Hipotesis bahwa perubahan itu
+   hilang saat restart diuji (`experiments/f5/uji_ketahanan.py`) dan **tidak terbukti**: setelah
+   `docker restart`, versi 1 tetap `NONE`, versi 2 tetap `ANY`, dan koneksi tanpa versi tetap
+   melihat kolom hasil adaptasi.
+
+Berkas `government-vdb.xml` di disk sengaja tidak diubah Executor: versi hasil adaptasi hidup di
+Teiid (dan isinya tersimpan di Knowledge per versi spesifikasi). Membangun ulang lab dengan
+`run.sh` mengembalikan seluruh OBDF, termasuk artefak mapping dan ontologi, ke kondisi dasar.

@@ -76,3 +76,24 @@ teks hasil lama saat dinaikkan dan diturunkan.
 - cryptography — Fernet dan MultiFernet: https://cryptography.io/en/latest/fernet/
 - W3C (2013). SPARQL 1.1 Protocol. https://www.w3.org/TR/sparql11-protocol/
 - W3C (2012). OWL 2 Web Ontology Language Profiles (Second Edition), §3.2.3. https://www.w3.org/TR/owl2-profiles/
+
+## Revisi F6: commit sebelum respons
+
+**Temuan.** Transaksi semula di-commit di penutup dependensi `get_db`. Pada FastAPI modern,
+penutup ini berjalan *setelah* respons diterima klien (terukur: respons 56 ms, commit 556 ms
+pada uji dengan commit tiruan yang lambat). Executor memanggil `/sync` lalu segera `/finish`
+dengan `candidate_spec_version_id` versi yang baru dibuat; bila `/finish` mendahului commit,
+kunci asingnya dilanggar dan Knowledge menjawab 409. Pada evaluasi F6, 5 dari 60 run
+perlakuan tertinggal berstatus `running` karena hal ini, padahal adaptasinya sendiri selesai.
+Cacat yang sama berlaku bagi setiap klien yang langsung memakai hasil sebuah penulisan,
+termasuk Orchestrator yang meng-commit offset Kafka setelah event "diterima".
+
+**Keputusan.** Seluruh router memakai `TransactionalRoute`, yang meng-commit setelah handler
+selesai tetapi sebelum respons dikembalikan, dan melakukan rollback bila handler atau commit
+gagal; galat integritas saat commit tetap dijawab 409. `get_db` hanya menutup sesi, dengan
+commit cadangan disertai peringatan bila sebuah rute tidak memakai kelas tersebut.
+
+**Bukti.** Uji `test_transaksi.py`: urutan commit terhadap `http.response.start` (gagal pada
+kode lama dengan urutan `['respons', 'commit']`), permintaan gagal tidak di-commit, galat
+integritas saat commit dijawab 409, dan setiap rute aplikasi memakai `TransactionalRoute`
+(termasuk router yang disimpan sebagai `_IncludedRouter` pada FastAPI baru). 125 uji lolos.

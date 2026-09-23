@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request
+from ..transaction import TransactionalRoute
 from sqlalchemy.orm import Session
 
 from ... import registry_service as svc
@@ -6,7 +7,7 @@ from ...security.auth import current_actor
 from ..deps import get_db
 from ..schemas import ApplySummary, ConfigDocument
 
-router = APIRouter(prefix='/api/v1', tags=['konfigurasi'])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['konfigurasi'])
 
 
 @router.post('/config/apply', response_model=ApplySummary)

@@ -84,3 +84,21 @@ sehingga Teiid kembali hanya berisi versi 1 dari berkas di disk. Dua hal ditetap
 Berkas `government-vdb.xml` di disk sengaja tidak diubah Executor: versi hasil adaptasi hidup di
 Teiid (dan isinya tersimpan di Knowledge per versi spesifikasi). Membangun ulang lab dengan
 `run.sh` mengembalikan seluruh OBDF, termasuk artefak mapping dan ontologi, ke kondisi dasar.
+
+## Revisi F6: eksekusi selalu ditutup
+
+**Temuan.** `execute()` hanya menangkap `ExecutionError`. Galat lain sesudah `start_execution`,
+misalnya HTTP 409 dari `/finish` (lihat ADR-0008) atau `MappingError` saat menyiapkan artefak,
+lolos ke worker dan eksekusinya tertinggal `running` selamanya. Karena harness menunggu sampai
+tidak ada eksekusi berjalan, setiap run sesudahnya tertunda 180 detik.
+
+**Keputusan.** Seluruh wilayah sejak `start_execution` dilindungi: galat tak terduga menutup
+eksekusi sebagai `failed` dengan pesan galat dan langkah terakhir yang selesai (`after_step`).
+Pencatatan akhir (`_finish`) diulang hingga tiga kali untuk galat sementara (galat transport,
+409, 5xx), tetapi tidak untuk galat klien lain. Pemulihan otomatis tidak dilakukan untuk galat
+tak terduga, karena keadaan sistem pada titik itu tidak diketahui; `after_step` memberi tahu
+administrator sejauh mana adaptasi berjalan.
+
+**Bukti.** Empat uji baru: `/finish` diulang setelah 409 sementara; galat 422 tidak diulang;
+galat sesudah `switch` menutup eksekusi dengan `after_step = switch`; galat saat menyiapkan
+artefak menutup eksekusi dengan `after_step = None`. 52 uji lolos.

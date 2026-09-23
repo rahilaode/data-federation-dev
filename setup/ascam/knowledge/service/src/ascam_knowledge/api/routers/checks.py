@@ -1,5 +1,6 @@
 """Uji koneksi target dan status terakhir (dasbor UI)."""
 from fastapi import APIRouter, Depends, Request
+from ..transaction import TransactionalRoute
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,7 +11,7 @@ from ...security.auth import current_actor
 from ..deps import get_db
 from ..schemas import CheckOut, TargetOut, TargetStatusOut
 
-router = APIRouter(prefix='/api/v1', tags=['uji koneksi'], dependencies=[Depends(current_actor)])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['uji koneksi'], dependencies=[Depends(current_actor)])
 
 
 def _hooks(request: Request) -> type[Hooks]:

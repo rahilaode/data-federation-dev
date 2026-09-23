@@ -8,6 +8,7 @@ Executor berhenti di tengah jalan: eksekusi yang tidak pernah selesai tetap terl
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from ..transaction import TransactionalRoute
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,7 @@ from ...security.auth import current_actor
 from ..deps import get_db
 from ..schemas import (ExecutionOut, ExecutionStartIn, FinishIn, StepIn, StepOut, ValidationIn)
 
-router = APIRouter(prefix='/api/v1', tags=['eksekusi'], dependencies=[Depends(current_actor)])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['eksekusi'], dependencies=[Depends(current_actor)])
 STATUS_RENCANA = {'succeeded': 'executed', 'failed': 'failed', 'rolled_back': 'failed'}
 
 

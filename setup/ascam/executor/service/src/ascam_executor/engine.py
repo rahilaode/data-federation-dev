@@ -14,12 +14,21 @@ Urutan langkah:
 
 Setiap langkah dilaporkan ke Knowledge sehingga jejaknya tetap ada meski Executor berhenti.
 """
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
+
 from .artifacts import ontology, r2rml, vdb
+
+log = logging.getLogger('ascam.executor')
+# Galat sementara saat mencatat hasil eksekusi: jaringan, 5xx, dan 409 dari pembacaan yang
+# mendahului commit permintaan sebelumnya (temuan evaluasi F6).
+PERCOBAAN_FINISH = 3
+STATUS_SEMENTARA = {409, 500, 502, 503, 504}
 
 
 @dataclass
@@ -172,14 +181,17 @@ class Executor:
             raise ExecutionError('rencana disusun di atas versi spesifikasi lain',
                                  {'base': plan['base_spec_version_id'], 'aktif': versi_aktif['id']})
         execution = self.knowledge.start_execution(plan['id'])
-        artefak = self._siapkan_artefak(plan, versi_aktif)
-        konteks = Konteks(obdf_id=self.obdf_id, plan=plan, execution_id=execution['id'],
-                          vdb_name=versi_aktif['teiid_vdb_name'],
-                          versi_lama=str(versi_aktif['teiid_vdb_version']),
-                          versi_baru=artefak['vdb_version'],
-                          deployment=f"{versi_aktif['teiid_vdb_name']}-{artefak['vdb_version']}-vdb.xml")
-        mulai_total = time.perf_counter()
+        # Sejak eksekusi dimulai, setiap jalan keluar harus menutupnya: eksekusi yang tertinggal
+        # berstatus running tidak pernah selesai dan menahan siklus berikutnya (temuan F6).
+        konteks = None
         try:
+            artefak = self._siapkan_artefak(plan, versi_aktif)
+            konteks = Konteks(obdf_id=self.obdf_id, plan=plan, execution_id=execution['id'],
+                              vdb_name=versi_aktif['teiid_vdb_name'],
+                              versi_lama=str(versi_aktif['teiid_vdb_version']),
+                              versi_baru=artefak['vdb_version'],
+                              deployment=f"{versi_aktif['teiid_vdb_name']}-{artefak['vdb_version']}-vdb.xml")
+            mulai_total = time.perf_counter()
             self._deploy(konteks, artefak)
             self._tulis_dan_validasi(konteks, artefak)
             konteks.baseline = self.sparql.fingerprint()
@@ -190,10 +202,34 @@ class Executor:
                 return self._rollback(konteks, rincian, mulai_total)
             return self._selesai(konteks, mulai_total)
         except ExecutionError as exc:
-            self.knowledge.finish_execution(konteks.execution_id, status='failed',
-                                            timings=konteks.timings,
-                                            failure={'message': str(exc), **exc.detail})
+            self._finish(execution['id'], status='failed',
+                         timings=konteks.timings if konteks else {},
+                         failure={'message': str(exc), **exc.detail})
             raise
+        except Exception as exc:
+            tahap = next(reversed(konteks.timings), None) if konteks else None
+            try:
+                self._finish(execution['id'], status='failed',
+                             timings=konteks.timings if konteks else {},
+                             failure={'message': f'galat tak terduga: {type(exc).__name__}: {exc}'[:500],
+                                      'after_step': tahap})
+            except Exception:                       # noqa: BLE001 — galat asal lebih penting
+                log.exception('eksekusi %s tidak dapat ditutup', execution['id'])
+            raise
+
+    def _finish(self, execution_id: int, **body) -> dict:
+        """Mencatat akhir eksekusi, mengulang untuk galat sementara."""
+        for percobaan in range(1, PERCOBAAN_FINISH + 1):
+            try:
+                return self.knowledge.finish_execution(execution_id, **body)
+            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                sementara = (isinstance(exc, httpx.TransportError)
+                             or exc.response.status_code in STATUS_SEMENTARA)
+                if not sementara or percobaan == PERCOBAAN_FINISH:
+                    raise
+                log.warning('mencatat akhir eksekusi %s gagal (%s); mencoba lagi',
+                            execution_id, exc)
+                self.sleep(0.5 * percobaan)
 
     def _deploy(self, konteks: Konteks, artefak: dict) -> None:
         mulai = time.perf_counter()
@@ -278,7 +314,7 @@ class Executor:
         self._step(konteks, 6, 'rollback', 'succeeded' if muat.get('ok') else 'failed', mulai,
                    artefak=dipulihkan, alasan=rincian, reload_ok=muat.get('ok'))
         konteks.timings['total_ms'] = int((time.perf_counter() - mulai_total) * 1000)
-        return self.knowledge.finish_execution(konteks.execution_id, status='rolled_back',
+        return self._finish(konteks.execution_id, status='rolled_back',
                                                timings=konteks.timings,
                                                failure={'message': 'verifikasi gagal', **rincian})
 
@@ -294,7 +330,7 @@ class Executor:
                    spec_version_id=hasil_sync.get('spec_version_id'),
                    version_no=hasil_sync.get('version_no'))
         konteks.timings['total_ms'] = int((time.perf_counter() - mulai_total) * 1000)
-        return self.knowledge.finish_execution(
+        return self._finish(
             konteks.execution_id, status='succeeded', timings=konteks.timings,
             candidate_spec_version_id=hasil_sync.get('spec_version_id'))
 

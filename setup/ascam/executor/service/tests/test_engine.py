@@ -126,3 +126,69 @@ def test_write_conflict_is_handled_as_failure():
     assert agent.files['r2rml'] == fx.MAPPING            # isi tidak berubah
     assert admin.undeployed == ['government-2-vdb.xml']
     assert knowledge.finished['status'] == 'failed'
+
+
+# ── regresi evaluasi F6: eksekusi tidak boleh tertinggal berstatus running ─────────
+import httpx  # noqa: E402
+
+
+def _galat_http(status: int) -> httpx.HTTPStatusError:
+    permintaan = httpx.Request('POST', 'http://knowledge/api/v1/executions/99/finish')
+    return httpx.HTTPStatusError(f'{status}', request=permintaan,
+                                 response=httpx.Response(status, request=permintaan))
+
+
+class KnowledgeKonflikSekali(fx.FakeKnowledge):
+    """/finish menolak sekali dengan 409, seperti saat versi hasil sync belum ter-commit."""
+    def __init__(self):
+        super().__init__()
+        self.percobaan_finish = 0
+
+    def finish_execution(self, execution_id, **body):
+        self.percobaan_finish += 1
+        if self.percobaan_finish == 1:
+            raise _galat_http(409)
+        return super().finish_execution(execution_id, **body)
+
+
+def test_finish_is_retried_after_a_transient_conflict():
+    executor, knowledge, _, _ = buat(knowledge=KnowledgeKonflikSekali())
+    hasil = executor.execute(fx.plan_drop())
+    assert knowledge.percobaan_finish == 2
+    assert hasil['status'] == 'succeeded' and knowledge.finished['status'] == 'succeeded'
+
+
+def test_finish_is_not_retried_for_a_client_error():
+    class KnowledgeTolak(fx.FakeKnowledge):
+        def finish_execution(self, execution_id, **body):
+            raise _galat_http(422)
+    executor, _, _, _ = buat(knowledge=KnowledgeTolak())
+    with pytest.raises(httpx.HTTPStatusError):
+        executor.execute(fx.plan_drop())
+
+
+def test_unexpected_error_after_switch_closes_the_execution_as_failed():
+    agent = fx.FakeAgent()
+
+    def reload_rusak():
+        raise RuntimeError('agen tidak menjawab')
+    agent.reload = reload_rusak
+    executor, knowledge, _, _ = buat(agent=agent)
+    with pytest.raises(RuntimeError):
+        executor.execute(fx.plan_drop())
+    assert knowledge.finished['status'] == 'failed'
+    assert knowledge.finished['failure']['after_step'] == 'switch'
+    assert 'RuntimeError' in knowledge.finished['failure']['message']
+
+
+def test_error_while_preparing_artifacts_closes_the_execution():
+    """Regresi rencana 2: MappingError sebelum langkah pertama meninggalkan eksekusi running."""
+    executor, knowledge, _, _ = buat()
+
+    def siapkan_rusak(plan, versi_aktif):
+        raise ValueError('predikat tidak ditemukan di mapping')
+    executor._siapkan_artefak = siapkan_rusak
+    with pytest.raises(ValueError):
+        executor.execute(fx.plan_drop())
+    assert knowledge.finished['status'] == 'failed'
+    assert knowledge.finished['failure']['after_step'] is None

@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from ..transaction import TransactionalRoute
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,7 @@ from ...sync import sync_obdf
 from ..deps import get_db
 from ..schemas import ArtifactOut, SpecVersionOut, SyncResultOut, SyncRunOut, VersionDetailOut
 
-router = APIRouter(prefix='/api/v1', tags=['sync'], dependencies=[Depends(current_actor)])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['sync'], dependencies=[Depends(current_actor)])
 
 CONTENT_TABLES = {
     'teiid_model': spec.TeiidModel, 'teiid_table': spec.TeiidTable, 'teiid_column': spec.TeiidColumn,

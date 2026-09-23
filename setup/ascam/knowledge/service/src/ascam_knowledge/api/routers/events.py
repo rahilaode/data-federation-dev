@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from ..transaction import TransactionalRoute
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,7 @@ from ..deps import get_db
 from ..schemas import (DecisionIn, EventIn, EventOut, EventResultOut, NotificationOut,
                        PlanActionOut, PlanOut)
 
-router = APIRouter(prefix='/api/v1', tags=['event'], dependencies=[Depends(current_actor)])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['event'], dependencies=[Depends(current_actor)])
 
 
 def _plan_out(db: Session, plan: ops.AdaptationPlan) -> PlanOut:

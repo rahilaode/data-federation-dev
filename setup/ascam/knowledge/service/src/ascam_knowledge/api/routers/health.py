@@ -1,10 +1,11 @@
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fastapi import APIRouter, Request
+from ..transaction import TransactionalRoute
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-router = APIRouter(tags=['kesehatan'])
+router = APIRouter(route_class=TransactionalRoute, tags=['kesehatan'])
 
 
 @router.get('/health')

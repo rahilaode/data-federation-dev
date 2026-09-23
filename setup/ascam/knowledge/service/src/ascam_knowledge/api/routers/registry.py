@@ -1,5 +1,6 @@
 """Endpoint registry: OBDF, sumber, kredensial, target, kebijakan, audit."""
 from fastapi import APIRouter, Depends, Request, status
+from ..transaction import TransactionalRoute
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,7 @@ from ..schemas import (AuditOut, CredentialIn, CredentialOut, NamingPolicyIn, Na
                        TargetIn, TargetOut, TargetPatch, TypeMappingIn, TypeMappingOut)
 from ...security.auth import current_actor
 
-router = APIRouter(prefix='/api/v1', tags=['registry'], dependencies=[Depends(current_actor)])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['registry'], dependencies=[Depends(current_actor)])
 
 
 def _obdf_out(db: Session, obj) -> ObdfOut:

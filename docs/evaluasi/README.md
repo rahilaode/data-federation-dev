@@ -69,6 +69,16 @@ python3 experiments/f6/analisis.py > results/analisis-final.md
 
 ## Ancaman terhadap validitas
 
+**Temuan evaluasi 20260922T150904.** Enam dari 60 run perlakuan tidak tercatat selesai. Lima
+di antaranya (A002 run 9; A003 run 1, 3, 8, 17) disebabkan cacat implementasi: Knowledge
+meng-commit setelah respons, sehingga `/finish` kadang mendahului commit `/sync` dan ditolak
+409, lalu Executor meninggalkan eksekusi berstatus `running` (ADR-0008 dan ADR-0020, revisi
+F6). Adaptasi pada kelima run itu sebenarnya selesai sampai sinkronisasi. Satu run (A003 run
+12) tidak menghasilkan event karena monitor MySQL tidak mencatat penggantian nama pemulihan
+maupun perlakuan; penyebabnya diuji dengan `experiments/f6/uji_monitor_mysql.py`. Karena hasil
+tersebut diperoleh dengan kode yang cacat, evaluasi perlakuan dijalankan ulang setelah perbaikan.
+
+
 1. **Langkah pemulihan adalah perubahan skema.** Mengembalikan kolom di antara run dideteksi
    ASCAM sebagai perubahan baru dan, tanpa pengendalian, dieksekusi otomatis — termasuk
    memuat ulang Ontop tepat saat cuplikan dasar diambil. Pada evaluasi pertama hal ini membuat

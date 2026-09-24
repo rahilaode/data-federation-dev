@@ -78,6 +78,24 @@ F6). Adaptasi pada kelima run itu sebenarnya selesai sampai sinkronisasi. Satu r
 maupun perlakuan; penyebabnya diuji dengan `experiments/f6/uji_monitor_mysql.py`. Karena hasil
 tersebut diperoleh dengan kode yang cacat, evaluasi perlakuan dijalankan ulang setelah perbaikan.
 
+**Uji monitor MySQL (3 ulangan per jeda).** Kolom diganti nama lalu dikembalikan setelah jeda W:
+
+| Jeda W (s) | Perubahan tercatat | Siklus dengan keduanya hilang | Latensi deteksi, median (min–maks) s |
+|---:|---:|---:|---:|
+| 2 | 0/6 | 3/3 | – |
+| 5 | 4/6 | 1/3 | 4,8 (2,3–7,4) |
+| 12 | 6/6 | 0/3 | 5,1 (0,1–7,2) |
+| 25 | 6/6 | 0/3 | 4,8 (−0,1–9,7) |
+
+Perubahan yang dikembalikan sebelum pemindaian berikutnya (interval 10 s) tidak terlihat, dan
+selalu hilang berpasangan. Dalam operasi, skema akhir tetap sejalan dengan OBDF sehingga yang
+terlewat hanya inkonsistensi sesaat. Dalam evaluasi, OBDF direset di luar siklus MAPE-K,
+sehingga pemulihan yang tidak terdeteksi membuat cuplikan monitor dan OBDF tidak lagi sejalan.
+Harness kini mewajibkan event pemulihan tiba (batas 60 s) sebelum DDL perlakuan, dan
+menghentikan evaluasi bila tidak. Pada run 12, jarak pemulihan dan perlakuan menurut harness
+melebihi 20 s, jadi pemulihan kemungkinan tertunda di sumber; hal itu tidak dapat dibuktikan
+dari data yang tersedia.
+
 
 1. **Langkah pemulihan adalah perubahan skema.** Mengembalikan kolom di antara run dideteksi
    ASCAM sebagai perubahan baru dan, tanpa pengendalian, dieksekusi otomatis — termasuk

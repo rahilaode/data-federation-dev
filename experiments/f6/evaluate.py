@@ -123,15 +123,26 @@ def siapkan(kode: str) -> dict:
     if sk.siapkan:
         sk.siapkan()
     sebelum = id_event()
+    pemulihan_terdeteksi = True
     if sk.pulihkan() not in ('bersih', ''):
-        tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
-                             if e['id'] not in sebelum), None), 20.0)
+        # Event pemulihan WAJIB tiba sebelum DDL perlakuan. Monitor MySQL membandingkan cuplikan
+        # tiap 10 detik; perubahan yang dikembalikan sebelum pemindaian berikutnya tidak terlihat
+        # (uji_monitor_mysql.py). Setelah event pemulihan tercatat, cuplikan sudah memuat keadaan
+        # terbaru sehingga DDL perlakuan dibandingkan terhadap cuplikan yang benar (anomali A003
+        # run 12 evaluasi 20260922T150904).
+        pemulihan_terdeteksi = tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
+                                                     if e['id'] not in sebelum), None), 60.0) is not None
         time.sleep(2)
     dinetralkan = netralkan_rencana()
     reset()
     versi = api('/api/v1/obdf/1/versions?limit=1')
-    return {'rencana_dinetralkan': dinetralkan,
+    return {'rencana_dinetralkan': dinetralkan, 'pemulihan_terdeteksi': pemulihan_terdeteksi,
             'versi_dasar': versi[0]['version_no'] if isinstance(versi, list) and versi else None}
+
+
+class PersiapanGagal(RuntimeError):
+    """Pemulihan tidak terdeteksi monitor: cuplikan monitor tidak sejalan dengan OBDF yang direset,
+    sehingga run ini dan run sesudahnya tidak sahih."""
 
 
 # ── mode baseline (§3.10.1) ───────────────────────────────────────────────────
@@ -140,6 +151,9 @@ def satu_baseline(kode: str, nomor: int, jeda_amati: float) -> dict:
     catatan = {'mode': 'baseline', 'skenario': kode, 'kode_baseline': 'b' + kode[1:],
                'judul': sk.judul, 'run': nomor, 'mulai': datetime.now(timezone.utc).isoformat()}
     catatan.update(siapkan(kode))                  # Executor tetap dijeda: tanpa adaptasi
+    if not catatan['pemulihan_terdeteksi']:
+        catatan['hasil'] = 'persiapan tidak tuntas'
+        return catatan
     catatan['jawaban_sebelum'] = kueri.jalankan_stabil(kode)
     catatan['ddl'] = sk.terapkan()
     time.sleep(jeda_amati)                         # beri waktu perubahan berlaku di sumber
@@ -161,6 +175,9 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
                'pola_diharapkan': sk.pola, 'keputusan_diharapkan': sk.keputusan, 'run': nomor,
                'mulai': datetime.now(timezone.utc).isoformat()}
     catatan.update(siapkan(kode))
+    if not catatan['pemulihan_terdeteksi']:
+        catatan['hasil'] = 'persiapan tidak tuntas'
+        return catatan
     catatan['jawaban_sebelum'] = kueri.jalankan_stabil(kode)
     event_awal = id_event()
     eksekusi_awal = {e['id'] for e in api('/api/v1/obdf/1/executions?limit=50')}
@@ -292,6 +309,8 @@ def main() -> int:
                     c = satu_baseline(kode, nomor, args.jeda_amati)
                     (keluaran / f'baseline-{kode}-{nomor:02d}.json').write_text(
                         json.dumps(c, indent=2, ensure_ascii=False))
+                    if c.get('hasil') == 'persiapan tidak tuntas':
+                        raise PersiapanGagal(f'b{kode[1:]} run {nomor}')
                     for nama, h in c['jawaban_sesudah'].items():
                         print(f"    {nama:22s} HTTP {h['status']} baris={h['n']} "
                               f"{(h['galat'] or '')[:90]}")
@@ -307,6 +326,8 @@ def main() -> int:
                     c = satu_perlakuan(kode, nomor, args.batas)
                     (keluaran / f'run-{kode}-{nomor:02d}.json').write_text(
                         json.dumps(c, indent=2, ensure_ascii=False))
+                    if c.get('hasil') == 'persiapan tidak tuntas':
+                        raise PersiapanGagal(f'{kode} run {nomor}')
                     p = (c.get('penilaian') or {})
                     print(f"    hasil={c.get('hasil')} keputusan={c.get('keputusan')} "
                           f"deteksi={c.get('deteksi_ms')} ms dt_adapt={c.get('dt_adapt_ms')} ms "
@@ -315,6 +336,9 @@ def main() -> int:
             (keluaran / 'kafka-audit.json').write_text(json.dumps(hasil_audit, indent=2))
             print(f"\n  audit Kafka: N_log={hasil_audit.get('N_log')} N_prod={hasil_audit.get('N_prod')} "
                   f"C_safe={hasil_audit.get('C_safe')}")
+    except PersiapanGagal as exc:
+        print(f'\nEVALUASI DIHENTIKAN pada {exc}: pemulihan sumber tidak terdeteksi monitor dalam 60 s.'
+              '\n  Periksa monitor (preflight.py) lalu jalankan ulang; run yang sudah tersimpan tetap sahih.')
     finally:
         kendali('pause')
         tenang()

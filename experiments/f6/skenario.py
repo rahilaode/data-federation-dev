@@ -62,7 +62,9 @@ def a001_isi_data() -> str:
 def a001_pulihkan() -> str:
     ada = pg("SELECT count(*) FROM information_schema.columns "
              "WHERE table_name='penerima_manfaat' AND column_name='email'")
-    return pg('ALTER TABLE public.penerima_manfaat DROP COLUMN email') if ada == '1' else 'bersih'
+    if ada != '1':
+        return 'bersih'
+    return 'dipulihkan: ' + pg('ALTER TABLE public.penerima_manfaat DROP COLUMN email')
 
 
 # ── A002: kolom dihapus pada sumber PostgreSQL ─────────────────────────────────
@@ -87,7 +89,7 @@ def a002_pulihkan() -> str:
     pg('ALTER TABLE public.program_bansos ADD COLUMN tipe_program VARCHAR(100)')
     pg('UPDATE public.program_bansos p SET tipe_program = c.tipe_program '
        'FROM public.ascam_cadangan_tipe_program c WHERE c.program_id = p.program_id')
-    return pg("SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL")
+    return 'dipulihkan: ' + pg("SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL")
 
 
 # ── A003: kolom diganti nama pada sumber MySQL ─────────────────────────────────
@@ -99,7 +101,10 @@ def a003_pulihkan() -> str:
     ada = my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
              "AND table_name='master_penduduk' AND column_name='tgl_lahir_ktp'")
     if ada.strip() == '1':
-        return my('ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir')
+        # Klien MySQL tidak mencetak apa pun saat ALTER berhasil; tanpa penanda, keluaran kosong
+        # terbaca sebagai "tidak ada perubahan" dan harness tidak menunggu event pemulihan
+        # (A003 run 1 dan 2, evaluasi 20260924T072348).
+        return 'dipulihkan: ' + my('ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir')
     return 'bersih'
 
 

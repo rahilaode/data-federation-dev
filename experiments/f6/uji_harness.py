@@ -54,6 +54,27 @@ def main() -> int:
         assert hasil == 'bersih' and not ddl, f'{kode}: pemulihan pada kondisi dasar -> {hasil!r} {ddl}'
     print('pemulihan pada kondisi dasar tidak mengirim DDL untuk setiap skenario')
 
+    # Sebaliknya, setelah perlakuan pemulihan HARUS menjalankan DDL dan tidak boleh terbaca sebagai
+    # "tidak ada perubahan", termasuk ketika klien (seperti MySQL) tidak mencetak apa pun.
+    kondisi_perlakuan = {'email': '1', 'tipe_program': '0', 'tgl_lahir_ktp': '1'}
+    for kode, sk in skenario.SKENARIO.items():
+        perintah = []
+
+        def palsu(sql, perintah=perintah):
+            perintah.append(sql)
+            if 'information_schema' in sql:
+                return next(v for k, v in kondisi_perlakuan.items() if k in sql)
+            return ''                                   # meniru ALTER yang berhasil tanpa keluaran
+        asli = (skenario.pg, skenario.my)
+        skenario.pg = skenario.my = palsu
+        try:
+            hasil = sk.pulihkan()
+        finally:
+            skenario.pg, skenario.my = asli
+        ddl = [q for q in perintah if q.lstrip().upper().startswith('ALTER')]
+        assert ddl and hasil not in ('bersih', ''), f'{kode}: pemulihan setelah perlakuan -> {hasil!r}'
+    print('pemulihan setelah perlakuan selalu menjalankan DDL dan tidak terbaca sebagai bersih')
+
     konfigurasi = evaluate.periksa_konfigurasi_debezium()
     assert all(v['hanya_ddl_event_log'] for v in konfigurasi.values()), konfigurasi
     print('konfigurasi Debezium hanya memantau ddl_event_log')

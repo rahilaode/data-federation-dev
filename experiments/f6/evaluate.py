@@ -124,7 +124,8 @@ def siapkan(kode: str) -> dict:
         sk.siapkan()
     sebelum = id_event()
     pemulihan_terdeteksi = True
-    if sk.pulihkan() not in ('bersih', ''):
+    # Kontrak: pulihkan() mengembalikan 'bersih' HANYA bila tidak ada DDL yang dijalankan.
+    if sk.pulihkan() != 'bersih':
         # Event pemulihan WAJIB tiba sebelum DDL perlakuan. Monitor MySQL membandingkan cuplikan
         # tiap 10 detik; perubahan yang dikembalikan sebelum pemindaian berikutnya tidak terlihat
         # (uji_monitor_mysql.py). Setelah event pemulihan tercatat, cuplikan sudah memuat keadaan

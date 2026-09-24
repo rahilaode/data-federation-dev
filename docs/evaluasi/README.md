@@ -92,9 +92,17 @@ selalu hilang berpasangan. Dalam operasi, skema akhir tetap sejalan dengan OBDF 
 terlewat hanya inkonsistensi sesaat. Dalam evaluasi, OBDF direset di luar siklus MAPE-K,
 sehingga pemulihan yang tidak terdeteksi membuat cuplikan monitor dan OBDF tidak lagi sejalan.
 Harness kini mewajibkan event pemulihan tiba (batas 60 s) sebelum DDL perlakuan, dan
-menghentikan evaluasi bila tidak. Pada run 12, jarak pemulihan dan perlakuan menurut harness
-melebihi 20 s, jadi pemulihan kemungkinan tertunda di sumber; hal itu tidak dapat dibuktikan
-dari data yang tersedia.
+menghentikan evaluasi bila tidak.
+
+**Koreksi (evaluasi 20260924T072348).** Pemeriksaan itu semula tidak pernah aktif untuk A003:
+klien MySQL tidak mencetak apa pun saat `ALTER` berhasil, dan harness memperlakukan keluaran
+kosong sama dengan `'bersih'` (tidak ada perubahan). Akibatnya DDL perlakuan dijalankan sekitar
+9–10 s setelah pemulihan, yaitu selama reset OBDF saja, sehingga keduanya dapat jatuh dalam satu
+jendela pemindaian dan saling meniadakan. Ini menjelaskan A003 run 12 pada evaluasi sebelumnya
+dan A003 run 1 dan 2 pada evaluasi ini (kueri `tanggal_lahir` sebelum DDL mengembalikan HTTP 200,
+DDL perlakuan berhasil, tetapi `ddl_event_log` tidak memuat baris apa pun antara 00:30:06 dan
+00:58:46). Kontrak pemulihan kini eksplisit: `'bersih'` hanya berarti tidak ada DDL, dan setiap
+jalur yang menjalankan DDL mengembalikan penanda `dipulihkan: …`. Swa-uji memeriksa kedua arah.
 
 
 1. **Langkah pemulihan adalah perubahan skema.** Mengembalikan kolom di antara run dideteksi

@@ -63,8 +63,13 @@ def main() -> int:
     if baseline:
         print('## 1. Skenario baseline tanpa ASCAM (§3.10.1)\n')
         for kode in sorted({r['skenario'] for r in baseline}):
-            runs = [r for r in baseline if r['skenario'] == kode]
-            print(f"### B{kode[1:]}: {runs[0]['judul']} ({len(runs)} run)\n")
+            semua = [r for r in baseline if r['skenario'] == kode]
+            runs = [r for r in semua if r.get('penilaian')]
+            if not runs:
+                print(f"### B{kode[1:]}: tidak ada run yang tuntas ({len(semua)} run berhenti)\n")
+                continue
+            print(f"### B{kode[1:]}: {runs[0]['judul']} ({len(runs)} run"
+                  f"{f', {len(semua) - len(runs)} tidak tuntas' if len(semua) > len(runs) else ''})\n")
             print('| Kueri | Jenis | Sebelum (HTTP, baris) | Sesudah (HTTP, baris) | Pesan galat sesudah |')
             print('|---|---|---|---|---|')
             for nama, jenis in ((n, v['jenis']) for n, v in runs[0]['penilaian']['per_kueri'].items()):
@@ -81,6 +86,10 @@ def main() -> int:
             print(f'\nExecutionPreserved rata-rata tanpa ASCAM: {rasio:.1f} %; artefak OBDF tidak '
                   f'berubah pada {utuh}/{len(runs)} run.\n')
 
+    tidak_tuntas = [r for r in baseline if not r.get('penilaian')]
+    if tidak_tuntas:
+        print('Run baseline tidak tuntas: ' + ', '.join(
+            f"B{r['skenario'][1:]} run {r['run']} ({r.get('hasil')})" for r in tidak_tuntas) + '\n')
     if not perlakuan:
         return 0
 

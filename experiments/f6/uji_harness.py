@@ -33,6 +33,27 @@ def main() -> int:
         assert {'terdampak', 'tetangga', 'kontrol'} <= jenis, f'{kode}: jenis kueri tidak lengkap'
     print(f'modul termuat; {len(skenario.SKENARIO)} skenario lengkap dengan Q_k')
 
+    # Pada kondisi dasar, pemulihan tidak boleh mengirim DDL dan harus mengembalikan 'bersih';
+    # selain itu harness menunggu event pemulihan yang tidak akan pernah datang.
+    kondisi_dasar = {'email': '0', 'tipe_program': '1', 'tgl_lahir_ktp': '0'}
+    for kode, sk in skenario.SKENARIO.items():
+        perintah: list[str] = []
+
+        def palsu(sql, perintah=perintah):
+            perintah.append(sql)
+            if 'information_schema' in sql:
+                return next(v for k, v in kondisi_dasar.items() if k in sql)
+            return 'DIUBAH'
+        asli = (skenario.pg, skenario.my)
+        skenario.pg = skenario.my = palsu
+        try:
+            hasil = sk.pulihkan()
+        finally:
+            skenario.pg, skenario.my = asli
+        ddl = [q for q in perintah if q.lstrip().upper().startswith(('ALTER', 'UPDATE'))]
+        assert hasil == 'bersih' and not ddl, f'{kode}: pemulihan pada kondisi dasar -> {hasil!r} {ddl}'
+    print('pemulihan pada kondisi dasar tidak mengirim DDL untuk setiap skenario')
+
     konfigurasi = evaluate.periksa_konfigurasi_debezium()
     assert all(v['hanya_ddl_event_log'] for v in konfigurasi.values()), konfigurasi
     print('konfigurasi Debezium hanya memantau ddl_event_log')

@@ -79,10 +79,14 @@ def a002_terapkan() -> str:
 def a002_pulihkan() -> str:
     ada = pg("SELECT count(*) FROM information_schema.columns "
              "WHERE table_name='program_bansos' AND column_name='tipe_program'")
-    if ada == '0':
-        pg('ALTER TABLE public.program_bansos ADD COLUMN tipe_program VARCHAR(100)')
-        pg('UPDATE public.program_bansos p SET tipe_program = c.tipe_program '
-           'FROM public.ascam_cadangan_tipe_program c WHERE c.program_id = p.program_id')
+    if ada != '0':
+        # Kolom sudah ada: tidak ada DDL, sehingga harness tidak boleh menunggu event pemulihan.
+        # Sebelumnya fungsi ini selalu mengembalikan jumlah baris, dan harness menunggu event
+        # yang tidak pernah datang (evaluasi 20260924T071746 berhenti di B002 run 1).
+        return 'bersih'
+    pg('ALTER TABLE public.program_bansos ADD COLUMN tipe_program VARCHAR(100)')
+    pg('UPDATE public.program_bansos p SET tipe_program = c.tipe_program '
+       'FROM public.ascam_cadangan_tipe_program c WHERE c.program_id = p.program_id')
     return pg("SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL")
 
 

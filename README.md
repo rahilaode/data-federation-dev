@@ -28,7 +28,7 @@ kata sandi di `setup/ascam/knowledge/secrets/ui_admin_password`).
 | `setup/data-source`, `setup/data-federation`, `setup/vkg-system` | OBDF studi kasus Bansos |
 | `setup/ascam/schema-monitor` | Kafka, Kafka Connect, dan konektor Debezium |
 | `setup/ascam/knowledge` | Knowledge Service (model runtime OBDF, analisis dampak, rencana) |
-| `setup/ascam/orchestrator` | Konsumsi event DDL dari Kafka |
+| `setup/ascam/orchestrator` | Event Normalizer (nama di kode: orchestrator): mengubah rekaman DDL dari Kafka menjadi event terstruktur |
 | `setup/ascam/executor` | Penerapan rencana secara blue-green |
 | `setup/ascam/ontop-agent` | Akses artefak mapping dan ontologi di host Ontop |
 | `setup/ascam/ui` | Konsol administrator web |

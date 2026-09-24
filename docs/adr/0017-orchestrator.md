@@ -75,3 +75,12 @@ melaporkan statistik.
 - Keterbatasan monitor PostgreSQL (mengambil teks DDL dari sesi aktif, sehingga DDL
   multi-pernyataan hanya menghasilkan satu baris log) kini tertangani di sisi normalisasi;
   perbaikan di sisi monitor dicatat sebagai pekerjaan lanjutan.
+
+## Catatan penamaan
+
+Secara konseptual komponen ini disebut **Event Normalizer** dan merupakan bagian dari fase
+Monitor MAPE-K: ia mengumpulkan rekaman DDL, menguraikannya, dan melaporkannya sebagai event
+terstruktur, tanpa menganalisis dampak atau menyusun rencana (keduanya berada di Knowledge
+Service, Algoritma 2). Nama `orchestrator` dipertahankan pada kode, layanan (`ascam-orchestrator`),
+dan grup konsumen Kafka karena berasal dari rancangan awal; paper dan tesis memakai nama
+konseptualnya.

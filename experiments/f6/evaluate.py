@@ -114,30 +114,43 @@ def ms_antara(awal_iso: str, akhir_iso: str | None) -> int | None:
     return int((b - a).total_seconds() * 1000)
 
 
+def pulihkan_semua() -> tuple[bool, list[str]]:
+    """Memulihkan kolom SEMUA skenario, bukan hanya skenario yang akan dijalankan.
+
+    Pada rancangan 3 x 2, dua skenario dapat memakai tabel yang sama (A002 dan A006 pada
+    program_bansos, A003 dan A005 pada master_penduduk). Bila setiap run hanya memulihkan
+    kolomnya sendiri, sisa perubahan skenario lain mencemari run berikutnya: pada evaluasi
+    20260930T091536 kueri tetangga A002 dan A006 sudah gagal SEBELUM DDL perlakuan.
+    Setiap pemulihan menunggu event-nya sendiri (lihat catatan monitor MySQL di siapkan)."""
+    terdeteksi, dipulihkan = True, []
+    for kode_lain, s in SKENARIO.items():
+        if s.siapkan:
+            s.siapkan()
+        sebelum = id_event()
+        # Kontrak: pulihkan() mengembalikan 'bersih' HANYA bila tidak ada DDL yang dijalankan.
+        if s.pulihkan() != 'bersih':
+            dipulihkan.append(kode_lain)
+            tiba = tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
+                                        if e['id'] not in sebelum), None), 60.0)
+            terdeteksi = terdeteksi and tiba is not None
+            time.sleep(2)
+    return terdeteksi, dipulihkan
+
+
 def siapkan(kode: str) -> dict:
-    """Kondisi dasar: Executor dijeda, sumber dipulihkan, event pemulihan ditunggu lalu rencananya
-    dinetralkan, OBDF direset. Langkah pemulihan juga perubahan skema (ancaman validitas 1)."""
-    sk = SKENARIO[kode]
+    """Kondisi dasar: Executor dijeda, SEMUA tabel skenario dipulihkan dan event pemulihannya
+    ditunggu, rencananya dinetralkan, lalu OBDF direset. Event pemulihan WAJIB tiba sebelum DDL
+    perlakuan: monitor MySQL membandingkan cuplikan tiap 10 detik, dan perubahan yang dikembalikan
+    sebelum pemindaian berikutnya tidak terlihat (uji_monitor_mysql.py; anomali A003 run 12
+    evaluasi 20260922T150904). Langkah pemulihan juga perubahan skema (ancaman validitas 1)."""
     kendali('pause')
     tenang()
-    if sk.siapkan:
-        sk.siapkan()
-    sebelum = id_event()
-    pemulihan_terdeteksi = True
-    # Kontrak: pulihkan() mengembalikan 'bersih' HANYA bila tidak ada DDL yang dijalankan.
-    if sk.pulihkan() != 'bersih':
-        # Event pemulihan WAJIB tiba sebelum DDL perlakuan. Monitor MySQL membandingkan cuplikan
-        # tiap 10 detik; perubahan yang dikembalikan sebelum pemindaian berikutnya tidak terlihat
-        # (uji_monitor_mysql.py). Setelah event pemulihan tercatat, cuplikan sudah memuat keadaan
-        # terbaru sehingga DDL perlakuan dibandingkan terhadap cuplikan yang benar (anomali A003
-        # run 12 evaluasi 20260922T150904).
-        pemulihan_terdeteksi = tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
-                                                     if e['id'] not in sebelum), None), 60.0) is not None
-        time.sleep(2)
+    pemulihan_terdeteksi, dipulihkan = pulihkan_semua()
     dinetralkan = netralkan_rencana()
     reset()
     versi = api('/api/v1/obdf/1/versions?limit=1')
     return {'rencana_dinetralkan': dinetralkan, 'pemulihan_terdeteksi': pemulihan_terdeteksi,
+            'skenario_dipulihkan': dipulihkan,
             'versi_dasar': versi[0]['version_no'] if isinstance(versi, list) and versi else None}
 
 

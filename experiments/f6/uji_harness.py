@@ -77,6 +77,24 @@ def main() -> int:
         assert ddl and hasil not in ('bersih', ''), f'{kode}: pemulihan setelah perlakuan -> {hasil!r}'
     print('pemulihan setelah perlakuan selalu menjalankan DDL dan tidak terbaca sebagai bersih')
 
+    # Persiapan setiap run memulihkan kolom SEMUA skenario (bukan hanya skenario yang dijalankan),
+    # karena pada rancangan 3 x 2 dua skenario dapat berbagi tabel (evaluasi 20260930T091536).
+    dipanggil = []
+    asli = {k: (s.pulihkan, s.siapkan) for k, s in skenario.SKENARIO.items()}
+    asli_id = evaluate.id_event
+    try:
+        for k, s in skenario.SKENARIO.items():
+            s.pulihkan = (lambda k=k: dipanggil.append(k) or 'bersih')
+            s.siapkan = None
+        evaluate.id_event = lambda: set()
+        ok, dipulihkan = evaluate.pulihkan_semua()
+    finally:
+        for k, s in skenario.SKENARIO.items():
+            s.pulihkan, s.siapkan = asli[k]
+        evaluate.id_event = asli_id
+    assert sorted(dipanggil) == sorted(skenario.SKENARIO) and ok and dipulihkan == [], dipanggil
+    print('persiapan memulihkan kolom semua skenario, bukan hanya skenario yang dijalankan')
+
     konfigurasi = evaluate.periksa_konfigurasi_debezium()
     assert all(v['hanya_ddl_event_log'] for v in konfigurasi.values()), konfigurasi
     print('konfigurasi Debezium hanya memantau ddl_event_log')

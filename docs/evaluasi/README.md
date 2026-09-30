@@ -158,3 +158,19 @@ Konektor PostgreSQL tetap memakai `publication.autocreate.mode = filtered`.
 `experiments/reset_konektor.py` memulihkan keadaan yang sudah rusak: menghentikan konektor,
 menghapus offset-nya, menghapus topik schema history MySQL, serta replication slot dan
 publikasi PostgreSQL, tanpa mengubah data sumber maupun isi `ddl_event_log`.
+
+## Kontaminasi antarskenario pada tabel bersama
+
+**Temuan evaluasi 20260930T091536 (tidak sahih).** Pada rancangan 3 x 2, A002 dan A006 memakai
+`program_bansos`, sedangkan A003 dan A005 memakai `master_penduduk`. Setiap run hanya memulihkan
+kolom skenarionya sendiri, sehingga sisa perubahan skenario lain terbawa: setelah B006,
+`nama_program` bernama `judul_program`, sehingga kueri tetangga A002 gagal di 20 dari 20 run;
+setelah A002, `tipe_program` hilang, sehingga kueri tetangga A006 dan B006 gagal. Kegagalan itu
+sudah terjadi SEBELUM DDL perlakuan, jadi bukan akibat adaptasi. Waktu A002 juga tercemar
+(IQR 22,6–30,0 s, maksimum 39,1 s).
+
+**Keputusan.** Persiapan setiap run memulihkan kolom semua skenario (`pulihkan_semua`), masing-
+masing menunggu event pemulihannya sendiri, dan mencatat skenario yang dipulihkan
+(`skenario_dipulihkan`). `analisis.py` melaporkan run yang kuerinya sudah gagal sebelum DDL
+(bagian 8), karena kondisi awal setiap run harus bersih. Direktori hasil yang tercemar disimpan
+sebagai jejak, tetapi tidak dipakai untuk paper.

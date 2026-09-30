@@ -204,6 +204,18 @@ def main() -> int:
               f"harapan={r.get('harapan')}, kegagalan={(r.get('eksekusi') or {}).get('failure')}")
     if not anomali:
         print('Tidak ada.')
+
+    # Kondisi awal setiap run harus bersih: kueri yang sudah gagal SEBELUM DDL menandakan sisa
+    # perubahan skenario lain (evaluasi 20260930T091536), sehingga run itu tidak sahih.
+    tercemar = [r for r in baseline + perlakuan
+                if any(not v.get('ok') for v in (r.get('jawaban_sebelum') or {}).values())]
+    print(f'\n## 8. Run dengan kondisi awal tercemar ({len(tercemar)} dari '
+          f'{len(baseline) + len(perlakuan)} run)\n')
+    if not tercemar:
+        print('Tidak ada: setiap kueri berhasil sebelum DDL dijalankan.')
+    for r in tercemar:
+        gagal = [n for n, v in r['jawaban_sebelum'].items() if not v.get('ok')]
+        print(f"- {r['mode']} {r['skenario']} run {r['run']}: gagal sebelum DDL: {', '.join(gagal)}")
     return 0
 
 

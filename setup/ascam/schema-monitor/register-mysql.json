@@ -12,7 +12,7 @@
     "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
     "schema.history.internal.kafka.topic": "schema-monitor-dukcapil",
     "table.include.list": "dukcapil.ddl_event_log",
-    "snapshot.mode": "initial",
+    "snapshot.mode": "no_data",
     "schema.history.internal.store.only.monitored.tables.ddl": "true",
     "schema.history.internal.store.only.captured.tables.ddl": "true"
   }

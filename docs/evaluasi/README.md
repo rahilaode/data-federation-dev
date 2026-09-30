@@ -142,3 +142,19 @@ mekanisme deteksi DBMS (event trigger PostgreSQL versus polling MySQL):
 Penilaian mengikuti pola skenario (P-001, P-002, P-003), bukan kodenya, sehingga identik di
 kedua DBMS. A005 tidak memiliki kueri kontrol lintas sumber karena satu-satunya kueri lintas
 sumber pada mapping menyentuh `master_penduduk`; kontrolnya memakai `master_keluarga`.
+
+## Konektor tanpa pemutaran ulang (snapshot.mode = no_data)
+
+**Temuan 2026-09-30.** Setelah lingkungan dinyalakan ulang, konektor MySQL gagal dengan galat
+1236 karena posisi binlog yang diingatnya (`mysql-bin.000003`) sudah tidak ada di server, yang
+kini hanya menyimpan `mysql-bin.000006` dan `000007`. Pada saat yang sama, konektor PostgreSQL,
+yang memakai mode bawaan `initial`, kehilangan offset dan membaca ulang seluruh
+`ddl_event_log`; Knowledge yang baru direset memproses DDL lama itu (event 149–153) dan
+mengadaptasi OBDF ke versi 2 terhadap riwayat yang sudah basi.
+
+**Keputusan.** Kedua konektor memakai `snapshot.mode = no_data`: skema tabel direkam, tetapi
+baris lama tidak diterbitkan, sehingga hanya DDL setelah pendaftaran yang sampai ke ASCAM.
+Konektor PostgreSQL tetap memakai `publication.autocreate.mode = filtered`.
+`experiments/reset_konektor.py` memulihkan keadaan yang sudah rusak: menghentikan konektor,
+menghapus offset-nya, menghapus topik schema history MySQL, serta replication slot dan
+publikasi PostgreSQL, tanpa mengubah data sumber maupun isi `ddl_event_log`.

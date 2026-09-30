@@ -108,6 +108,61 @@ def a003_pulihkan() -> str:
     return 'bersih'
 
 
+# ── A004: kolom baru pada sumber MySQL ─────────────────────────────────────────
+def a004_terapkan() -> str:
+    return my('ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)')
+
+
+def a004_isi_data() -> str:
+    return my("UPDATE master_wilayah SET kode_pos = CONCAT('9022', wilayah_id) WHERE wilayah_id <= 3")
+
+
+def a004_pulihkan() -> str:
+    ada = my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
+             "AND table_name='master_wilayah' AND column_name='kode_pos'")
+    if ada.strip() != '1':
+        return 'bersih'
+    return 'dipulihkan: ' + my('ALTER TABLE master_wilayah DROP COLUMN kode_pos')
+
+
+# ── A005: kolom dihapus pada sumber MySQL (logical table SELECT *) ────────────
+def a005_siapkan() -> str:
+    """Nilai kolom disalin agar dapat dikembalikan setelah run."""
+    ada = my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
+             "AND table_name='master_penduduk' AND column_name='status_hidup'")
+    if ada.strip() != '1':
+        return 'kolom belum dipulihkan; cadangan tidak dibuat ulang'
+    return my('CREATE TABLE IF NOT EXISTS ascam_cadangan_status_hidup AS '
+              'SELECT nik, status_hidup FROM master_penduduk')
+
+
+def a005_terapkan() -> str:
+    return my('ALTER TABLE master_penduduk DROP COLUMN status_hidup')
+
+
+def a005_pulihkan() -> str:
+    ada = my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
+             "AND table_name='master_penduduk' AND column_name='status_hidup'")
+    if ada.strip() != '0':
+        return 'bersih'
+    my('ALTER TABLE master_penduduk ADD COLUMN status_hidup VARCHAR(20)')
+    my('UPDATE master_penduduk p JOIN ascam_cadangan_status_hidup c ON c.nik = p.nik '
+       'SET p.status_hidup = c.status_hidup')
+    return 'dipulihkan: ' + my('SELECT count(*) FROM master_penduduk WHERE status_hidup IS NOT NULL')
+
+
+# ── A006: kolom diganti nama pada sumber PostgreSQL (proyeksi eksplisit) ──────
+def a006_terapkan() -> str:
+    return pg('ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program')
+
+
+def a006_pulihkan() -> str:
+    ada = pg("SELECT count(*) FROM information_schema.columns "
+             "WHERE table_name='program_bansos' AND column_name='judul_program'")
+    if ada != '1':
+        return 'bersih'
+    return 'dipulihkan: ' + pg('ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program')
+
 
 SKENARIO = {
     'a001': Skenario(kode='a001', judul='ADD COLUMN email pada penerima_manfaat', pola='P-001',
@@ -128,4 +183,21 @@ SKENARIO = {
                      kolom='tanggal_lahir', terapkan=a003_terapkan, pulihkan=a003_pulihkan,
                      predikat='http://bansos.go.id/ontology/tanggalLahir',
                      catatan='jawaban harus identik dengan sebelum adaptasi'),
+    # Rancangan 3 x 2: setiap operator juga diuji pada DBMS lainnya.
+    'a004': Skenario(kode='a004', judul='ADD COLUMN kode_pos pada master_wilayah', pola='P-001',
+                     keputusan='hitl', sumber='dukcapil', tabel='master_wilayah', kolom='kode_pos',
+                     terapkan=a004_terapkan, pulihkan=a004_pulihkan,
+                     predikat='http://bansos.go.id/ontology/kodePos',
+                     catatan='kolom baru diisi 3 baris setelah perubahan', isi_data=a004_isi_data),
+    'a005': Skenario(kode='a005', judul='DROP COLUMN status_hidup pada master_penduduk',
+                     pola='P-002', keputusan='auto', sumber='dukcapil', tabel='master_penduduk',
+                     kolom='status_hidup', siapkan=a005_siapkan, terapkan=a005_terapkan,
+                     pulihkan=a005_pulihkan,
+                     predikat='http://bansos.go.id/ontology/statusHidup',
+                     catatan='logical table SELECT *: tanpa penulisan ulang proyeksi'),
+    'a006': Skenario(kode='a006', judul='RENAME COLUMN nama_program pada program_bansos',
+                     pola='P-003', keputusan='auto', sumber='kemensos', tabel='program_bansos',
+                     kolom='nama_program', terapkan=a006_terapkan, pulihkan=a006_pulihkan,
+                     predikat='http://bansos.go.id/ontology/namaProgram',
+                     catatan='proyeksi eksplisit menyebut kolom; jawaban harus identik'),
 }

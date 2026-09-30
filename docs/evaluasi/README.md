@@ -127,3 +127,18 @@ jalur yang menjalankan DDL mengembalikan penanda `dipulihkan: …`. Swa-uji meme
    pemeriksaan awal wajib dijalankan setelah setiap reset infrastruktur.
 6. **Kueri regresi terbatas** (tiga kueri tetap): kesetaraan jawaban diukur pada cakupan kueri
    tersebut, bukan pada seluruh kemungkinan kueri.
+
+## Rancangan 3 x 2 (operator x DBMS)
+
+Setiap operator diuji pada kedua sumber agar pengaruh operator tidak tercampur dengan
+mekanisme deteksi DBMS (event trigger PostgreSQL versus polling MySQL):
+
+| | PostgreSQL | MySQL |
+|---|---|---|
+| ADD | A001 `penerima_manfaat.email` | A004 `master_wilayah.kode_pos` |
+| DROP | A002 `program_bansos.tipe_program` (proyeksi eksplisit) | A005 `master_penduduk.status_hidup` (`SELECT *`) |
+| RENAME | A006 `program_bansos.nama_program` (proyeksi eksplisit) | A003 `master_penduduk.tanggal_lahir` (`SELECT *`) |
+
+Penilaian mengikuti pola skenario (P-001, P-002, P-003), bukan kodenya, sehingga identik di
+kedua DBMS. A005 tidak memiliki kueri kontrol lintas sumber karena satu-satunya kueri lintas
+sumber pada mapping menyentuh `master_penduduk`; kontrolnya memakai `master_keluarga`.

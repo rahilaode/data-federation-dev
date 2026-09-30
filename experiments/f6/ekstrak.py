@@ -25,7 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 LANGKAH = ['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'sync']
 # Komponen Δt_adapt: dari DDL sampai verifikasi selesai (sync terjadi sesudah t_end)
 KOMPONEN_DT = ['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify']
-OPERASI = {'a001': 'ADD', 'a002': 'DROP', 'a003': 'RENAME'}
+OPERASI = {'a001': 'ADD', 'a002': 'DROP', 'a003': 'RENAME',
+           'a004': 'ADD', 'a005': 'DROP', 'a006': 'RENAME'}
+SUMBER = {'a001': 'PostgreSQL', 'a002': 'PostgreSQL', 'a006': 'PostgreSQL',
+          'a003': 'MySQL', 'a004': 'MySQL', 'a005': 'MySQL'}
 
 
 def statistik(nilai: list) -> dict | None:
@@ -104,7 +107,8 @@ def main() -> int:
     for kode in sorted({r['skenario'] for r in runs} | {r['skenario'] for r in baseline}):
         semua = [r for r in runs if r['skenario'] == kode]
         ok = [r for r in semua if r.get('hasil') == 'succeeded']
-        s = {'operasi': OPERASI.get(kode, kode), 'run': len(semua), 'berhasil': len(ok)}
+        s = {'operasi': OPERASI.get(kode, kode), 'sumber': SUMBER.get(kode), 'run': len(semua),
+             'berhasil': len(ok)}
         if semua:
             s['keputusan_sesuai'] = sum(1 for r in semua if r.get('sesuai_harapan'))
             s['harapan_terpenuhi'] = sum(1 for r in ok if r.get('harapan') and all(r['harapan'].values()))

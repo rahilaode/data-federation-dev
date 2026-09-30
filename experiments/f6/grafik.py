@@ -26,8 +26,11 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import rcParams  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-URUTAN = ['a003', 'a002', 'a001']          # dari bawah ke atas: ADD tampil paling atas
-LABEL = {'a001': 'ADD (A001)', 'a002': 'DROP (A002)', 'a003': 'RENAME (A003)'}
+# dari bawah ke atas; pasangan PostgreSQL/MySQL tiap operator berdampingan, ADD paling atas
+URUTAN = ['a003', 'a006', 'a005', 'a002', 'a004', 'a001']
+LABEL = {'a001': 'ADD, PostgreSQL (A001)', 'a004': 'ADD, MySQL (A004)',
+         'a002': 'DROP, PostgreSQL (A002)', 'a005': 'DROP, MySQL (A005)',
+         'a006': 'RENAME, PostgreSQL (A006)', 'a003': 'RENAME, MySQL (A003)'}
 
 # (label legenda, kunci di ringkasan.json, warna isi, arsiran); label diawali "_" = tanpa legenda
 KOMPONEN = [
@@ -98,7 +101,7 @@ def main() -> int:
     for sisi in ('top', 'right'):
         ax.spines[sisi].set_visible(False)
     ax.legend(ncol=6, fontsize=6.6, frameon=False, loc='upper center',
-              bbox_to_anchor=(0.46, -0.32 if len(kode) >= 3 else -0.45),
+              bbox_to_anchor=(0.46, -0.62 / (0.53 * len(kode))),   # jarak tetap di bawah sumbu
               handlelength=1.5, columnspacing=0.9, handletextpad=0.4)
     fig.tight_layout()
 

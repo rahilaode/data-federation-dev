@@ -35,7 +35,8 @@ def main() -> int:
 
     # Pada kondisi dasar, pemulihan tidak boleh mengirim DDL dan harus mengembalikan 'bersih';
     # selain itu harness menunggu event pemulihan yang tidak akan pernah datang.
-    kondisi_dasar = {'email': '0', 'tipe_program': '1', 'tgl_lahir_ktp': '0'}
+    kondisi_dasar = {'email': '0', 'tipe_program': '1', 'tgl_lahir_ktp': '0',
+                     'kode_pos': '0', 'status_hidup': '1', 'judul_program': '0'}
     for kode, sk in skenario.SKENARIO.items():
         perintah: list[str] = []
 
@@ -56,7 +57,8 @@ def main() -> int:
 
     # Sebaliknya, setelah perlakuan pemulihan HARUS menjalankan DDL dan tidak boleh terbaca sebagai
     # "tidak ada perubahan", termasuk ketika klien (seperti MySQL) tidak mencetak apa pun.
-    kondisi_perlakuan = {'email': '1', 'tipe_program': '0', 'tgl_lahir_ktp': '1'}
+    kondisi_perlakuan = {'email': '1', 'tipe_program': '0', 'tgl_lahir_ktp': '1',
+                         'kode_pos': '1', 'status_hidup': '0', 'judul_program': '1'}
     for kode, sk in skenario.SKENARIO.items():
         perintah = []
 
@@ -89,20 +91,21 @@ def main() -> int:
     sementara = Path(tempfile.mkdtemp(dir=ROOT / 'results'))
     try:
         for kode in skenario.SKENARIO:
-            sebelum = {q: ok(0 if q == 'email' else 4) for q in kueri.Q[kode]}
+            pola = skenario.SKENARIO[kode].pola
+            terdampak = kueri.terdampak(kode)
+            sebelum = {q: ok(0 if (q == terdampak and pola == 'P-001') else 4) for q in kueri.Q[kode]}
             rusak = dict(sebelum)
-            terdampak = next(q for q, (j, _) in kueri.Q[kode].items() if j == 'terdampak')
-            if kode != 'a001':
+            if pola != 'P-001':
                 rusak[terdampak] = gagal('kolom tidak ada')
             (sementara / f'baseline-{kode}-01.json').write_text(json.dumps({
                 'mode': 'baseline', 'skenario': kode, 'judul': kode, 'run': 1,
                 'jawaban_sebelum': sebelum, 'jawaban_sesudah': rusak,
                 'penilaian': kueri.nilai(kode, sebelum, rusak), 'artefak_tidak_berubah': True}))
             sesudah = dict(sebelum)
-            if kode == 'a001':
-                sesudah['email'] = ok(3, 'e')
-            if kode == 'a002':
-                sesudah['tipe_program'] = ok(0)
+            if pola == 'P-001':
+                sesudah[terdampak] = ok(3, 'e')
+            if pola == 'P-002':
+                sesudah[terdampak] = ok(0)
             penilaian = kueri.nilai(kode, sebelum, sesudah)
             harapan = kueri.sesuai_harapan(kode, sesudah, penilaian)
             assert all(harapan.values()), (kode, harapan)

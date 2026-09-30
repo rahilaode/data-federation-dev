@@ -57,7 +57,44 @@ Q = {
                                             '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
         **KONTROL,
     },
+    'a004': {
+        'kode_pos': ('terdampak', B + 'SELECT ?w ?kode WHERE { ?w bansos:kodePos ?kode } ORDER BY ?w'),
+        'wilayah': ('tetangga', B + 'SELECT ?w ?prov ?kab WHERE { ?w a bansos:Wilayah ; '
+                                'bansos:provinsi ?prov ; bansos:kabupaten ?kab } ORDER BY ?w'),
+        'penerima_ke_penduduk': ('kontrol', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
+                                            '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
+        **KONTROL,
+    },
+    'a005': {
+        'status_hidup': ('terdampak', B + 'SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; '
+                                      'bansos:statusHidup ?status } ORDER BY ?s'),
+        'nama_pekerjaan': ('tetangga', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
+                                       'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
+        # Satu-satunya kueri lintas sumber menyentuh master_penduduk, jadi kontrol A005 memakai
+        # tabel MySQL lain (keterbatasan mapping, dicatat sebagai ancaman validitas).
+        'keluarga_wilayah': ('kontrol', B + 'SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k'),
+        **KONTROL,
+    },
+    'a006': {
+        'nama_program': ('terdampak', B + 'SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; '
+                                      'bansos:namaProgram ?nama } ORDER BY ?p'),
+        'tipe_nominal': ('tetangga', B + 'SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; '
+                                     'bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p'),
+        'penerima_ke_penduduk': ('kontrol', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
+                                            '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
+        **KONTROL,
+    },
 }
+
+
+def pola(kode: str) -> str:
+    """Pola ASCAM skenario; penilaian mengikuti pola, bukan kode, agar sama di kedua DBMS."""
+    from skenario import SKENARIO
+    return SKENARIO[kode].pola
+
+
+def terdampak(kode: str) -> str:
+    return next(n for n, (jenis, _) in Q[kode].items() if jenis == 'terdampak')
 
 
 def jalankan(kueri: str, batas: float = 90.0) -> dict:
@@ -108,20 +145,19 @@ def nilai(kode: str, sebelum: dict, sesudah: dict) -> dict:
             'baris_sebelum': a.get('n'), 'baris_sesudah': b.get('n'),
             'status_sesudah': b.get('status'),
         }
-    kunci = 'result_preserved' if kode == 'a003' else 'execution_preserved'
+    kunci = 'result_preserved' if pola(kode) == 'P-003' else 'execution_preserved'
     rasio = 100.0 * sum(v[kunci] for v in per_kueri.values()) / len(per_kueri)
     return {'metrik': kunci, 'preservation_ratio': rasio, 'per_kueri': per_kueri}
 
 
 def sesuai_harapan(kode: str, sesudah: dict, penilaian: dict) -> dict:
-    """Harapan teoretis skenario perlakuan (proposal §3.10.2, hlm. 104)."""
-    if kode == 'a001':
-        email = sesudah.get('email') or {}
+    """Harapan teoretis skenario perlakuan menurut polanya (proposal §3.10.2, hlm. 104)."""
+    q = sesudah.get(terdampak(kode)) or {}
+    if pola(kode) == 'P-001':
         return {'kueri_lama_valid': all(v['execution_preserved'] for n, v in penilaian['per_kueri'].items()
-                                        if n != 'email'),
-                'kueri_baru_mengembalikan_hasil': bool(email.get('ok') and (email.get('n') or 0) > 0)}
-    if kode == 'a002':
-        tipe = sesudah.get('tipe_program') or {}
-        return {'kueri_lama_tetap_berjalan': bool(tipe.get('ok')),
-                'answer_set_kosong': bool(tipe.get('ok') and tipe.get('n') == 0)}
+                                        if n != terdampak(kode)),
+                'kueri_baru_mengembalikan_hasil': bool(q.get('ok') and (q.get('n') or 0) > 0)}
+    if pola(kode) == 'P-002':
+        return {'kueri_lama_tetap_berjalan': bool(q.get('ok')),
+                'answer_set_kosong': bool(q.get('ok') and q.get('n') == 0)}
     return {'answer_set_identik': penilaian['preservation_ratio'] == 100.0}

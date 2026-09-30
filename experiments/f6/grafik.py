@@ -28,9 +28,11 @@ from matplotlib import rcParams  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 # dari bawah ke atas; pasangan PostgreSQL/MySQL tiap operator berdampingan, ADD paling atas
 URUTAN = ['a003', 'a006', 'a005', 'a002', 'a004', 'a001']
+# Penomoran paper: A001-A003 PostgreSQL, A004-A006 MySQL, sehingga harness a006 = A003 dan a003 = A006.
+PAPER = {'a001': 'A001', 'a002': 'A002', 'a006': 'A003', 'a004': 'A004', 'a005': 'A005', 'a003': 'A006'}
 LABEL = {'a001': 'ADD, PostgreSQL (A001)', 'a004': 'ADD, MySQL (A004)',
          'a002': 'DROP, PostgreSQL (A002)', 'a005': 'DROP, MySQL (A005)',
-         'a006': 'RENAME, PostgreSQL (A006)', 'a003': 'RENAME, MySQL (A003)'}
+         'a006': 'RENAME, PostgreSQL (A003)', 'a003': 'RENAME, MySQL (A006)'}
 
 # (label legenda, kunci di ringkasan.json, warna isi, arsiran); label diawali "_" = tanpa legenda
 KOMPONEN = [
@@ -84,17 +86,9 @@ def main() -> int:
                 hatch=arsir, height=0.55, label=label)
         kiri = [a + b for a, b in zip(kiri, nilai)]
 
-    batas_kanan = 0.0
-    for i, k in enumerate(kode):
-        dt = ringkasan[k]['waktu_ms']['dt_adapt']
-        lo, hi, med = dt['q1'] / 1000, dt['q3'] / 1000, dt['median'] / 1000
-        ax.plot([lo, hi], [i, i], color='black', linewidth=0.8)
-        for x in (lo, hi):
-            ax.plot([x, x], [i - 0.12, i + 0.12], color='black', linewidth=0.8)
-        ax.text(max(hi, med) + 0.4, i, f'{med:.1f} s', va='center', fontsize=7.5)
-        batas_kanan = max(batas_kanan, hi, med)
-
-    ax.set_xlim(0, batas_kanan * 1.15)                 # ruang untuk label median
+    # Tanpa garis interkuartil dan tanpa angka di batang: nilainya dicantumkan di keterangan gambar.
+    batas_kanan = max(ringkasan[k]['waktu_ms']['dt_adapt']['median'] / 1000 for k in kode)
+    ax.set_xlim(0, (int(batas_kanan / 5) + 1) * 5)
     ax.set_xlabel('Time from DDL execution (s)')
     ax.xaxis.grid(True, linewidth=0.3, color='#bbbbbb')
     ax.set_axisbelow(True)
@@ -108,6 +102,14 @@ def main() -> int:
     keluar = direktori / 'ringkasan'
     for ekstensi in ('png', 'svg', 'pdf'):
         fig.savefig(keluar / f'fig_adaptation_time.{ekstensi}', dpi=300, bbox_inches='tight')
+    print('Nilai untuk keterangan gambar (median, detik):')
+    for k in reversed(kode):
+        w = ringkasan[k]['waktu_ms']
+        d = lambda n: median_detik(w, n)
+        print(f"  {PAPER.get(k, k)}: total {d('dt_adapt'):.1f}; detection {d('deteksi'):.1f}; "
+              f"ingestion and planning {d('jeda_turunan_median'):.1f}; validate {d('validate'):.1f}; "
+              f"restart Ontop {d('reload_ontop'):.1f}; verify {d('verify'):.1f}; "
+              f"deploy and switch {d('deploy_vdb') + d('switch'):.2f}")
     print(f'Grafik ditulis ke {keluar.relative_to(ROOT)}/fig_adaptation_time.{{png,svg,pdf}}')
     return 0
 

@@ -16,7 +16,7 @@ services:
       - knowledge-db-data:/var/lib/postgresql/data
       - ./db-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - '127.0.0.1:55432:5432'        # hanya untuk inspeksi lokal
+      - '0.0.0.0:55432:5432'        # hanya untuk inspeksi lokal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ascam_owner -d ascam_knowledge"]
       interval: 3s
@@ -64,7 +64,7 @@ services:
     volumes:
       - ./config:/config:ro
     ports:
-      - '127.0.0.1:18000:8000'
+      - '0.0.0.0:18000:8000'
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/ready', timeout=3).status == 200 else 1)"]

@@ -18,7 +18,7 @@ services:
       ASCAM_UI_SESSION_KEY_FILE: /run/secrets/ui_session_key
     secrets: [knowledge_api_tokens, ui_admin_password, ui_session_key]
     ports:
-      - '127.0.0.1:18400:8000'
+      - '0.0.0.0:18400:8000'
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status == 200 else 1)"]

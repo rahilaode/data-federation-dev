@@ -224,13 +224,15 @@ gagal (HTTP 500) walaupun view terbaca langsung lewat Teiid:
 
 **Temuan uji coba 20261009T032658.** A009 sesuai rancangan (HITL dengan alasan ekspresi view,
 rencana ditolak, tidak ada eksekusi, versi tetap). A007 dan A008 diputuskan otomatis dengan benar,
-tetapi eksekusinya `failed`. Dugaan kuat (menunggu rincian `failure`): Executor mengambil sidik jari
+tetapi eksekusinya `failed` dengan `HTTPStatusError 500` pada kueri sidik jari dasar, sesudah
+langkah `validate` (terkonfirmasi dari `failure.after_step`). Penyebabnya: Executor mengambil sidik jari
 dasar dari instance aktif SESUDAH DDL, dan kueri sidik jari `?s ?p ?o` menyapu semua mapping.
 Kolom view selalu nullable, sehingga Ontop harus membaca kolom yang sudah dihapus untuk menyaring
 `IS NOT NULL`, dan seluruh kueri gagal. Skenario lama lolos karena kolomnya dideklarasikan
 `not null` di VDB, sehingga Ontop tidak perlu membacanya. Perbaikan: bila sidik jari utuh gagal
 pada instance lama, sidik jari diambil per predikat (daftar dari ℳ, ℳ′, dan 𝒯); predikat yang
-gagal dicatat, dan instance baru diperiksa dengan cara yang sama.
+gagal dicatat, dan instance baru diperiksa dengan cara yang sama. Uji ulang 20261009T040048:
+A007, A008, dan A002 (regresi jalur sidik jari utuh) `succeeded`, PreservationRatio 100 %.
 
 **Ketersediaan endpoint.** Setiap run perlakuan kini menjalankan probe berurutan setiap ±0,5 s
 dari DDL sampai eksekusi selesai, dengan kueri yang tidak disentuh skenario mana pun

@@ -115,7 +115,9 @@ def periksa(diam: bool = False) -> tuple[bool, list[str]]:
     for skenario_view in ('a007', 'a008', 'a009'):
         nama = kueri.terdampak(skenario_view)
         hasil = kueri.jalankan(kueri.Q[skenario_view][nama][1], batas=60)
-        lapor(f"  view {skenario_view} ({nama}): HTTP {hasil['status']} baris={hasil['n']}")
+        galat = ' '.join((hasil['galat'] or '').split())[:400]
+        lapor(f"  view {skenario_view} ({nama}): HTTP {hasil['status']} baris={hasil['n']}"
+              f"{' | ' + galat if galat else ''}")
         if not hasil['ok'] or not hasil['n']:
             masalah.append(f'kueri dasar {skenario_view} ({nama}) tidak menghasilkan baris; '
                            'view studi kasus belum termuat (jalankan start.sh)')

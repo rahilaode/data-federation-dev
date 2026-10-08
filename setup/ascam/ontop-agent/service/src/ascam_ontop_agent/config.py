@@ -23,6 +23,13 @@ class AgentConfig:
     ontop_input_dir: str = '/opt/ontop/input'          # path di dalam kontainer Ontop
     sparql_path: str = '/sparql'
     tokens_file: str | None = None
+    # Blue-green lapisan OBDA (ADR-0022): dua instance Ontop di belakang proxy nginx. Setiap
+    # instance membaca slotnya sendiri dan terkunci pada satu versi VDB.
+    slots_dir: Path | None = None                       # berisi blue/, green/, state.json
+    proxy_runtime_dir: Path | None = None               # berisi upstream.conf milik nginx
+    proxy_container: str = 'vkg-system-ontop-teiid'
+    instance_prefix: str = 'vkg-system-ontop'           # -> vkg-system-ontop-blue / -green
+    network: str | None = 'ascam-networks'
     names: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -52,4 +59,13 @@ def from_env() -> AgentConfig:
         ontop_input_dir=os.getenv('ASCAM_AGENT_ONTOP_INPUT_DIR', '/opt/ontop/input'),
         sparql_path=os.getenv('ASCAM_AGENT_SPARQL_PATH', '/sparql'),
         tokens_file=os.getenv('ASCAM_AGENT_API_TOKENS_FILE'),
+        slots_dir=_path(os.getenv('ASCAM_AGENT_SLOTS_DIR')),
+        proxy_runtime_dir=_path(os.getenv('ASCAM_AGENT_PROXY_RUNTIME_DIR')),
+        proxy_container=os.getenv('ASCAM_AGENT_PROXY_CONTAINER', 'vkg-system-ontop-teiid'),
+        instance_prefix=os.getenv('ASCAM_AGENT_INSTANCE_PREFIX', 'vkg-system-ontop'),
+        network=os.getenv('ASCAM_AGENT_NETWORK', 'ascam-networks') or None,
     )
+
+
+def _path(value: str | None) -> Path | None:
+    return Path(value) if value else None

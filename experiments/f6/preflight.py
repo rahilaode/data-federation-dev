@@ -97,6 +97,15 @@ def periksa(diam: bool = False) -> tuple[bool, list[str]]:
     lapor(f"  executor: {exe.get('state')}")
     agen = http(AGENT, '/health', token('ontop_agent_api_tokens'))
     lapor(f"  agen: {agen.get('status')} artefak={agen.get('artifacts')}")
+
+    # Blue-green lapisan OBDA (ADR-0022): tepat satu instance Ontop (yang aktif) berjalan.
+    bg = http(AGENT, '/api/v1/bluegreen', token('ontop_agent_api_tokens'))
+    if bg.get('active'):
+        jalan = sorted(n for n in aktif if n in ('vkg-system-ontop-blue', 'vkg-system-ontop-green'))
+        lapor(f"  ontop blue-green: aktif {bg['active']} (VDB v{bg.get('vdb_version')}), "
+              f"instance berjalan {jalan}")
+        if jalan != [bg['active_container']]:
+            masalah.append(f"instance Ontop berjalan {jalan}, seharusnya hanya {bg['active_container']}")
     if agen.get('status') != 'ok':
         masalah.append('agen Ontop tidak sehat')
 

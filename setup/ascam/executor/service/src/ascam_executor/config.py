@@ -28,6 +28,9 @@ class Settings:
     teiid_jdbc_port: int = int(os.getenv('ASCAM_EXEC_TEIID_JDBC_PORT', '31000'))
     poll_seconds: float = float(os.getenv('ASCAM_EXEC_POLL_SECONDS', '5'))
     enabled: bool = os.getenv('ASCAM_EXEC_ENABLED', 'true').lower() == 'true'
+    # 'bluegreen' (ADR-0022): Ontop siaga diverifikasi sebelum lalu lintas dialihkan.
+    # 'restart' (ADR-0001): Ontop tunggal di-restart di tempat, rancangan sebelum ADR-0022.
+    obda_strategy: str = os.getenv('ASCAM_EXEC_OBDA_STRATEGY', 'bluegreen')
 
     def knowledge_token(self) -> str:
         if not self.token_file:

@@ -13,6 +13,8 @@ services:
       ASCAM_EXEC_OBDF: bansos
       ASCAM_EXEC_TEIID_PASSWORD_FILE: /run/secrets/obdf_teiid_mgmt_password
       ASCAM_EXEC_AGENT_TOKEN_FILE: /run/secrets/obdf_ontop_agent_token
+      # Blue-green lapisan OBDA (ADR-0022); 'restart' = rancangan lama dengan Ontop tunggal
+      ASCAM_EXEC_OBDA_STRATEGY: bluegreen
       ASCAM_EXEC_TEIID_JDBC_HOST: teiid
       # Mode pengamatan: jalankan dengan ASCAM_EXEC_ENABLED=false docker compose up -d
       ASCAM_EXEC_ENABLED: '${ASCAM_EXEC_ENABLED:-true}'

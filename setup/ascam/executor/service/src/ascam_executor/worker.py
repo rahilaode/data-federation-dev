@@ -63,7 +63,9 @@ class ExecutorWorker:
         sparql = SparqlClient(targets['ontop_sparql']['endpoint'])
         executor = Executor(knowledge, admin, agent, sparql, obdf_id,
                             teiid_jdbc_host=self.settings.teiid_jdbc_host,
-                            teiid_jdbc_port=self.settings.teiid_jdbc_port)
+                            teiid_jdbc_port=self.settings.teiid_jdbc_port,
+                            obda_strategy=self.settings.obda_strategy,
+                            sparql_for=SparqlClient.from_url)
         return knowledge, obdf_id, executor
 
     def process_once(self, knowledge: KnowledgeClient, obdf_id: int, executor: Executor) -> int:

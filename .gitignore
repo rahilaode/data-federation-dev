@@ -7,3 +7,7 @@ results/
 
 # cadangan artefak OBDA yang dibuat Ontop Agent (ADR-0018)
 setup/vkg-system/config/ascam-backups/
+
+# slot blue-green dan upstream proxy, dibuat init-bluegreen.sh dan diubah agen (ADR-0022)
+setup/vkg-system/slots/
+setup/vkg-system/proxy/runtime/

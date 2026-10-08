@@ -159,6 +159,30 @@ class AgentClient:
     def prune_backups(self, keep: int = 20) -> dict:
         return self._request('POST', '/api/v1/backups/prune', params={'keep': keep})
 
+    # ── blue-green lapisan OBDA (ADR-0022) ─────────────────────────────────────
+    def bluegreen_state(self) -> dict:
+        return self._request('GET', '/api/v1/bluegreen')
+
+    def bluegreen_prepare(self, r2rml: str, ontology: str, vdb_version: str,
+                          expected_r2rml_sha256: str | None,
+                          expected_ontology_sha256: str | None) -> dict:
+        return self._request('POST', '/api/v1/bluegreen/prepare', json={
+            'r2rml': r2rml, 'ontology': ontology, 'vdb_version': str(vdb_version),
+            'expected_r2rml_sha256': expected_r2rml_sha256,
+            'expected_ontology_sha256': expected_ontology_sha256})
+
+    def bluegreen_validate(self, db_url: str | None = None) -> dict:
+        return self._request('POST', '/api/v1/bluegreen/validate', json={'db_url': db_url})
+
+    def bluegreen_start(self) -> dict:
+        return self._request('POST', '/api/v1/bluegreen/start')
+
+    def bluegreen_switch(self) -> dict:
+        return self._request('POST', '/api/v1/bluegreen/switch')
+
+    def bluegreen_discard(self) -> dict:
+        return self._request('POST', '/api/v1/bluegreen/discard')
+
 
 class SparqlClient:
     """Verifikasi jawaban OBDF setelah adaptasi."""
@@ -170,6 +194,14 @@ class SparqlClient:
         path = endpoint.get('path') or '/sparql'
         self.url = f"{scheme}://{endpoint['host']}:{endpoint['port']}{path}"
         self._client = client or httpx.Client(timeout=TIMEOUT)
+
+    @classmethod
+    def from_url(cls, url: str, client: httpx.Client | None = None) -> 'SparqlClient':
+        """Klien untuk endpoint instance tertentu, mis. instance siaga blue-green."""
+        instance = cls.__new__(cls)
+        instance.url = url
+        instance._client = client or httpx.Client(timeout=TIMEOUT)
+        return instance
 
     def fingerprint(self) -> dict[str, int]:
         """{IRI predikat: jumlah triple} — sidik jari graf virtual."""

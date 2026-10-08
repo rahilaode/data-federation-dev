@@ -8,15 +8,24 @@ services:
     container_name: ascam-ontop-agent
     restart: unless-stopped
     environment:
-      ASCAM_AGENT_ARTIFACTS_DIR: /artifacts
+      ASCAM_AGENT_ARTIFACTS_DIR: /vkg/config
       ASCAM_AGENT_ONTOP_CONTAINER: vkg-system-ontop-teiid
       ASCAM_AGENT_ONTOP_IMAGE: ontop/ontop-endpoint:4.1.1
       ASCAM_AGENT_API_TOKENS_FILE: /run/secrets/ontop_agent_api_tokens
+      # Blue-green lapisan OBDA (ADR-0022). ASCAM_AGENT_ONTOP_CONTAINER di atas kini menunjuk
+      # proxy; validasi dan penyalaan memakai instance <prefix>-blue / <prefix>-green.
+      ASCAM_AGENT_SLOTS_DIR: /vkg/slots
+      ASCAM_AGENT_PROXY_RUNTIME_DIR: /vkg/proxy/runtime
+      ASCAM_AGENT_PROXY_CONTAINER: vkg-system-ontop-teiid
+      ASCAM_AGENT_INSTANCE_PREFIX: vkg-system-ontop
+      ASCAM_AGENT_NETWORK: ascam-networks
     secrets: [ontop_agent_api_tokens]
     volumes:
       # Artefak OBDA milik host Ontop. Baca-tulis sejak F4a: agen menulis ℳ dan 𝒯 secara
       # atomik dan menyimpan cadangan di ../../vkg-system/config/ascam-backups (ADR-0018).
-      - ../../vkg-system/config:/artifacts
+      # Direktori lapisan OBDA: config/ (artefak kanonik = instance aktif), slots/ (artefak per
+      # instance), dan proxy/runtime/ (upstream nginx).
+      - ../../vkg-system:/vkg
       # Diperlukan untuk menjalankan CLI Ontop sekali jalan dan (F4) memuat ulang Ontop.
       - /var/run/docker.sock:/var/run/docker.sock
     ports:

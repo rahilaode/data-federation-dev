@@ -35,19 +35,24 @@ class OntopRunner:
             self._client = docker.from_env()
         return self._client
 
-    def _network(self) -> str | None:
-        container = self.client.containers.get(self.cfg.ontop_container)
+    def _network(self, container_name: str) -> str | None:
+        if self.cfg.network:
+            return self.cfg.network
+        container = self.client.containers.get(container_name)
         networks = container.attrs['NetworkSettings']['Networks']
         return next(iter(networks), None)
 
-    def run(self, args: list[str]) -> CommandResult:
+    def run(self, args: list[str], container_name: str | None = None) -> CommandResult:
+        # Volume diambil dari instance Ontop yang artefaknya divalidasi. Pada blue-green
+        # (ADR-0022) itu instance siaga, yang boleh dalam keadaan berhenti.
+        container_name = container_name or self.cfg.ontop_container
         t0 = time.perf_counter()
         command = ['-cp', CLASSPATH, '-Dlogback.configurationFile=/opt/ontop/log/logback.xml',
                    'it.unibz.inf.ontop.cli.Ontop', *args]
         try:
             container = self.client.containers.run(
                 self.cfg.ontop_image, command=command, entrypoint='java',
-                volumes_from=[self.cfg.ontop_container], network=self._network(),
+                volumes_from=[container_name], network=self._network(container_name),
                 detach=True, remove=False)
         except Exception as exc:                        # noqa: BLE001
             return CommandResult(False, -1, f'{type(exc).__name__}: {exc}'[:2000],
@@ -63,11 +68,11 @@ class OntopRunner:
                 pass
         return CommandResult(code == 0, code, logs[-4000:], int((time.perf_counter() - t0) * 1000))
 
-    def validate(self, db_url: str | None = None) -> CommandResult:
+    def validate(self, db_url: str | None = None, container_name: str | None = None) -> CommandResult:
         args = ['validate',
                 '-m', self.cfg.container_path('r2rml'),
                 '-t', self.cfg.container_path('ontology'),
                 '-p', self.cfg.container_properties]
         if db_url:
             args += ['--db-url', db_url]
-        return self.run(args)
+        return self.run(args, container_name)

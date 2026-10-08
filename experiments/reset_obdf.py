@@ -5,7 +5,8 @@ Setiap run evaluasi harus berangkat dari keadaan yang sama. Skrip ini:
   1. mengembalikan artefak OBDA (mapping.ttl, ontology_file.ttl) ke isi di git;
   2. mengembalikan koneksi Teiid ke VDB versi 1 dan menghapus versi yang lebih baru;
   3. menghapus kolom uji pada sumber (bawaan: kemensos.penerima_manfaat.email);
-  4. memuat ulang Ontop lalu memverifikasi endpoint menjawab;
+  4. memuat ulang Ontop lalu memverifikasi endpoint menjawab (blue-green: instance aktif
+     dibangun ulang dari artefak di git dan dikunci ke VDB versi dasar, ADR-0022);
   5. menyinkronkan Knowledge sehingga versi spesifikasi aktif mencerminkan keadaan dasar.
 
 Catatan: riwayat di Knowledge (event, rencana, eksekusi) TIDAK dihapus, karena merupakan
@@ -138,8 +139,16 @@ def main() -> int:
               if ada == '1' else 'kolom sudah tidak ada')
 
     judul('4) Ontop dimuat ulang')
-    hasil = api(AGENT, '/api/v1/reload', token_agen, 'POST')
-    print(f"  ok={hasil.get('ok')} total={hasil.get('total_ms')} ms {hasil.get('error') or ''}")
+    # Blue-green (ADR-0022): instance aktif dibangun ulang dari artefak kanonik dan dikunci ke
+    # versi dasar; instance siaga dihentikan. Agen tanpa blue-green menjawab 409, lalu dipakai
+    # muat ulang lama (ADR-0001).
+    hasil = api(AGENT, '/api/v1/bluegreen/reset', token_agen, 'POST', {'vdb_version': args.versi_dasar})
+    if hasil.get('_http') == 409:
+        hasil = api(AGENT, '/api/v1/reload', token_agen, 'POST')
+        print(f"  ok={hasil.get('ok')} total={hasil.get('total_ms')} ms {hasil.get('error') or ''}")
+    else:
+        print(f"  ok={hasil.get('ok')} instance={hasil.get('color')} "
+              f"durasi={hasil.get('duration_ms')} ms {hasil.get('error') or ''}")
     artefak = api(AGENT, '/api/v1/artifacts', token_agen)
     for a in artefak if isinstance(artefak, list) else []:
         print(f"  artefak {a['kind']:9s} {a['sha256'][:16]}")

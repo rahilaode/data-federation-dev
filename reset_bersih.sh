@@ -62,6 +62,7 @@ DEPLOY_DIR=setup/data-federation/deployments
 rm -f "$DEPLOY_DIR"/*.dodeploy "$DEPLOY_DIR"/*.isdeploying "$DEPLOY_DIR"/*.deployed \
       "$DEPLOY_DIR"/*.failed "$DEPLOY_DIR"/*.undeployed "$DEPLOY_DIR"/*.pending
 touch "$DEPLOY_DIR"/government-vdb.xml.dodeploy
+rm -rf setup/vkg-system/slots setup/vkg-system/proxy/runtime   # dibuat ulang oleh up.sh (ADR-0022)
 chmod 777 "$DEPLOY_DIR"
 echo "  penanda deployment VDB disiapkan (government-vdb.xml.dodeploy)"
 ubah=$(git status --porcelain -- setup | grep -v '\.dodeploy$' || true)

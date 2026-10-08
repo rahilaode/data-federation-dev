@@ -239,9 +239,12 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
     catatan['langkah'] = {n: s['detail'].get('duration_ms') for n, s in langkah.items()}
     catatan['status_langkah'] = {n: s['status'] for n, s in langkah.items()}
     catatan['hasil'] = eksekusi['status']
-    # Δt_adapt (pers. 3.16): t_start = DDL dieksekusi; t_end = artefak termodifikasi dan siap
-    # dipakai, yaitu saat verifikasi SPARQL pasca-muat-ulang selesai.
-    catatan['dt_adapt_ms'] = ms_antara(t0_wall, (langkah.get('verify') or {}).get('finished_at'))
+    # Δt_adapt (pers. 3.16): t_start = DDL dieksekusi; t_end = artefak termodifikasi, terverifikasi,
+    # dan melayani kueri. Pada blue-green (ADR-0022) verifikasi terjadi SEBELUM peralihan, sehingga
+    # t_end adalah akhir langkah switch; pada strategi restart, akhir verifikasi pasca-muat-ulang.
+    akhir = 'switch' if 'start_ontop' in langkah else 'verify'
+    catatan['t_end_langkah'] = akhir
+    catatan['dt_adapt_ms'] = ms_antara(t0_wall, (langkah.get(akhir) or {}).get('finished_at'))
     catatan['dt_adapt_mesin_ms'] = (catatan['dt_adapt_ms'] - catatan['keputusan_ms']
                                     if catatan['dt_adapt_ms'] is not None else None)
 

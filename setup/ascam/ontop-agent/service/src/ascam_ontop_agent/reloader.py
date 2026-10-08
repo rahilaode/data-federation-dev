@@ -25,13 +25,15 @@ class ReloadResult:
 
 def reload_ontop(cfg: AgentConfig, docker_client=None, http: httpx.Client | None = None,
                  stop_timeout: int = 10, ready_timeout: float = 120.0,
-                 sleep=time.sleep) -> ReloadResult:
+                 sleep=time.sleep, container_name: str | None = None) -> ReloadResult:
+    # Dengan blue-green (ADR-0022) yang di-restart adalah instance aktif, bukan proxy.
+    container_name = container_name or cfg.ontop_container
     start = time.perf_counter()
     try:
         if docker_client is None:
             import docker
             docker_client = docker.from_env()
-        container = docker_client.containers.get(cfg.ontop_container)
+        container = docker_client.containers.get(container_name)
         container.restart(timeout=stop_timeout)
     except Exception as exc:                        # noqa: BLE001
         elapsed = int((time.perf_counter() - start) * 1000)
@@ -39,7 +41,7 @@ def reload_ontop(cfg: AgentConfig, docker_client=None, http: httpx.Client | None
 
     stopped = time.perf_counter()
     client = http or httpx.Client(timeout=5)
-    url = f'http://{cfg.ontop_container}:8080{cfg.sparql_path}'
+    url = f'http://{container_name}:8080{cfg.sparql_path}'
     error = None
     try:
         while time.perf_counter() - stopped < ready_timeout:

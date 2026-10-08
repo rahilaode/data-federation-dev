@@ -12,6 +12,18 @@ Urutan langkah:
   6. rollback     Bila verifikasi gagal: koneksi dikembalikan, artefak dipulihkan, Ontop
                   dimuat ulang, dan eksekusi ditandai rolled_back.
 
+Strategi `bluegreen` (ADR-0022, bawaan) menerapkan blue-green juga pada lapisan OBDA:
+  1. deploy_vdb   sama seperti di atas; versi N tetap melayani.
+  2. validate     ℳ′ dan 𝒯′ ditulis ke slot instance Ontop SIAGA yang dikunci ke versi N+1,
+                  lalu `ontop validate` dijalankan dengan volume instance itu.
+  3. start_ontop  instance siaga dinyalakan; instance aktif terus melayani.
+  4. verify       sidik jari graf diambil LANGSUNG dari instance siaga, sebelum lalu lintas
+                  dialihkan, dan dibandingkan dengan sidik jari instance aktif.
+  5. switch       proxy dialihkan ke instance siaga, artefaknya dipromosikan, instance lama
+                  dihentikan, dan versi N+1 menerima koneksi tanpa versi (ANY).
+  5. rollback     bila verifikasi gagal: instance siaga dihentikan dan versi N+1 dihapus;
+                  pengguna tidak pernah melihat versi yang belum terverifikasi.
+
 Setiap langkah dilaporkan ke Knowledge sehingga jejaknya tetap ada meski Executor berhenti.
 """
 import logging
@@ -88,7 +100,12 @@ def _xsd_for(type_mappings: list[dict], native_type: str | None) -> str | None:
 
 class Executor:
     def __init__(self, knowledge, admin, agent, sparql, obdf_id: int, *, sleep=time.sleep,
-                 teiid_jdbc_host: str = 'teiid', teiid_jdbc_port: int = 31000):
+                 teiid_jdbc_host: str = 'teiid', teiid_jdbc_port: int = 31000,
+                 obda_strategy: str = 'restart', sparql_for=None):
+        if obda_strategy not in ('restart', 'bluegreen'):
+            raise ValueError(f'strategi OBDA tidak dikenal: {obda_strategy!r}')
+        if obda_strategy == 'bluegreen' and sparql_for is None:
+            raise ValueError('strategi bluegreen memerlukan sparql_for (klien SPARQL per instance)')
         self.knowledge = knowledge
         self.admin = admin
         self.agent = agent
@@ -96,6 +113,8 @@ class Executor:
         self.obdf_id = obdf_id
         self.sleep = sleep
         self.jdbc = (teiid_jdbc_host, teiid_jdbc_port)
+        self.obda_strategy = obda_strategy
+        self.sparql_for = sparql_for
 
     # ── pelaporan ───────────────────────────────────────────────────────────────
     def _step(self, konteks: Konteks, seq: int, nama: str, status: str, mulai: float,
@@ -142,8 +161,8 @@ class Executor:
             'ontology_sha': ont['sha256'],
         }
 
-    def _verifikasi(self, konteks: Konteks) -> tuple[bool, dict]:
-        sesudah = self.sparql.fingerprint()
+    def _verifikasi(self, konteks: Konteks, sparql=None) -> tuple[bool, dict]:
+        sesudah = (sparql or self.sparql).fingerprint()
         sebelum = konteks.baseline
         pattern = konteks.plan.get('pattern')
         predikat = _predikat(konteks.plan)
@@ -192,6 +211,8 @@ class Executor:
                               versi_baru=artefak['vdb_version'],
                               deployment=f"{versi_aktif['teiid_vdb_name']}-{artefak['vdb_version']}-vdb.xml")
             mulai_total = time.perf_counter()
+            if self.obda_strategy == 'bluegreen':
+                return self._jalankan_bluegreen(konteks, artefak, mulai_total)
             self._deploy(konteks, artefak)
             self._tulis_dan_validasi(konteks, artefak)
             konteks.baseline = self.sparql.fingerprint()
@@ -294,16 +315,100 @@ class Executor:
         if not hasil.get('ok'):
             raise ExecutionError(f"muat ulang Ontop gagal: {hasil.get('error')}")
 
-    def _verify(self, konteks: Konteks) -> tuple[bool, dict]:
+    def _verify(self, konteks: Konteks, sparql=None, seq: int = 5,
+                **ekstra: Any) -> tuple[bool, dict]:
         mulai = time.perf_counter()
         try:
-            ok, rincian = self._verifikasi(konteks)
+            ok, rincian = self._verifikasi(konteks, sparql)
         except Exception as exc:                    # noqa: BLE001
             ok, rincian = False, {'error': str(exc)[:300]}
+        rincian.update(ekstra)
         self.knowledge.add_validation(konteks.execution_id, validator='sparql_regression',
                                       passed=ok, details=rincian)
-        self._step(konteks, 5, 'verify', 'succeeded' if ok else 'failed', mulai, **rincian)
+        self._step(konteks, seq, 'verify', 'succeeded' if ok else 'failed', mulai, **rincian)
         return ok, rincian
+
+    # ── blue-green lapisan OBDA (ADR-0022) ──────────────────────────────────────
+    def _jalankan_bluegreen(self, konteks: Konteks, artefak: dict, mulai_total: float) -> dict:
+        self._deploy(konteks, artefak)
+        siaga = self._siapkan_siaga(konteks, artefak)
+        konteks.baseline = self.sparql.fingerprint()            # instance aktif, lewat proxy
+        self._nyalakan_siaga(konteks)
+        ok, rincian = self._verify(konteks, sparql=self.sparql_for(siaga['standby_sparql_url']),
+                                   seq=4, instance=siaga['standby'])
+        if not ok:
+            return self._batalkan_siaga(konteks, rincian, mulai_total)
+        self._alihkan(konteks)
+        return self._selesai(konteks, mulai_total)
+
+    def _gagal_sebelum_peralihan(self, konteks: Konteks) -> None:
+        """Instance siaga dihentikan dan versi VDB baru dihapus; versi aktif tidak tersentuh."""
+        try:
+            self.agent.bluegreen_discard()
+        except Exception:                           # noqa: BLE001 — galat asal lebih penting
+            log.exception('instance siaga tidak dapat dihentikan')
+        self.admin.undeploy(konteks.deployment)
+
+    def _siapkan_siaga(self, konteks: Konteks, artefak: dict) -> dict:
+        mulai = time.perf_counter()
+        try:
+            siaga = self.agent.bluegreen_state()
+            self.agent.bluegreen_prepare(artefak['r2rml'], artefak['ontology'], konteks.versi_baru,
+                                         artefak['r2rml_sha'], artefak['ontology_sha'])
+            host, port = self.jdbc
+            hasil = self.agent.bluegreen_validate(f'jdbc:teiid:{konteks.vdb_name}@mm://{host}:{port}'
+                                                  f';version={konteks.versi_baru}')
+        except Exception as exc:                    # noqa: BLE001
+            self._gagal_sebelum_peralihan(konteks)
+            self._step(konteks, 2, 'validate', 'failed', mulai, error=str(exc)[:300])
+            raise ExecutionError(f'penulisan atau validasi artefak gagal: {exc}') from exc
+        self.knowledge.add_validation(konteks.execution_id, validator='ontop_validate',
+                                      passed=bool(hasil.get('ok')),
+                                      details={'exit_code': hasil.get('exit_code'),
+                                               'instance': siaga['standby'],
+                                               'output': (hasil.get('output') or '')[-1000:]})
+        if not hasil.get('ok'):
+            self._gagal_sebelum_peralihan(konteks)
+            self._step(konteks, 2, 'validate', 'failed', mulai, exit_code=hasil.get('exit_code'),
+                       instance=siaga['standby'])
+            raise ExecutionError('ontop validate menolak artefak baru',
+                                 {'output': (hasil.get('output') or '')[-500:]})
+        self._step(konteks, 2, 'validate', 'succeeded', mulai, exit_code=0,
+                   instance=siaga['standby'], vdb_version=konteks.versi_baru)
+        return siaga
+
+    def _nyalakan_siaga(self, konteks: Konteks) -> None:
+        mulai = time.perf_counter()
+        hasil = self.agent.bluegreen_start()
+        detail = {'instance': hasil.get('color'), 'error': hasil.get('error'),
+                  **(hasil.get('detail') or {})}
+        if not hasil.get('ok'):
+            self._gagal_sebelum_peralihan(konteks)
+            self._step(konteks, 3, 'start_ontop', 'failed', mulai, **detail)
+            raise ExecutionError(f"instance Ontop siaga tidak siap: {hasil.get('error')}")
+        self._step(konteks, 3, 'start_ontop', 'succeeded', mulai, **detail)
+
+    def _alihkan(self, konteks: Konteks) -> None:
+        mulai = time.perf_counter()
+        hasil = self.agent.bluegreen_switch()
+        if not hasil.get('ok'):                     # proxy tetap pada instance lama (agen)
+            self._gagal_sebelum_peralihan(konteks)
+            self._step(konteks, 5, 'switch', 'failed', mulai, error=hasil.get('error'))
+            raise ExecutionError(f"peralihan proxy gagal: {hasil.get('error')}")
+        self.admin.set_connection_type(konteks.vdb_name, konteks.versi_baru, 'ANY')
+        detail = hasil.get('detail') or {}
+        self._step(konteks, 5, 'switch', 'succeeded', mulai, connection_type='ANY',
+                   vdb_version=konteks.versi_baru, instance=hasil.get('color'),
+                   proxy_ms=detail.get('switch_ms'), retired=detail.get('retired'))
+
+    def _batalkan_siaga(self, konteks: Konteks, rincian: dict, mulai_total: float) -> dict:
+        mulai = time.perf_counter()
+        self._gagal_sebelum_peralihan(konteks)
+        self._step(konteks, 5, 'rollback', 'succeeded', mulai, alasan=rincian,
+                   dampak='tidak ada; lalu lintas tidak pernah dialihkan')
+        konteks.timings['total_ms'] = int((time.perf_counter() - mulai_total) * 1000)
+        return self._finish(konteks.execution_id, status='rolled_back', timings=konteks.timings,
+                            failure={'message': 'verifikasi gagal', **rincian})
 
     def _rollback(self, konteks: Konteks, rincian: dict, mulai_total: float) -> dict:
         mulai = time.perf_counter()

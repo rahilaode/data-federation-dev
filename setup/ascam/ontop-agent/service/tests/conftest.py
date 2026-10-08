@@ -18,8 +18,9 @@ class FakeRunner:
         self.calls = []
         self.result = result or CommandResult(True, 0, 'Validation completed', 1200)
 
-    def validate(self, db_url=None):
+    def validate(self, db_url=None, container_name=None):
         self.calls.append(db_url)
+        self.containers = getattr(self, 'containers', []) + [container_name]
         return self.result
 
 

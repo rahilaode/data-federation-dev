@@ -35,7 +35,8 @@ LABEL = {'a001': 'ADD, PostgreSQL (A001)', 'a004': 'ADD, MySQL (A004)',
          'a006': 'RENAME, PostgreSQL (A003)', 'a003': 'RENAME, MySQL (A006)'}
 
 # (label legenda, kunci di ringkasan.json, warna isi, arsiran); label diawali "_" = tanpa legenda
-KOMPONEN = [
+# Strategi restart (ADR-0001): Ontop tunggal dimuat ulang sesudah peralihan VDB.
+KOMPONEN_RESTART = [
     ('Detection', 'deteksi', '#ffffff', '////'),
     ('Ingestion and planning', 'jeda_turunan_median', '#e6e6e6', ''),
     ('Deploy / switch VDB', 'deploy_vdb', '#000000', ''),
@@ -44,6 +45,21 @@ KOMPONEN = [
     ('Restart Ontop', 'reload_ontop', '#595959', ''),
     ('Verify', 'verify', '#ffffff', '....'),
 ]
+# Strategi blue-green (ADR-0022): instance siaga dinyalakan dan diverifikasi sebelum peralihan.
+KOMPONEN_BLUEGREEN = [
+    ('Detection', 'deteksi', '#ffffff', '////'),
+    ('Ingestion and planning', 'jeda_turunan_median', '#e6e6e6', ''),
+    ('Deploy VDB', 'deploy_vdb', '#000000', ''),
+    ('Validate', 'validate', '#a6a6a6', ''),
+    ('Start standby Ontop', 'start_ontop', '#595959', ''),
+    ('Verify', 'verify', '#ffffff', '....'),
+    ('Switch', 'switch', '#d9d9d9', 'xxxx'),
+]
+
+
+def komponen_untuk(ringkasan: dict, kode: list[str]) -> list[tuple]:
+    bluegreen = any((ringkasan[k]['waktu_ms'].get('start_ontop') or {}) for k in kode)
+    return KOMPONEN_BLUEGREEN if bluegreen else KOMPONEN_RESTART
 
 
 def pilih_direktori() -> Path:
@@ -80,7 +96,7 @@ def main() -> int:
 
     label_y = [LABEL[k] for k in kode]
     kiri = [0.0] * len(kode)
-    for label, kunci, warna, arsir in KOMPONEN:
+    for label, kunci, warna, arsir in komponen_untuk(ringkasan, kode):
         nilai = [max(median_detik(ringkasan[k]['waktu_ms'], kunci), 0.0) for k in kode]
         ax.barh(label_y, nilai, left=kiri, color=warna, edgecolor='black', linewidth=0.5,
                 hatch=arsir, height=0.55, label=label)
@@ -108,7 +124,8 @@ def main() -> int:
         d = lambda n: median_detik(w, n)
         print(f"  {PAPER.get(k, k)}: total {d('dt_adapt'):.1f}; detection {d('deteksi'):.1f}; "
               f"ingestion and planning {d('jeda_turunan_median'):.1f}; validate {d('validate'):.1f}; "
-              f"restart Ontop {d('reload_ontop'):.1f}; verify {d('verify'):.1f}; "
+              f"restart Ontop {d('reload_ontop'):.1f}; start standby Ontop {d('start_ontop'):.1f}; "
+              f"verify {d('verify'):.1f}; "
               f"deploy and switch {d('deploy_vdb') + d('switch'):.2f}")
     print(f'Grafik ditulis ke {keluar.relative_to(ROOT)}/fig_adaptation_time.{{png,svg,pdf}}')
     return 0

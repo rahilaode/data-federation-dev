@@ -242,7 +242,7 @@ def test_reload_endpoint_uses_injected_docker(agent, artifacts_dir, monkeypatch)
     agent.app.state.docker = FakeDockerForReload(container)
     # endpoint SPARQL tiruan: reload akan gagal menunggu, tetapi restart tetap terjadi
     monkeypatch.setattr('ascam_ontop_agent.app.reload_ontop',
-                        lambda cfg, docker_client=None: __import__('ascam_ontop_agent.reloader',
+                        lambda cfg, docker_client=None, container_name=None: __import__('ascam_ontop_agent.reloader',
                                                                    fromlist=['ReloadResult'])
                         .ReloadResult(True, 800, 5200, 6000))
     body = agent.post('/api/v1/reload').json()

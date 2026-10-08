@@ -112,8 +112,10 @@ fi
 compose setup/data-federation/docker-compose.yaml up -d 2>&1 | sed 's/^/  /'
 tunggu "VDB government (ACTIVE)" 240 teiid_vdb_aktif
 
-compose setup/vkg-system/docker-compose.yaml up -d 2>&1 | sed 's/^/  /'
-tunggu "endpoint SPARQL Ontop" 180 sparql_siap
+# Blue-green lapisan OBDA (ADR-0022): slot yang sudah ada dipertahankan, sehingga instance
+# yang aktif setelah adaptasi terakhir tetap yang melayani.
+setup/vkg-system/up.sh 2>&1 | sed 's/^/  /'
+tunggu "endpoint SPARQL Ontop (lewat proxy)" 180 sparql_siap
 
 # ── 2. Kafka dan Debezium ─────────────────────────────────────────────────────
 judul "2) Kafka dan Debezium"

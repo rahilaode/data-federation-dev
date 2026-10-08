@@ -21,7 +21,9 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LANGKAH = ['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'sync']
+# restart (ADR-0001): ... switch, reload_ontop, verify; blue-green (ADR-0022): ... start_ontop,
+# verify, switch. Langkah yang tidak ada pada suatu strategi tercatat kosong.
+LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 'switch', 'sync']
 BATAS_DT = 60_000
 
 

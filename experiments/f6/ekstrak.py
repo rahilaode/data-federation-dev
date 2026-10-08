@@ -22,9 +22,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LANGKAH = ['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'sync']
-# Komponen Δt_adapt: dari DDL sampai verifikasi selesai (sync terjadi sesudah t_end)
-KOMPONEN_DT = ['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify']
+# restart (ADR-0001): ... switch, reload_ontop, verify; blue-green (ADR-0022): ... start_ontop,
+# verify, switch. Langkah yang tidak ada pada suatu strategi tercatat kosong.
+LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 'switch', 'sync']
+# Komponen Δt_adapt yang terukur (sync terjadi sesudah t_end); yang tidak ada diabaikan
+KOMPONEN_DT = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 'switch']
 OPERASI = {'a001': 'ADD', 'a002': 'DROP', 'a003': 'RENAME',
            'a004': 'ADD', 'a005': 'DROP', 'a006': 'RENAME'}
 SUMBER = {'a001': 'PostgreSQL', 'a002': 'PostgreSQL', 'a006': 'PostgreSQL',
@@ -121,11 +123,12 @@ def main() -> int:
                 **{n: statistik([(r.get('langkah') or {}).get(n) for r in ok]) for n in LANGKAH},
             }
             w = s['waktu_ms']
-            if w['dt_adapt'] and w['deteksi'] and all(w[n] for n in KOMPONEN_DT):
+            komponen = [n for n in KOMPONEN_DT if w.get(n)]
+            if w['dt_adapt'] and w['deteksi'] and komponen:
                 # Jeda deteksi -> awal eksekusi (ingestion, planning, pick-up), turunan dari median
                 s['waktu_ms']['jeda_turunan_median'] = (
                     w['dt_adapt']['median'] - w['deteksi']['median']
-                    - sum(w[n]['median'] for n in KOMPONEN_DT))
+                    - sum(w[n]['median'] for n in komponen))
             s['di_bawah_60s'] = sum(1 for r in ok if (r.get('dt_adapt_ms') or 1e9) < 60_000)
             rasio = [r['penilaian']['preservation_ratio'] for r in ok if r.get('penilaian')]
             s['preservation'] = {

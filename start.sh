@@ -62,6 +62,7 @@ git checkout -- setup/vkg-system/config/mapping.ttl setup/vkg-system/config/onto
 DEP=setup/data-federation/deployments
 rm -f "$DEP"/*.dodeploy "$DEP"/*.isdeploying "$DEP"/*.deployed "$DEP"/*.failed "$DEP"/*.undeployed "$DEP"/*.pending
 touch "$DEP"/government-vdb.xml.dodeploy && chmod 777 "$DEP"
+rm -rf setup/vkg-system/slots setup/vkg-system/proxy/runtime    # slot blue-green dibuat ulang (ADR-0022)
 
 langkah "4/9 sumber data (PostgreSQL, MySQL)"
 compose setup/data-source/docker-compose.yaml up -d >/dev/null
@@ -70,11 +71,11 @@ tunggu "PostgreSQL (init.sql)" 300 docker exec datasources-pgsql psql -U postgre
 tunggu "MySQL (init.sql)" 300 docker exec datasources-mysql sh -c \
   'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1 FROM dukcapil.ddl_event_log LIMIT 1"'
 
-langkah "5/9 Teiid dan Ontop"
+langkah "5/9 Teiid dan Ontop (proxy + instance aktif blue-green)"
 compose setup/data-federation/docker-compose.yaml up -d >/dev/null
 tunggu "VDB government (ACTIVE)" 300 teiid_aktif
-compose setup/vkg-system/docker-compose.yaml up -d >/dev/null
-tunggu "endpoint SPARQL" 240 curl -sf -G http://localhost:8080/sparql --data-urlencode 'query=ASK { ?s ?p ?o }'
+setup/vkg-system/up.sh --reset | sed 's/^/  /'
+tunggu "endpoint SPARQL (lewat proxy)" 240 curl -sf -G http://localhost:8080/sparql --data-urlencode 'query=ASK { ?s ?p ?o }'
 
 langkah "6/9 Kafka dan Debezium"
 compose setup/ascam/schema-monitor/docker-compose.yaml up -d >/dev/null

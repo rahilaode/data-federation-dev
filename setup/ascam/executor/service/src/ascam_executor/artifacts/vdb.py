@@ -74,6 +74,17 @@ def statement_alter_view(view: str, body: str) -> str:
     return f'ALTER VIEW {quote(view)} AS {isi};'
 
 
+def statements_recreate_view(view: str, body: str) -> list[str]:
+    """Cadangan bila Teiid menolak ALTER VIEW yang mengubah daftar kolom: view dihapus lalu
+    didefinisikan ulang (`DROP VIEW`, BNF *drop table*, teiid-documents hlm. 819). Tetap hanya
+    menambahkan pernyataan (ADR-0002); mode dipilih lewat ASCAM_EXEC_VIEW_STATEMENT."""
+    isi = statement_alter_view(view, body)[len(f'ALTER VIEW {quote(view)} AS '):]
+    return [f'DROP VIEW {quote(view)};', f'CREATE VIEW {quote(view)} AS {isi}']
+
+
+VIEW_STATEMENTS = ('alter', 'recreate')
+
+
 def _indentasi(teks: str) -> str:
     """Indentasi baris DDL yang sudah ada, agar pernyataan baru menyatu rapi."""
     for baris in teks.splitlines():
@@ -108,12 +119,16 @@ def next_version(xml: str) -> str:
 
 
 def apply_actions(xml: str, actions: list[dict], type_lookup=None,
-                  new_version: str | None = None) -> tuple[str, list[str]]:
+                  new_version: str | None = None,
+                  view_statement: str = 'alter') -> tuple[str, list[str]]:
     """Menerapkan tindakan rencana beraksi artefak `vdb`.
 
     `type_lookup(column_type)` memetakan tipe asli sumber ke tipe Teiid (dari Knowledge);
-    bila tidak diberikan, `column_type` dipakai apa adanya.
+    bila tidak diberikan, `column_type` dipakai apa adanya. `view_statement` menentukan bentuk
+    penyesuaian view: 'alter' (ALTER VIEW) atau 'recreate' (DROP VIEW lalu CREATE VIEW).
     """
+    if view_statement not in VIEW_STATEMENTS:
+        raise VdbError(f'bentuk pernyataan view tidak dikenal: {view_statement!r}')
     per_model: dict[str, list[str]] = {}
     for action in actions:
         operation = action['operation']
@@ -125,6 +140,9 @@ def apply_actions(xml: str, actions: list[dict], type_lookup=None,
             statement = statement_add_column(table, action['column'], tipe)
         elif operation == 'drop_column':
             statement = statement_drop_column(table, action['column'])
+        elif operation == 'alter_view' and view_statement == 'recreate':
+            per_model.setdefault(model, []).extend(statements_recreate_view(table, action['body']))
+            continue
         elif operation == 'alter_view':
             statement = statement_alter_view(table, action['body'])
         elif operation == 'set_name_in_source':

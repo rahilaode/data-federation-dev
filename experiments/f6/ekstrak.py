@@ -28,9 +28,13 @@ LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 's
 # Komponen Δt_adapt yang terukur (sync terjadi sesudah t_end); yang tidak ada diabaikan
 KOMPONEN_DT = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 'switch']
 OPERASI = {'a001': 'ADD', 'a002': 'DROP', 'a003': 'RENAME',
-           'a004': 'ADD', 'a005': 'DROP', 'a006': 'RENAME'}
+           'a004': 'ADD', 'a005': 'DROP', 'a006': 'RENAME',
+           'a007': 'DROP (view)', 'a008': 'DROP (view)', 'a009': 'DROP (ekspresi view)'}
 SUMBER = {'a001': 'PostgreSQL', 'a002': 'PostgreSQL', 'a006': 'PostgreSQL',
-          'a003': 'MySQL', 'a004': 'MySQL', 'a005': 'MySQL'}
+          'a003': 'MySQL', 'a004': 'MySQL', 'a005': 'MySQL',
+          'a007': 'PostgreSQL', 'a008': 'MySQL', 'a009': 'PostgreSQL'}
+# Hasil yang sah: 'ditolak' hanya terjadi pada skenario yang rencananya memang harus ditolak (A009)
+HASIL_SAH = {'succeeded', 'ditolak'}
 
 
 def statistik(nilai: list) -> dict | None:
@@ -69,7 +73,7 @@ def main() -> int:
     kolom = ['skenario', 'operasi', 'run', 'hasil', 'keputusan', 'pola', 'sesuai_harapan',
              'harapan_terpenuhi', 'n_manual', 'keputusan_ms', 'deteksi_ms', 'dt_adapt_ms',
              'dt_adapt_mesin_ms', 'adaptasi_ms', *[f'{n}_ms' for n in LANGKAH],
-             'metrik', 'preservation_ratio']
+             'metrik', 'preservation_ratio', 'ketersediaan_persen', 'selang_gagal_terpanjang_ms']
     with open(keluar / 'runs.csv', 'w', newline='', encoding='utf-8') as berkas:
         tulis = csv.DictWriter(berkas, fieldnames=kolom)
         tulis.writeheader()
@@ -87,6 +91,8 @@ def main() -> int:
                 'dt_adapt_mesin_ms': r.get('dt_adapt_mesin_ms'), 'adaptasi_ms': r.get('adaptasi_ms'),
                 **{f'{n}_ms': langkah.get(n) for n in LANGKAH},
                 'metrik': penilaian.get('metrik'), 'preservation_ratio': penilaian.get('preservation_ratio'),
+                'ketersediaan_persen': (r.get('ketersediaan') or {}).get('ketersediaan_persen'),
+                'selang_gagal_terpanjang_ms': (r.get('ketersediaan') or {}).get('selang_gagal_terpanjang_ms'),
             })
 
     # ── baseline.csv ──────────────────────────────────────────────────────────
@@ -108,7 +114,7 @@ def main() -> int:
     ringkasan = {'sumber': str(direktori.relative_to(ROOT)), 'skenario': {}}
     for kode in sorted({r['skenario'] for r in runs} | {r['skenario'] for r in baseline}):
         semua = [r for r in runs if r['skenario'] == kode]
-        ok = [r for r in semua if r.get('hasil') == 'succeeded']
+        ok = [r for r in semua if r.get('hasil') in HASIL_SAH]
         s = {'operasi': OPERASI.get(kode, kode), 'sumber': SUMBER.get(kode), 'run': len(semua),
              'berhasil': len(ok)}
         if semua:
@@ -135,8 +141,14 @@ def main() -> int:
                 'metrik': ok[0]['penilaian']['metrik'] if ok and ok[0].get('penilaian') else None,
                 'rata_rata': statistics.mean(rasio) if rasio else None,
                 'run_100': sum(1 for v in rasio if v == 100.0)}
+            sedia = [r['ketersediaan'] for r in semua if (r.get('ketersediaan') or {}).get('n_probe')]
+            s['ketersediaan'] = {
+                'run_tanpa_probe_gagal': sum(1 for k in sedia if k['n_gagal'] == 0),
+                'run_terpantau': len(sedia),
+                'persen': statistik([k['ketersediaan_persen'] for k in sedia]),
+                'selang_gagal_terpanjang_ms': statistik([k['selang_gagal_terpanjang_ms'] for k in sedia])}
             s['anomali'] = [{'run': r['run'], 'hasil': r.get('hasil')} for r in semua
-                            if r.get('hasil') != 'succeeded']
+                            if r.get('hasil') not in HASIL_SAH]
         dasar = [r for r in baseline if r['skenario'] == kode and r.get('penilaian')]
         if dasar:
             ep = [100 * sum(v['execution_preserved'] for v in r['penilaian']['per_kueri'].values())

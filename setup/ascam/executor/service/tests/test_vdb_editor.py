@@ -121,3 +121,25 @@ def test_alter_view_is_appended_to_the_view_model():
 def test_alter_view_rejects_empty_body():
     with pytest.raises(vdb.VdbError):
         vdb.statement_alter_view('profil', ' ; ')
+
+
+def test_recreate_view_mode_drops_then_creates():
+    """Cadangan F0.8: DROP VIEW lalu CREATE VIEW, tetap hanya menambahkan pernyataan."""
+    hasil, statements = vdb.apply_actions(VDB_VIEW, [
+        {'operation': 'drop_column', 'model': 'dukcapil', 'table': 'master_penduduk',
+         'column': 'pekerjaan'},
+        {'operation': 'alter_view', 'model': 'v', 'table': 'profil',
+         'body': 'SELECT p.nik FROM dukcapil.master_penduduk AS p;'},
+    ], new_version='2', view_statement='recreate')
+    assert statements[-2:] == ['DROP VIEW "profil";',
+                               'CREATE VIEW "profil" AS SELECT p.nik FROM dukcapil.master_penduduk AS p;']
+    model_v = [m for m in minidom.parseString(hasil).getElementsByTagName('model')
+               if m.getAttribute('name') == 'v'][0]
+    ddl = model_v.getElementsByTagName('metadata')[0].firstChild.data
+    assert 'CREATE VIEW profil AS SELECT p.nik, p.pekerjaan' in ddl
+    assert ddl.index('DROP VIEW "profil";') < ddl.index('CREATE VIEW "profil" AS SELECT p.nik FROM')
+
+
+def test_unknown_view_statement_mode_is_rejected():
+    with pytest.raises(vdb.VdbError):
+        vdb.apply_actions(VDB_VIEW, [], view_statement='replace')

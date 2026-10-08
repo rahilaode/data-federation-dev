@@ -49,6 +49,12 @@ bansos:PenerimaBansos
     rdfs:label          "Social Assistance Beneficiary"@en ;
     rdfs:comment        "Individu yang terdaftar sebagai penerima manfaat program bansos."@id .
 
+bansos:PenerimaAktif
+    a                   owl:Class ;
+    rdfs:subClassOf     bansos:PenerimaBansos ;
+    rdfs:label          "Penerima Manfaat Aktif"@id ;
+    rdfs:comment        "Penerima manfaat yang masih aktif; dibentuk dari view layanan.v_penerima_aktif."@id .
+
 bansos:Penduduk
     a                   owl:Class ;
     rdfs:label          "Penduduk"@id ;
@@ -206,6 +212,13 @@ bansos:periodeSelesai
     rdfs:label          "Periode Selesai"@id ;
     rdfs:domain         bansos:ProgramBansos ;
     rdfs:range          xsd:date .
+
+bansos:tahunBerakhir
+    a                   owl:DatatypeProperty ;
+    rdfs:label          "Tahun Berakhir Program"@id ;
+    rdfs:comment        "Tahun periode selesai program; dihitung oleh view layanan.v_program_berakhir."@id ;
+    rdfs:domain         bansos:ProgramBansos ;
+    rdfs:range          xsd:integer .
 
 
 # ================================================================

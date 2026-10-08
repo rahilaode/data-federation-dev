@@ -101,7 +101,7 @@ def _xsd_for(type_mappings: list[dict], native_type: str | None) -> str | None:
 class Executor:
     def __init__(self, knowledge, admin, agent, sparql, obdf_id: int, *, sleep=time.sleep,
                  teiid_jdbc_host: str = 'teiid', teiid_jdbc_port: int = 31000,
-                 obda_strategy: str = 'restart', sparql_for=None):
+                 obda_strategy: str = 'restart', sparql_for=None, view_statement: str = 'alter'):
         if obda_strategy not in ('restart', 'bluegreen'):
             raise ValueError(f'strategi OBDA tidak dikenal: {obda_strategy!r}')
         if obda_strategy == 'bluegreen' and sparql_for is None:
@@ -115,6 +115,7 @@ class Executor:
         self.jdbc = (teiid_jdbc_host, teiid_jdbc_port)
         self.obda_strategy = obda_strategy
         self.sparql_for = sparql_for
+        self.view_statement = view_statement
 
     # ── pelaporan ───────────────────────────────────────────────────────────────
     def _step(self, konteks: Konteks, seq: int, nama: str, status: str, mulai: float,
@@ -134,7 +135,8 @@ class Executor:
         versi_baru = vdb.next_version(xml)
         xml_baru, statements = vdb.apply_actions(xml, _actions(plan, 'vdb'),
                                                  type_lookup=_type_lookup(type_mappings),
-                                                 new_version=versi_baru)
+                                                 new_version=versi_baru,
+                                                 view_statement=self.view_statement)
         mapping = self.agent.artifact('r2rml')
         ont = self.agent.artifact('ontology')
         aksi_mapping = []

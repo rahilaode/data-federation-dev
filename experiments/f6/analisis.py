@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # verify, switch. Langkah yang tidak ada pada suatu strategi tercatat kosong.
 LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 'switch', 'sync']
 BATAS_DT = 60_000
+# Hasil yang sah: 'ditolak' hanya terjadi pada skenario yang rencananya memang harus ditolak (A009)
+HASIL_SAH = {'succeeded', 'ditolak'}
 
 
 def kuartil(nilai: list) -> str:
@@ -102,7 +104,7 @@ def main() -> int:
     print('|---|---:|---:|---:|---:|')
     for kode in skenario:
         runs = [r for r in perlakuan if r['skenario'] == kode]
-        ok = [r for r in runs if r.get('hasil') == 'succeeded']
+        ok = [r for r in runs if r.get('hasil') in HASIL_SAH]
         benar = sum(1 for r in runs if r.get('sesuai_harapan'))
         harapan = sum(1 for r in ok if r.get('harapan') and all(r['harapan'].values()))
         print(f'| {kode.upper()} | {len(runs)} | {len(ok)}/{len(runs)} | {benar}/{len(runs)} | '
@@ -140,7 +142,7 @@ def main() -> int:
           'N_manual keputusan | N_manual perbaikan |')
     print('|---|---:|---:|---:|---:|---:|---:|')
     for kode in skenario:
-        ok = [r for r in perlakuan if r['skenario'] == kode and r.get('hasil') == 'succeeded']
+        ok = [r for r in perlakuan if r['skenario'] == kode and r.get('hasil') in HASIL_SAH]
         dt = [r.get('dt_adapt_ms') for r in ok if r.get('dt_adapt_ms') is not None]
         mesin = [r.get('dt_adapt_mesin_ms') for r in ok if r.get('dt_adapt_mesin_ms') is not None]
         manual = sorted({r.get('n_manual', 0) for r in ok})
@@ -151,9 +153,27 @@ def main() -> int:
     print('| Skenario | Deteksi (ms) | ' + ' | '.join(LANGKAH) + ' |')
     print('|---|---:|' + '---:|' * len(LANGKAH))
     for kode in skenario:
-        ok = [r for r in perlakuan if r['skenario'] == kode and r.get('hasil') == 'succeeded']
+        ok = [r for r in perlakuan if r['skenario'] == kode and r.get('hasil') in HASIL_SAH]
         sel = [kuartil([(r.get('langkah') or {}).get(n) for r in ok]) for n in LANGKAH]
         print(f"| {kode.upper()} | {kuartil([r.get('deteksi_ms') for r in ok])} | " + ' | '.join(sel) + ' |')
+
+    # ── 4b. ketersediaan endpoint ────────────────────────────────────────────────
+    terpantau = [r for r in perlakuan if (r.get('ketersediaan') or {}).get('n_probe')]
+    if terpantau:
+        print('\n### Ketersediaan endpoint SPARQL selama adaptasi (ADR-0022)\n')
+        print('Probe berurutan setiap ±0,5 s dari DDL sampai eksekusi selesai, memakai kueri yang '
+              'tidak disentuh skenario mana pun.\n')
+        print('| Skenario | Run terpantau | Run tanpa probe gagal | Ketersediaan (median, min) | '
+              'Selang gagal terpanjang maks (ms) |')
+        print('|---|---:|---:|---:|---:|')
+        for kode in skenario:
+            k = [r['ketersediaan'] for r in terpantau if r['skenario'] == kode]
+            if not k:
+                continue
+            persen = [x['ketersediaan_persen'] for x in k]
+            print(f"| {kode.upper()} | {len(k)} | {sum(1 for x in k if x['n_gagal'] == 0)} | "
+                  f"{statistics.median(persen):.1f} % ({min(persen):.1f} %) | "
+                  f"{max(x['selang_gagal_terpanjang_ms'] for x in k)} |")
 
     # ── 5. semantic preservation ─────────────────────────────────────────────────
     print('\n## 5. Semantic preservation (§3.11.3)\n')
@@ -198,7 +218,7 @@ def main() -> int:
             print(f'| {kode.upper()} / B{kode[1:]} | {f(b)} | {f(ep)} | {f(rp)} |')
 
     # ── 7. anomali ───────────────────────────────────────────────────────────────
-    anomali = [r for r in perlakuan if r.get('hasil') != 'succeeded' or not r.get('sesuai_harapan')
+    anomali = [r for r in perlakuan if r.get('hasil') not in HASIL_SAH or not r.get('sesuai_harapan')
                or not (r.get('harapan') and all(r['harapan'].values()))]
     print(f'\n## 7. Anomali ({len(anomali)} dari {len(perlakuan)} run perlakuan)\n')
     for r in anomali:

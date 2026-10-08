@@ -31,6 +31,9 @@ class Settings:
     # 'bluegreen' (ADR-0022): Ontop siaga diverifikasi sebelum lalu lintas dialihkan.
     # 'restart' (ADR-0001): Ontop tunggal di-restart di tempat, rancangan sebelum ADR-0022.
     obda_strategy: str = os.getenv('ASCAM_EXEC_OBDA_STRATEGY', 'bluegreen')
+    # Bentuk penyesuaian view (ADR-0023): 'alter' (ALTER VIEW) atau 'recreate' (DROP VIEW lalu
+    # CREATE VIEW), dipilih berdasarkan hasil uji kelayakan F0.8 pada Teiid 16.
+    view_statement: str = os.getenv('ASCAM_EXEC_VIEW_STATEMENT', 'alter')
 
     def knowledge_token(self) -> str:
         if not self.token_file:

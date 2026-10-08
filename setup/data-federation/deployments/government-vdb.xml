@@ -23,7 +23,8 @@
                   tanggal_lahir date not null,
                   pekerjaan varchar(100) not null,
                   penghasilan integer not null,
-                  status_hidup varchar(20) not null
+                  status_hidup varchar(20) not null,
+                  created_at timestamp
                  )OPTIONS(UPDATABLE 'FALSE');
             ]]></metadata>   
     </model>
@@ -35,7 +36,9 @@
                   program_id integer not null primary key,
                   nama_program varchar(100) not null,
                   tipe_program varchar(50) not null,
-                  nominal integer not null
+                  nominal integer not null,
+                  periode_mulai date,
+                  periode_selesai date
                 )OPTIONS(UPDATABLE 'FALSE');
 
                 CREATE FOREIGN TABLE penerima_manfaat(
@@ -64,5 +67,23 @@
                   alasan varchar(255)
                 )OPTIONS(UPDATABLE 'FALSE');
             ]]></metadata>                
+    </model>
+
+    <!-- Lapisan layanan: view yang dibaca mapping (skenario A007-A009, ADR-0023).
+         Kolomnya dipilih yang tidak disentuh skenario A001-A006. -->
+    <model visible="true" type="VIRTUAL" name="layanan">
+        <metadata type="DDL"><![CDATA[
+                CREATE VIEW v_penerima_aktif AS
+                  SELECT penerima_id, no_kartu_keluarga
+                  FROM kemensos.penerima_manfaat WHERE aktif = TRUE;
+
+                CREATE VIEW v_penduduk_tercatat AS
+                  SELECT nik, created_at AS waktu_pencatatan
+                  FROM dukcapil.master_penduduk;
+
+                CREATE VIEW v_program_berakhir AS
+                  SELECT program_id, YEAR(periode_selesai) AS tahun_berakhir
+                  FROM kemensos.program_bansos;
+            ]]></metadata>
     </model>
 </vdb>

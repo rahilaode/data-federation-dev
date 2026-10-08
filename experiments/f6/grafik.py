@@ -27,12 +27,14 @@ from matplotlib import rcParams  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 # dari bawah ke atas; pasangan PostgreSQL/MySQL tiap operator berdampingan, ADD paling atas
-URUTAN = ['a003', 'a006', 'a005', 'a002', 'a004', 'a001']
+URUTAN = ['a008', 'a007', 'a003', 'a006', 'a005', 'a002', 'a004', 'a001']
 # Penomoran paper: A001-A003 PostgreSQL, A004-A006 MySQL, sehingga harness a006 = A003 dan a003 = A006.
 PAPER = {'a001': 'A001', 'a002': 'A002', 'a006': 'A003', 'a004': 'A004', 'a005': 'A005', 'a003': 'A006'}
 LABEL = {'a001': 'ADD, PostgreSQL (A001)', 'a004': 'ADD, MySQL (A004)',
          'a002': 'DROP, PostgreSQL (A002)', 'a005': 'DROP, MySQL (A005)',
-         'a006': 'RENAME, PostgreSQL (A003)', 'a003': 'RENAME, MySQL (A006)'}
+         'a006': 'RENAME, PostgreSQL (A003)', 'a003': 'RENAME, MySQL (A006)',
+         'a007': 'DROP via view, PostgreSQL (A007)', 'a008': 'DROP via view, MySQL (A008)'}
+# A009 tidak digambar: rencananya ditolak sehingga tidak memiliki Δt_adapt.
 
 # (label legenda, kunci di ringkasan.json, warna isi, arsiran); label diawali "_" = tanpa legenda
 # Strategi restart (ADR-0001): Ontop tunggal dimuat ulang sesudah peralihan VDB.
@@ -85,7 +87,8 @@ def main() -> int:
     if not berkas.exists():
         sys.exit(f'{berkas.relative_to(ROOT)} belum ada; jalankan ekstrak.py lebih dulu')
     ringkasan = json.loads(berkas.read_text())['skenario']
-    kode = [k for k in URUTAN if k in ringkasan and ringkasan[k].get('berhasil')]
+    kode = [k for k in URUTAN if k in ringkasan and ringkasan[k].get('berhasil')
+            and (ringkasan[k].get('waktu_ms') or {}).get('dt_adapt')]
     if not kode:
         sys.exit('tidak ada skenario perlakuan yang berhasil untuk digambar')
 

@@ -36,7 +36,8 @@ def main() -> int:
     # Pada kondisi dasar, pemulihan tidak boleh mengirim DDL dan harus mengembalikan 'bersih';
     # selain itu harness menunggu event pemulihan yang tidak akan pernah datang.
     kondisi_dasar = {'email': '0', 'tipe_program': '1', 'tgl_lahir_ktp': '0',
-                     'kode_pos': '0', 'status_hidup': '1', 'judul_program': '0'}
+                     'kode_pos': '0', 'status_hidup': '1', 'judul_program': '0',
+                     'no_kartu_keluarga': '1', 'created_at': '1', 'periode_selesai': '1'}
     for kode, sk in skenario.SKENARIO.items():
         perintah: list[str] = []
 
@@ -58,7 +59,8 @@ def main() -> int:
     # Sebaliknya, setelah perlakuan pemulihan HARUS menjalankan DDL dan tidak boleh terbaca sebagai
     # "tidak ada perubahan", termasuk ketika klien (seperti MySQL) tidak mencetak apa pun.
     kondisi_perlakuan = {'email': '1', 'tipe_program': '0', 'tgl_lahir_ktp': '1',
-                         'kode_pos': '1', 'status_hidup': '0', 'judul_program': '1'}
+                         'kode_pos': '1', 'status_hidup': '0', 'judul_program': '1',
+                         'no_kartu_keluarga': '0', 'created_at': '0', 'periode_selesai': '0'}
     for kode, sk in skenario.SKENARIO.items():
         perintah = []
 
@@ -116,7 +118,8 @@ def main() -> int:
             if pola != 'P-001':
                 rusak[terdampak] = gagal('kolom tidak ada')
             (sementara / f'baseline-{kode}-01.json').write_text(json.dumps({
-                'mode': 'baseline', 'skenario': kode, 'judul': kode, 'run': 1,
+                'mode': 'baseline', 'skenario': kode, 'kode_baseline': 'b' + kode[1:],
+                'judul': kode, 'run': 1,
                 'jawaban_sebelum': sebelum, 'jawaban_sesudah': rusak,
                 'penilaian': kueri.nilai(kode, sebelum, rusak), 'artefak_tidak_berubah': True}))
             sesudah = dict(sebelum)
@@ -124,21 +127,35 @@ def main() -> int:
                 sesudah[terdampak] = ok(3, 'e')
             if pola == 'P-002':
                 sesudah[terdampak] = ok(0)
+            ditolak = not skenario.SKENARIO[kode].setujui
+            if ditolak:                                 # A009: rencana ditolak, view tetap rusak
+                sesudah = dict(rusak)
             penilaian = kueri.nilai(kode, sebelum, sesudah)
             harapan = kueri.sesuai_harapan(kode, sesudah, penilaian)
             assert all(harapan.values()), (kode, harapan)
             (sementara / f'run-{kode}-01.json').write_text(json.dumps({
-                'mode': 'perlakuan', 'skenario': kode, 'judul': kode, 'run': 1, 'hasil': 'succeeded',
+                'mode': 'perlakuan', 'skenario': kode, 'judul': kode, 'run': 1,
+                'hasil': 'ditolak' if ditolak else 'succeeded',
+                'ketersediaan': {'n_probe': 10, 'n_gagal': 0, 'ketersediaan_persen': 100.0,
+                                 'selang_gagal_terpanjang_ms': 0, 'jeda_probe_s': 0.5},
                 'keputusan': skenario.SKENARIO[kode].keputusan, 'pola': skenario.SKENARIO[kode].pola,
                 'sesuai_harapan': True, 'n_manual': 0, 'keputusan_ms': 0, 'deteksi_ms': 1,
-                'dt_adapt_ms': 1, 'dt_adapt_mesin_ms': 1, 'langkah': {'validate': 1},
+                'dt_adapt_ms': None if ditolak else 1, 'dt_adapt_mesin_ms': None if ditolak else 1,
+                'langkah': {} if ditolak else {'validate': 1},
                 'jawaban_sebelum': sebelum, 'jawaban_sesudah': sesudah, 'penilaian': penilaian,
                 'harapan': harapan}))
         hasil = subprocess.run([sys.executable, str(F6 / 'analisis.py'), str(sementara)],
                                capture_output=True, text=True)
         assert hasil.returncode == 0, hasil.stderr
-        for bagian in ('## 1.', '## 2.', '## 4.', '## 5.', '## 6.', '## 7.'):
+        for bagian in ('## 1.', '## 2.', '## 4.', '### Ketersediaan', '## 5.', '## 6.', '## 7.'):
             assert bagian in hasil.stdout, f'bagian {bagian} tidak muncul'
+        assert 'Tidak ada.' in hasil.stdout.split('## 7.')[1], hasil.stdout.split('## 7.')[1][:600]
+        hasil = subprocess.run([sys.executable, str(F6 / 'ekstrak.py'), str(sementara)],
+                               capture_output=True, text=True)
+        assert hasil.returncode == 0, hasil.stderr
+        ringkas = json.loads((sementara / 'ringkasan' / 'ringkasan.json').read_text())['skenario']
+        assert all(v['berhasil'] == 1 for v in ringkas.values()), ringkas
+        print('ekstrak.py menghitung run yang ditolak (A009) sebagai hasil sah')
         print('analisis berjalan ujung ke ujung atas hasil tiruan; harapan teoretis terpenuhi')
     finally:
         shutil.rmtree(sementara, ignore_errors=True)

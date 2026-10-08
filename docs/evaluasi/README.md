@@ -174,3 +174,38 @@ masing menunggu event pemulihannya sendiri, dan mencatat skenario yang dipulihka
 (`skenario_dipulihkan`). `analisis.py` melaporkan run yang kuerinya sudah gagal sebelum DDL
 (bagian 8), karena kondisi awal setiap run harus bersih. Direktori hasil yang tercemar disimpan
 sebagai jejak, tetapi tidak dipakai untuk paper.
+
+## Skenario view (A007–A009, ADR-0023)
+
+Studi kasus diberi model virtual `layanan` berisi tiga view yang dibaca TriplesMap baru.
+Kolomnya dipilih yang **tidak disentuh A001–A006** dan tidak dibaca TriplesMap lain, sehingga
+dampak yang teramati hanya berasal dari jalur lewat view dan enam skenario lama tidak berubah.
+Ketiga property (`noKartuKeluarga`, `createdAt`, `tahunBerakhir`) sudah atau baru ditambahkan
+pada ontologi; `createdAt` dan `periode_selesai` juga ditambahkan ke foreign table VDB karena
+kolom itu ada di sumber tetapi sebelumnya tidak dideklarasikan.
+
+| Skenario | View | Perubahan | DBMS | Keputusan yang diharapkan |
+|---|---|---|---|---|
+| A007 | `v_penerima_aktif`: `SELECT penerima_id, no_kartu_keluarga … WHERE aktif = TRUE` | `DROP COLUMN no_kartu_keluarga` | PostgreSQL | otomatis: proyeksi view dikecilkan, proyeksi eksplisit mapping ditulis ulang |
+| A008 | `v_penduduk_tercatat`: `SELECT nik, created_at AS waktu_pencatatan …` | `DROP COLUMN created_at` | MySQL | otomatis: kolom beralias dibuang dari view; mapping `SELECT *` atas view |
+| A009 | `v_program_berakhir`: `SELECT program_id, YEAR(periode_selesai) AS tahun_berakhir …` | `DROP COLUMN periode_selesai` | PostgreSQL | HITL dengan alasan "dipakai dalam ekspresi … layanan.v_program_berakhir" |
+
+A009 adalah kontrol negatif. Rencananya tidak lengkap (definisi view harus dibuat ulang manusia),
+sehingga evaluator **menolak** rencana alih-alih menyetujuinya; harness mencatat bahwa tidak ada
+eksekusi, versi OBDF tidak berubah, dan kueri terdampak tetap gagal seperti baseline. Keputusan
+dinilai sesuai hanya bila alasan HITL memuat teks yang dirancang (`alasan_memuat`), bukan sekadar
+`decision = hitl`. Pada data contoh, kesepuluh baris `penerima_manfaat` bernilai `aktif = TRUE`,
+sehingga `WHERE aktif = TRUE` pada A007 tidak menyaring baris; klausa itu ada untuk memastikan
+kolom WHERE view tetap diperlakukan sebagai HITL (diuji di Knowledge, bukan di evaluasi).
+
+**Prasyarat: uji kelayakan F0.8.** Reference Guide Teiid menyatakan `ALTER VIEW` tidak boleh
+mengubah informasi kolom (teiid-documents, *Schema object DDL*, hlm. 356–357). Sebelum evaluasi,
+`./experiments/f0/f0_8.sh` memeriksa pada VDB uji terpisah apakah Teiid 16 menerima
+`ALTER VIEW` yang mengecilkan proyeksi, dan bila tidak, apakah `DROP VIEW` lalu `CREATE VIEW`
+diterima. Hasilnya menentukan `ASCAM_EXEC_VIEW_STATEMENT` (`alter` atau `recreate`) pada Executor.
+
+**Ketersediaan endpoint.** Setiap run perlakuan kini menjalankan probe berurutan setiap ±0,5 s
+dari DDL sampai eksekusi selesai, dengan kueri yang tidak disentuh skenario mana pun
+(`TransaksiBansos`). Dicatat persentase probe berhasil dan selang gagal terpanjang (dari probe
+gagal pertama sampai probe berhasil berikutnya), untuk menguji klaim ADR-0022 bahwa adaptasi
+tidak memutus endpoint.

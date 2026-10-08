@@ -23,6 +23,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -154,6 +155,47 @@ def siapkan(kode: str) -> dict:
             'versi_dasar': versi[0]['version_no'] if isinstance(versi, list) and versi else None}
 
 
+class PemantauKetersediaan(threading.Thread):
+    """Mengirim kueri ringan ke endpoint SPARQL secara berkala selama adaptasi.
+
+    Mengukur klaim ADR-0022 bahwa endpoint tidak terputus oleh adaptasi: setiap probe dicatat
+    berhasil atau gagal, lalu diringkas sebagai persentase probe berhasil dan selang gagal
+    terpanjang. Probe berjalan berurutan (bukan paralel), jadi beban tambahan pada Ontop kecil."""
+
+    def __init__(self, jeda: float = 0.5, batas: float = 5.0):
+        super().__init__(daemon=True)
+        self.jeda, self.batas = jeda, batas
+        self.probe: list[tuple[float, bool]] = []
+        self._berhenti = threading.Event()
+
+    def run(self) -> None:
+        mulai = time.perf_counter()
+        while not self._berhenti.is_set():
+            hasil = kueri.jalankan(kueri.KETERSEDIAAN, batas=self.batas)
+            self.probe.append((time.perf_counter() - mulai, bool(hasil['ok'])))
+            self._berhenti.wait(self.jeda)
+
+    def ringkasan(self) -> dict:
+        self._berhenti.set()
+        self.join(timeout=self.batas + 2)
+        # Selang gagal diukur dari probe gagal pertama sampai probe berhasil berikutnya (batas
+        # atas lama endpoint tidak menjawab); selang yang belum pulih dihitung sampai probe terakhir.
+        gagal, terpanjang, awal = 0, 0.0, None
+        for t, ok in self.probe:
+            if not ok:
+                gagal += 1
+                awal = t if awal is None else awal
+            elif awal is not None:
+                terpanjang, awal = max(terpanjang, t - awal), None
+        if awal is not None:
+            terpanjang = max(terpanjang, self.probe[-1][0] - awal)
+        n = len(self.probe)
+        return {'n_probe': n, 'n_gagal': gagal,
+                'ketersediaan_persen': round(100.0 * (n - gagal) / n, 2) if n else None,
+                'selang_gagal_terpanjang_ms': int(terpanjang * 1000),
+                'jeda_probe_s': self.jeda}
+
+
 class PersiapanGagal(RuntimeError):
     """Pemulihan tidak terdeteksi monitor: cuplikan monitor tidak sejalan dengan OBDF yang direset,
     sehingga run ini dan run sesudahnya tidak sahih."""
@@ -197,9 +239,20 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
     eksekusi_awal = {e['id'] for e in api('/api/v1/obdf/1/executions?limit=50')}
     kendali('resume')
 
+    pemantau = PemantauKetersediaan()
+    pemantau.start()
     t0_wall = datetime.now(timezone.utc).isoformat()
     t0 = time.perf_counter()
     catatan['t_start'] = t0_wall
+    try:
+        return _perlakuan_berjalan(sk, catatan, t0, t0_wall, event_awal, eksekusi_awal, batas)
+    finally:
+        catatan['ketersediaan'] = pemantau.ringkasan()
+
+
+def _perlakuan_berjalan(sk, catatan: dict, t0: float, t0_wall: str, event_awal: set,
+                        eksekusi_awal: set, batas: float) -> dict:
+    kode = sk.kode
     catatan['ddl'] = sk.terapkan()
 
     event = tunggu(lambda: next((e for e in api('/api/v1/obdf/1/events?limit=20')
@@ -214,10 +267,18 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
     catatan['keputusan'] = rencana['decision'] if rencana else None
     catatan['pola'] = rencana['pattern'] if rencana else None
     catatan['sesuai_harapan'] = catatan['keputusan'] == sk.keputusan and catatan['pola'] == sk.pola
+    catatan['alasan'] = rencana['reasons'] if rencana else None
+    if sk.alasan_memuat:
+        # keputusan HITL harus muncul karena alasan yang dirancang, bukan alasan lain
+        catatan['alasan_sesuai'] = any(all(p in str(r) for p in sk.alasan_memuat)
+                                       for r in (catatan['alasan'] or []))
+        catatan['sesuai_harapan'] = catatan['sesuai_harapan'] and catatan['alasan_sesuai']
 
     # HITL (ADR-0021): satu persetujuan = satu keputusan manual; penyuntingan artefak tetap nol
     catatan['n_manual'] = 0
     catatan['keputusan_ms'] = 0
+    if rencana and rencana['status'] == 'pending_approval' and not sk.setujui:
+        return _tolak(sk, catatan, rencana, eksekusi_awal)
     if rencana and rencana['status'] == 'pending_approval':
         t_rencana = time.perf_counter()
         hasil = api(f"/api/v1/plans/{rencana['id']}/approve", 'POST',
@@ -253,6 +314,32 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
     catatan['jawaban_sesudah'] = kueri.jalankan_himpunan(kode)
     catatan['penilaian'] = kueri.nilai(kode, catatan['jawaban_sebelum'], catatan['jawaban_sesudah'])
     catatan['harapan'] = kueri.sesuai_harapan(kode, catatan['jawaban_sesudah'], catatan['penilaian'])
+    catatan['selesai'] = datetime.now(timezone.utc).isoformat()
+    return catatan
+
+
+def _tolak(sk, catatan: dict, rencana: dict, eksekusi_awal: set, amati: float = 20.0) -> dict:
+    """Rencana yang tidak lengkap ditolak evaluator (A009): view harus didefinisikan ulang oleh
+    administrator, bukan disetujui apa adanya. Dicatat bahwa tidak ada eksekusi yang berjalan dan
+    versi OBDF tidak berubah; kueri sesudahnya menunjukkan kondisi yang harus ditangani manusia."""
+    kode = sk.kode
+    hasil = api(f"/api/v1/plans/{rencana['id']}/reject", 'POST',
+                {'note': 'rencana tidak lengkap: view harus didefinisikan ulang administrator '
+                         '(protokol F6)'})
+    catatan['n_manual'] = 1
+    catatan['ditolak_oleh'] = hasil.get('decided_by')
+    time.sleep(amati)                               # beri kesempatan bila Executor keliru mengeksekusi
+    baru = [e for e in api('/api/v1/obdf/1/executions?limit=10') if e['id'] not in eksekusi_awal]
+    versi = api('/api/v1/obdf/1/versions?limit=1')
+    catatan['eksekusi_baru'] = [{'id': e['id'], 'status': e['status']} for e in baru]
+    catatan['versi_sesudah'] = versi[0]['version_no'] if isinstance(versi, list) and versi else None
+    catatan['hasil'] = 'ditolak' if not baru else 'dieksekusi_meski_ditolak'
+    catatan['adaptasi_ms'] = catatan['dt_adapt_ms'] = catatan['dt_adapt_mesin_ms'] = None
+    catatan['jawaban_sesudah'] = kueri.jalankan_himpunan(kode)
+    catatan['penilaian'] = kueri.nilai(kode, catatan['jawaban_sebelum'], catatan['jawaban_sesudah'])
+    catatan['harapan'] = {**kueri.sesuai_harapan(kode, catatan['jawaban_sesudah'], catatan['penilaian']),
+                          'tidak_dieksekusi': not baru,
+                          'versi_tidak_berubah': catatan['versi_sesudah'] == catatan.get('versi_dasar')}
     catatan['selesai'] = datetime.now(timezone.utc).isoformat()
     return catatan
 

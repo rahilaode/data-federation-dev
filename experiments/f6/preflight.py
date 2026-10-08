@@ -109,6 +109,17 @@ def periksa(diam: bool = False) -> tuple[bool, list[str]]:
     if agen.get('status') != 'ok':
         masalah.append('agen Ontop tidak sehat')
 
+    # Studi kasus view (A007-A009): predikat yang dibentuk dari view model `layanan` harus terjawab
+    # pada kondisi dasar. Bila tidak, OBDF berjalan dengan VDB/mapping lama: jalankan start.sh.
+    import kueri
+    for skenario_view in ('a007', 'a008', 'a009'):
+        nama = kueri.terdampak(skenario_view)
+        hasil = kueri.jalankan(kueri.Q[skenario_view][nama][1], batas=60)
+        lapor(f"  view {skenario_view} ({nama}): HTTP {hasil['status']} baris={hasil['n']}")
+        if not hasil['ok'] or not hasil['n']:
+            masalah.append(f'kueri dasar {skenario_view} ({nama}) tidak menghasilkan baris; '
+                           'view studi kasus belum termuat (jalankan start.sh)')
+
     versi = http(KNOWLEDGE, '/api/v1/obdf/1/versions?limit=1', token('knowledge_api_tokens', 'ui'))
     if isinstance(versi, list) and versi:
         lapor(f"  knowledge: versi aktif {versi[0]['version_no']} "

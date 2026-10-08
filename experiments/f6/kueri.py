@@ -84,7 +84,37 @@ Q = {
                                             '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
         **KONTROL,
     },
+    # A007-A009: kueri terdampak membaca predikat yang dibentuk dari VIEW; kueri tetangga membaca
+    # tabel dasar yang sama (A008, A009) atau kolom lain dari view yang sama (A007).
+    'a007': {
+        'nokk_penerima_aktif': ('terdampak', B + 'SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; '
+                                            'bansos:noKartuKeluarga ?kk } ORDER BY ?p'),
+        'penerima_aktif': ('tetangga', B + 'SELECT ?p WHERE { ?p a bansos:PenerimaAktif } ORDER BY ?p'),
+        'tautan_penduduk': ('kontrol', B + 'SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } '
+                                       'ORDER BY ?p'),
+        **KONTROL,
+    },
+    'a008': {
+        'waktu_pencatatan': ('terdampak', B + 'SELECT ?s ?t WHERE { ?s bansos:createdAt ?t } ORDER BY ?s'),
+        'nama_pekerjaan': ('tetangga', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
+                                       'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
+        'keluarga_wilayah': ('kontrol', B + 'SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k'),
+        **KONTROL,
+    },
+    'a009': {
+        'tahun_berakhir': ('terdampak', B + 'SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th } '
+                                        'ORDER BY ?p'),
+        'nama_program': ('tetangga', B + 'SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; '
+                                     'bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p'),
+        'transaksi_program': ('kontrol', B + 'SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } '
+                                         'ORDER BY ?t'),
+        **KONTROL,
+    },
 }
+
+# Kueri ringan untuk pemantauan ketersediaan endpoint selama adaptasi: tabel transaksi_bansos
+# tidak disentuh skenario mana pun, sehingga kegagalannya berarti endpoint tidak tersedia.
+KETERSEDIAAN = B + 'SELECT ?t WHERE { ?t a bansos:TransaksiBansos } LIMIT 1'
 
 
 def pola(kode: str) -> str:
@@ -152,7 +182,14 @@ def nilai(kode: str, sebelum: dict, sesudah: dict) -> dict:
 
 def sesuai_harapan(kode: str, sesudah: dict, penilaian: dict) -> dict:
     """Harapan teoretis skenario perlakuan menurut polanya (proposal §3.10.2, hlm. 104)."""
+    from skenario import SKENARIO
     q = sesudah.get(terdampak(kode)) or {}
+    if not SKENARIO[kode].setujui:
+        # Rencana ditolak: OBDF tidak berubah, sehingga kueri yang melewati view rusak tetap gagal
+        # sampai administrator mendefinisikan ulang view (perilaku sama dengan baseline). Kueri
+        # lain dicatat di `penilaian` tanpa harapan: bergantung pada apakah Teiid memangkas
+        # kolom view yang tidak diminta sebelum push-down.
+        return {'kueri_terdampak_gagal': not q.get('ok')}
     if pola(kode) == 'P-001':
         return {'kueri_lama_valid': all(v['execution_preserved'] for n, v in penilaian['per_kueri'].items()
                                         if n != terdampak(kode)),

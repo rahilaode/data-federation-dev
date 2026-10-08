@@ -47,6 +47,12 @@ class Skenario:
     catatan: str = ''
     # Mengisi data pada kolom baru agar "kueri baru mengembalikan hasil" dapat diuji (A001)
     isi_data: Callable[[], str] | None = None
+    # Tindakan evaluator bila rencana menunggu persetujuan: True = disetujui (A001, A004),
+    # False = ditolak karena rencana tidak lengkap dan view harus didefinisikan ulang manusia (A009)
+    setujui: bool = True
+    # Potongan teks yang harus muncul pada alasan HITL (memeriksa alasan, bukan hanya keputusan)
+    alasan_memuat: tuple[str, ...] = ()
+    view: str | None = None             # view Teiid yang dilalui kolom (A007-A009)
 
 
 # ── A001: kolom baru pada sumber PostgreSQL ────────────────────────────────────
@@ -164,6 +170,83 @@ def a006_pulihkan() -> str:
     return 'dipulihkan: ' + pg('ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program')
 
 
+# ── A007-A009: kolom yang dibaca mapping LEWAT VIEW Teiid (model layanan, ADR-0023) ──
+def _pg_ada(tabel: str, kolom: str) -> bool:
+    return pg("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' "
+              f"AND table_name='{tabel}' AND column_name='{kolom}'") == '1'
+
+
+def _my_ada(tabel: str, kolom: str) -> bool:
+    return my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
+              f"AND table_name='{tabel}' AND column_name='{kolom}'").strip() == '1'
+
+
+# A007: pass-through view pada PostgreSQL; kolom tidak dibaca TriplesMap lain
+def a007_siapkan() -> str:
+    if not _pg_ada('penerima_manfaat', 'no_kartu_keluarga'):
+        return 'kolom belum dipulihkan; cadangan tidak dibuat ulang'
+    return pg('CREATE TABLE IF NOT EXISTS public.ascam_cadangan_no_kk AS '
+              'SELECT penerima_id, no_kartu_keluarga FROM public.penerima_manfaat')
+
+
+def a007_terapkan() -> str:
+    return pg('ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga')
+
+
+def a007_pulihkan() -> str:
+    if _pg_ada('penerima_manfaat', 'no_kartu_keluarga'):
+        return 'bersih'
+    pg('ALTER TABLE public.penerima_manfaat ADD COLUMN no_kartu_keluarga CHAR(16)')
+    pg('UPDATE public.penerima_manfaat p SET no_kartu_keluarga = c.no_kartu_keluarga '
+       'FROM public.ascam_cadangan_no_kk c WHERE c.penerima_id = p.penerima_id')
+    return 'dipulihkan: ' + pg('SELECT count(*) FROM public.penerima_manfaat '
+                               'WHERE no_kartu_keluarga IS NOT NULL')
+
+
+# A008: view dengan alias (created_at AS waktu_pencatatan) pada MySQL
+def a008_siapkan() -> str:
+    if not _my_ada('master_penduduk', 'created_at'):
+        return 'kolom belum dipulihkan; cadangan tidak dibuat ulang'
+    return my('CREATE TABLE IF NOT EXISTS ascam_cadangan_created_at AS '
+              'SELECT nik, created_at FROM master_penduduk')
+
+
+def a008_terapkan() -> str:
+    return my('ALTER TABLE master_penduduk DROP COLUMN created_at')
+
+
+def a008_pulihkan() -> str:
+    if _my_ada('master_penduduk', 'created_at'):
+        return 'bersih'
+    my('ALTER TABLE master_penduduk ADD COLUMN created_at DATETIME DEFAULT NOW()')
+    my('UPDATE master_penduduk p JOIN ascam_cadangan_created_at c ON c.nik = p.nik '
+       'SET p.created_at = c.created_at')
+    return 'dipulihkan: ' + my('SELECT count(*) FROM master_penduduk p JOIN ascam_cadangan_created_at c '
+                               'ON c.nik = p.nik WHERE p.created_at = c.created_at')
+
+
+# A009: kolom dipakai di dalam ekspresi view (YEAR(periode_selesai)); kontrol negatif
+def a009_siapkan() -> str:
+    if not _pg_ada('program_bansos', 'periode_selesai'):
+        return 'kolom belum dipulihkan; cadangan tidak dibuat ulang'
+    return pg('CREATE TABLE IF NOT EXISTS public.ascam_cadangan_periode_selesai AS '
+              'SELECT program_id, periode_selesai FROM public.program_bansos')
+
+
+def a009_terapkan() -> str:
+    return pg('ALTER TABLE public.program_bansos DROP COLUMN periode_selesai')
+
+
+def a009_pulihkan() -> str:
+    if _pg_ada('program_bansos', 'periode_selesai'):
+        return 'bersih'
+    pg('ALTER TABLE public.program_bansos ADD COLUMN periode_selesai DATE')
+    pg('UPDATE public.program_bansos p SET periode_selesai = c.periode_selesai '
+       'FROM public.ascam_cadangan_periode_selesai c WHERE c.program_id = p.program_id')
+    return 'dipulihkan: ' + pg('SELECT count(*) FROM public.program_bansos '
+                               'WHERE periode_selesai IS NOT NULL')
+
+
 SKENARIO = {
     'a001': Skenario(kode='a001', judul='ADD COLUMN email pada penerima_manfaat', pola='P-001',
                      # ADR-0021: ADD memerlukan persetujuan administrator
@@ -200,4 +283,23 @@ SKENARIO = {
                      kolom='nama_program', terapkan=a006_terapkan, pulihkan=a006_pulihkan,
                      predikat='http://bansos.go.id/ontology/namaProgram',
                      catatan='proyeksi eksplisit menyebut kolom; jawaban harus identik'),
+    'a007': Skenario(kode='a007', judul='DROP COLUMN no_kartu_keluarga lewat view v_penerima_aktif',
+                     pola='P-002', keputusan='auto', sumber='kemensos', tabel='penerima_manfaat',
+                     kolom='no_kartu_keluarga', siapkan=a007_siapkan, terapkan=a007_terapkan,
+                     pulihkan=a007_pulihkan, view='layanan.v_penerima_aktif',
+                     predikat='http://bansos.go.id/ontology/noKartuKeluarga',
+                     catatan='view pass-through: proyeksi view dikecilkan (ALTER VIEW)'),
+    'a008': Skenario(kode='a008', judul='DROP COLUMN created_at lewat view v_penduduk_tercatat',
+                     pola='P-002', keputusan='auto', sumber='dukcapil', tabel='master_penduduk',
+                     kolom='created_at', siapkan=a008_siapkan, terapkan=a008_terapkan,
+                     pulihkan=a008_pulihkan, view='layanan.v_penduduk_tercatat',
+                     predikat='http://bansos.go.id/ontology/createdAt',
+                     catatan='view pass-through beralias; mapping SELECT * atas view'),
+    'a009': Skenario(kode='a009', judul='DROP COLUMN periode_selesai yang dipakai ekspresi view',
+                     pola='P-002', keputusan='hitl', sumber='kemensos', tabel='program_bansos',
+                     kolom='periode_selesai', siapkan=a009_siapkan, terapkan=a009_terapkan,
+                     pulihkan=a009_pulihkan, view='layanan.v_program_berakhir',
+                     predikat='http://bansos.go.id/ontology/tahunBerakhir', setujui=False,
+                     alasan_memuat=('ekspresi', 'layanan.v_program_berakhir'),
+                     catatan='kontrol negatif: rencana tidak lengkap, evaluator menolak'),
 }

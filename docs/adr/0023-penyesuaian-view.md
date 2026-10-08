@@ -1,6 +1,6 @@
 # ADR-0023: Penyesuaian view Teiid saat kolom sumber dihapus
 
-- **Status:** Diterima (uji integrasi pada Teiid 16 masih harus dijalankan)
+- **Status:** Diterima (uji kelayakan F0.8 dan skenario A007–A009 masih harus dijalankan di VM)
 - **Tanggal:** 2026-10-08
 - **Fase MAPE-K:** Analyze & Plan, Execute
 - **Terkait:** ADR-0002, ADR-0016, ADR-0022
@@ -38,6 +38,35 @@ hlm. 356–357; *DDL commands → Alter view*, hlm. 495).
    ditolak menghentikan eksekusi sebelum peralihan (ADR-0022).
 7. Verifikasi P-002 menuntut **semua** predikat yang di-deprecate hilang dan hanya predikat itu
    yang hilang, karena satu kolom dapat diekspos beberapa predikat lewat view.
+
+8. **Bentuk pernyataan dapat dipilih** (`ASCAM_EXEC_VIEW_STATEMENT`): `alter` (bawaan) atau
+   `recreate` (`DROP VIEW` lalu `CREATE VIEW`, BNF *drop table*, hlm. 819). Keduanya tetap hanya
+   menambahkan pernyataan. Pilihan ditetapkan dari uji kelayakan F0.8, bukan diasumsikan.
+9. Fungsi penulisan ulang teks (`viewsql.py`) dipisahkan dari perambatan (`views.py`) agar uji
+   kelayakan memakai kode yang sama persis dengan Knowledge.
+
+## Uji kelayakan F0.8 (belum dijalankan)
+
+Skrip: `experiments/f0/f0_8.sh` (memanggil `f0_8_teiid_alter_view.py` di kontainer sementara).
+VDB uji `f0av` berisi foreign table `penerima_manfaat`, view pass-through dengan `WHERE`, view
+bertingkat di atasnya, dan (terpisah) view berkolom inline. Definisi baru dibentuk dari `Body`
+di `SYSADMIN.Views` dengan `viewsql.remove_projection`.
+
+| Versi | Isi | Harapan |
+|---|---|---|
+| v1 | VDB dasar | ACTIVE |
+| v2 | DROP kolom tanpa penyesuaian (kontrol, mengulang F0.7) | FAILED |
+| v3 | DROP + `ALTER VIEW` pada kedua view | pertanyaan utama |
+| v4 | DROP + `DROP VIEW`/`CREATE VIEW` pada kedua view | cadangan |
+| v5 | DROP + `ALTER VIEW` hanya view dasar | FAILED (perambatan diperlukan) |
+| v6–v7 | view berkolom inline, lalu DROP + `ALTER VIEW` | ACTIVE, lalu FAILED |
+
+## Studi kasus dan evaluasi
+
+Model virtual `layanan` (tiga view) dan TriplesMap `MapPenerimaAktif`, `MapPendudukTercatat`,
+`MapProgramBerakhir` ditambahkan ke artefak dasar, beserta skenario A007–A009 (lihat
+`docs/evaluasi/README.md`). `tests/test_studi_kasus_view.py` memeriksa keputusan dan rencana
+ketiga skenario atas artefak nyata di repositori, serta bahwa A002 dan A005 tidak menyentuh view.
 
 ## Konsekuensi
 

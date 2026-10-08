@@ -223,3 +223,38 @@
         rr:predicate bansos:memilikDataKependudukan ;
         rr:objectMap [ rr:template "http://bansos.go.id/resource/penduduk/{nik}" ; rr:termType rr:IRI ]
     ] .
+# ==========================================
+# LAPISAN LAYANAN: TriplesMap yang membaca view Teiid (model layanan, ADR-0023)
+# ==========================================
+<#MapPenerimaAktif> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, no_kartu_keluarga FROM layanan.v_penerima_aktif" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ;
+        rr:class bansos:PenerimaAktif ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:noKartuKeluarga ;
+        rr:objectMap [ rr:column "no_kartu_keluarga" ]
+    ] .
+
+<#MapPendudukTercatat> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM layanan.v_penduduk_tercatat" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/penduduk/{nik}" ;
+        rr:class bansos:Penduduk ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:createdAt ;
+        rr:objectMap [ rr:column "waktu_pencatatan" ; rr:datatype xsd:dateTime ]
+    ] .
+
+<#MapProgramBerakhir> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT program_id, tahun_berakhir FROM layanan.v_program_berakhir" ] ;
+    rr:subjectMap [
+        rr:template "http://bansos.go.id/resource/program/{program_id}" ;
+        rr:class bansos:ProgramBansos ;
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:tahunBerakhir ;
+        rr:objectMap [ rr:column "tahun_berakhir" ; rr:datatype xsd:integer ]
+    ] .

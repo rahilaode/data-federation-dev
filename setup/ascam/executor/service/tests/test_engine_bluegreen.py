@@ -161,3 +161,19 @@ def test_drop_through_view_expects_every_deprecated_predicate_gone():
     assert executor.execute(plan)['status'] == 'rolled_back'          # LAIN masih ada
     executor, knowledge, _, _, _ = buat(aktif=sebelum, siaga=fx.TANPA_STATUS)
     assert executor.execute(plan)['status'] == 'succeeded'
+
+
+def test_unexpected_error_before_switch_cleans_up_standby():
+    """Temuan uji VM: Knowledge menolak langkah start_ontop (422); siaga dan VDB baru dibersihkan."""
+    class KnowledgeTolakLangkah(fx.FakeKnowledge):
+        def add_step(self, execution_id, **step):
+            if step['name'] == 'start_ontop':
+                raise RuntimeError('422 Unprocessable Entity')
+            return super().add_step(execution_id, **step)
+    executor, knowledge, admin, agent, _ = buat()
+    executor.knowledge = KnowledgeTolakLangkah()
+    with pytest.raises(RuntimeError):
+        executor.execute(fx.plan_drop())
+    assert agent.log[-1] == ('discard', 'green') and admin.undeployed == ['government-2-vdb.xml']
+    assert agent.active == 'blue' and admin.connection_types == []
+    assert executor.knowledge.finished['status'] == 'failed'

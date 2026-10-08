@@ -91,7 +91,9 @@ class Execution(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-STEP_NAMES = ('deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'rollback', 'sync')
+# start_ontop: instance Ontop siaga dinyalakan pada strategi blue-green (ADR-0022)
+STEP_NAMES = ('deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify',
+              'rollback', 'sync')
 
 
 class ExecutionStep(Base):

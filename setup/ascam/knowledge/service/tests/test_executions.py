@@ -40,6 +40,20 @@ def test_execution_records_steps_and_marks_plan_executed(api, obdf):
     assert riwayat[0]['id'] == eid and riwayat[0]['timings'] == {'total_ms': 12000}
 
 
+def test_bluegreen_steps_are_accepted(api, obdf):
+    """ADR-0022: urutan langkah strategi blue-green, termasuk start_ontop (temuan uji VM 422)."""
+    plan_id = rencana_disetujui(api, obdf)
+    eid = api.post(f'/api/v1/plans/{plan_id}/executions').json()['id']
+    urutan = ['deploy_vdb', 'validate', 'start_ontop', 'verify', 'switch', 'sync']
+    for seq, nama in enumerate(urutan, start=1):
+        r = api.post(f'/api/v1/executions/{eid}/steps',
+                     json={'seq': seq, 'name': nama, 'status': 'succeeded',
+                           'detail': {'instance': 'green'}})
+        assert r.status_code in (200, 201), r.text
+    selesai = api.post(f'/api/v1/executions/{eid}/finish', json={'status': 'succeeded'}).json()
+    assert [s['name'] for s in selesai['steps']] == urutan
+
+
 def test_failed_execution_marks_plan_failed_and_notifies(api, obdf):
     plan_id = rencana_disetujui(api, obdf)
     eid = api.post(f'/api/v1/plans/{plan_id}/executions').json()['id']

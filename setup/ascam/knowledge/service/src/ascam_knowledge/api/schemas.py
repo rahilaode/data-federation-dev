@@ -406,7 +406,8 @@ class ExecutionStartIn(BaseModel):
 
 class StepIn(BaseModel):
     seq: int
-    name: Literal['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'rollback', 'sync']
+    name: Literal['deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify',
+                  'rollback', 'sync']
     status: Literal['running', 'succeeded', 'failed', 'skipped']
     detail: dict[str, Any] = Field(default_factory=dict)
     started_at: datetime | None = None

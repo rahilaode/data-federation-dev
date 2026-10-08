@@ -256,6 +256,7 @@ a.tahap:hover .nama { text-decoration: underline; }
 .l-validate { background: #6B7A90; }
 .l-switch { background: #2D3B52; }
 .l-reload_ontop { background: #A7B4C6; }
+.l-start_ontop { background: #8796AC; }
 .l-verify { background: var(--berhasil); }
 .l-sync { background: var(--ontologi); }
 .l-rollback { background: var(--gagal); }

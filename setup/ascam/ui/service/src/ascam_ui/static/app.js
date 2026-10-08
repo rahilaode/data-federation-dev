@@ -4,9 +4,9 @@
    artefak berasal dari sistem lain dan tidak boleh dipercaya sebagai markup. */
 
 const S = { user: null, obdf: null, oid: null, menunggu: null, tipe: {}, events: {}, pemutar: null };
-const LANGKAH = ['deploy_vdb', 'validate', 'switch', 'reload_ontop', 'verify', 'sync', 'rollback'];
+const LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify', 'sync', 'rollback'];
 const NAMA_LANGKAH = {
-  deploy_vdb: 'Deploy VDB', validate: 'Validasi', switch: 'Pindah koneksi', reload_ontop: 'Muat ulang Ontop',
+  deploy_vdb: 'Deploy VDB', validate: 'Validasi', start_ontop: 'Nyalakan Ontop siaga', switch: 'Pindah koneksi', reload_ontop: 'Muat ulang Ontop',
   verify: 'Verifikasi', sync: 'Sinkronisasi', rollback: 'Pemulihan',
 };
 const LAPISAN = {

@@ -338,11 +338,19 @@ class Executor:
     # ── blue-green lapisan OBDA (ADR-0022) ──────────────────────────────────────
     def _jalankan_bluegreen(self, konteks: Konteks, artefak: dict, mulai_total: float) -> dict:
         self._deploy(konteks, artefak)
-        siaga = self._siapkan_siaga(konteks, artefak)
-        konteks.baseline = self.sparql.fingerprint()            # instance aktif, lewat proxy
-        self._nyalakan_siaga(konteks)
-        ok, rincian = self._verify(konteks, sparql=self.sparql_for(siaga['standby_sparql_url']),
-                                   seq=4, instance=siaga['standby'])
+        try:
+            siaga = self._siapkan_siaga(konteks, artefak)
+            konteks.baseline = self.sparql.fingerprint()        # instance aktif, lewat proxy
+            self._nyalakan_siaga(konteks)
+            ok, rincian = self._verify(konteks, sparql=self.sparql_for(siaga['standby_sparql_url']),
+                                       seq=4, instance=siaga['standby'])
+        except ExecutionError:
+            raise                                               # sudah dibersihkan langkahnya
+        except Exception:
+            # Galat tak terduga sebelum peralihan (mis. pencatatan langkah ditolak Knowledge):
+            # instance siaga dan VDB baru tetap harus dibersihkan (temuan uji VM 2026-10-08).
+            self._gagal_sebelum_peralihan(konteks)
+            raise
         if not ok:
             return self._batalkan_siaga(konteks, rincian, mulai_total)
         self._alihkan(konteks)

@@ -24,6 +24,11 @@ Strategi `bluegreen` (ADR-0022, bawaan) menerapkan blue-green juga pada lapisan 
   5. rollback     bila verifikasi gagal: instance siaga dihentikan dan versi N+1 dihapus;
                   pengguna tidak pernah melihat versi yang belum terverifikasi.
 
+Sidik jari dasar diambil SESUDAH DDL diterapkan di sumber, karena Executor bekerja atas event.
+Bila sidik jari utuh gagal pada saat itu (mis. view tanpa kunci membuat Ontop membaca kolom yang
+sudah dihapus, temuan uji VM A007/A008 2026-10-09), sidik jari diambil per predikat: predikat yang
+gagal dicatat, dan cara yang sama dipakai untuk instance baru agar keduanya sebanding.
+
 Setiap langkah dilaporkan ke Knowledge sehingga jejaknya tetap ada meski Executor berhenti.
 """
 import logging
@@ -33,6 +38,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+
+from rdflib import OWL, RDF, Graph, Namespace
 
 from .artifacts import ontology, r2rml, vdb
 
@@ -55,12 +62,35 @@ class Konteks:
     backups: dict[str, str] = field(default_factory=dict)
     baseline: dict[str, int] = field(default_factory=dict)
     timings: dict[str, int] = field(default_factory=dict)
+    predikat: set[str] = field(default_factory=set)       # kandidat predikat untuk sidik jari per predikat
+    per_predikat: bool = False                            # sidik jari utuh gagal pada instance lama
+    baseline_gagal: list[str] = field(default_factory=list)
 
 
 class ExecutionError(Exception):
     def __init__(self, message: str, detail: dict | None = None):
         super().__init__(message)
         self.detail = detail or {}
+
+
+RR = Namespace('http://www.w3.org/ns/r2rml#')
+
+
+def daftar_predikat(mapping_lama: str, mapping_baru: str, ontologi: str) -> set[str]:
+    """Predikat yang mungkin muncul di graf: konstanta rr:predicate pada ℳ dan ℳ′, property yang
+    dideklarasikan 𝒯, dan rdf:type."""
+    hasil = {str(RDF.type)}
+    for teks, publik in ((mapping_lama, 'urn:ascam:mapping'), (mapping_baru, 'urn:ascam:mapping'),
+                         (ontologi, None)):
+        try:
+            graf = Graph().parse(data=teks, format='turtle', publicID=publik)
+        except Exception:                            # noqa: BLE001 — hanya untuk cadangan sidik jari
+            log.exception('artefak tidak dapat diurai untuk daftar predikat')
+            continue
+        hasil |= {str(o) for o in graf.objects(None, RR.predicate)}
+        for jenis in (OWL.ObjectProperty, OWL.DatatypeProperty):
+            hasil |= {str(s) for s in graf.subjects(RDF.type, jenis)}
+    return hasil
 
 
 def _actions(plan: dict, artifact: str) -> list[dict]:
@@ -161,31 +191,58 @@ class Executor:
             'r2rml_sha': mapping['sha256'],
             'ontology': ontology.apply_actions(ont['content'], aksi_ontologi),
             'ontology_sha': ont['sha256'],
+            'predikat': daftar_predikat(mapping['content'],
+                                        r2rml.apply_actions(mapping['content'], aksi_mapping),
+                                        ont['content']),
         }
 
+    def _sidik_jari(self, konteks: Konteks, sparql) -> tuple[dict[str, int], list[str]]:
+        """(sidik jari, predikat yang kuerinya gagal). Cara pengambilan ditentukan saat dasar."""
+        if not konteks.per_predikat:
+            try:
+                return sparql.fingerprint(), []
+            except Exception as exc:                # noqa: BLE001
+                if konteks.baseline or konteks.baseline_gagal:
+                    raise                           # instance baru harus menjawab sidik jari utuh
+                log.warning('sidik jari utuh gagal pada instance lama (%s); per predikat', exc)
+                konteks.per_predikat = True
+        return sparql.fingerprint_per_predicate(sorted(konteks.predikat))
+
+    def _ambil_dasar(self, konteks: Konteks) -> None:
+        konteks.baseline, konteks.baseline_gagal = self._sidik_jari(konteks, self.sparql)
+
     def _verifikasi(self, konteks: Konteks, sparql=None) -> tuple[bool, dict]:
-        sesudah = (sparql or self.sparql).fingerprint()
+        sesudah, gagal = self._sidik_jari(konteks, sparql or self.sparql)
         sebelum = konteks.baseline
+        gagal_sebelum = set(konteks.baseline_gagal)
         pattern = konteks.plan.get('pattern')
         predikat = _predikat(konteks.plan)
         hilang = sorted(set(sebelum) - set(sesudah))
         rincian = {'predikat_sebelum': len(sebelum), 'predikat_sesudah': len(sesudah),
                    'hilang': hilang, 'predikat_sasaran': predikat}
+        if konteks.per_predikat:
+            rincian.update(sidik_jari='per_predikat', gagal_sebelum=sorted(gagal_sebelum),
+                           gagal_sesudah=gagal)
         usang = _predikat_usang(konteks.plan)
         if pattern == 'P-002' and usang:
             # Satu kolom dapat diekspos beberapa predikat, termasuk lewat view (ADR-0023):
             # semua predikat yang di-deprecate harus hilang, dan hanya predikat itu yang boleh hilang.
-            ok = not (usang & set(sesudah)) and set(hilang) <= usang
+            # Predikat yang gagal pada instance lama dan bukan sasaran harus terjawab sekarang.
+            ok = (not gagal and not (usang & set(sesudah)) and set(hilang) <= usang
+                  and (gagal_sebelum - usang) <= set(sesudah))
             rincian['predikat_sasaran'] = sorted(usang)
             rincian['harapan'] = 'predikat sasaran hilang, predikat lain tetap'
         elif pattern == 'P-002' and predikat:
-            ok = predikat not in sesudah and hilang in ([], [predikat])
+            ok = not gagal and predikat not in sesudah and hilang in ([], [predikat])
             rincian['harapan'] = 'predikat sasaran hilang, predikat lain tetap'
         elif pattern == 'P-003':
-            ok = sesudah == sebelum
+            # predikat yang gagal pada instance lama (kolom sudah berganti nama) tidak dapat
+            # dibandingkan nilainya, tetapi harus kembali terjawab
+            ok = (not gagal and all(sesudah.get(p) == n for p, n in sebelum.items())
+                  and set(sesudah) - set(sebelum) <= gagal_sebelum)
             rincian['harapan'] = 'jawaban identik dengan sebelum adaptasi'
         else:                                        # P-001: kolom baru boleh belum berisi data
-            ok = not hilang
+            ok = not gagal and not hilang
             rincian['harapan'] = 'tidak ada predikat yang hilang'
         return ok, rincian
 
@@ -215,6 +272,7 @@ class Executor:
         try:
             artefak = self._siapkan_artefak(plan, versi_aktif)
             konteks = Konteks(obdf_id=self.obdf_id, plan=plan, execution_id=execution['id'],
+                              predikat=artefak.get('predikat') or set(),
                               vdb_name=versi_aktif['teiid_vdb_name'],
                               versi_lama=str(versi_aktif['teiid_vdb_version']),
                               versi_baru=artefak['vdb_version'],
@@ -224,7 +282,7 @@ class Executor:
                 return self._jalankan_bluegreen(konteks, artefak, mulai_total)
             self._deploy(konteks, artefak)
             self._tulis_dan_validasi(konteks, artefak)
-            konteks.baseline = self.sparql.fingerprint()
+            self._ambil_dasar(konteks)
             self._switch(konteks)
             self._reload(konteks)
             ok, rincian = self._verify(konteks)
@@ -342,7 +400,7 @@ class Executor:
         self._deploy(konteks, artefak)
         try:
             siaga = self._siapkan_siaga(konteks, artefak)
-            konteks.baseline = self.sparql.fingerprint()        # instance aktif, lewat proxy
+            self._ambil_dasar(konteks)                          # instance aktif, lewat proxy
             self._nyalakan_siaga(konteks)
             ok, rincian = self._verify(konteks, sparql=self.sparql_for(siaga['standby_sparql_url']),
                                        seq=4, instance=siaga['standby'])

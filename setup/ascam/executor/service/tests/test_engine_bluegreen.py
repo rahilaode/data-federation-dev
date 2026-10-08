@@ -177,3 +177,61 @@ def test_unexpected_error_before_switch_cleans_up_standby():
     assert agent.log[-1] == ('discard', 'green') and admin.undeployed == ['government-2-vdb.xml']
     assert agent.active == 'blue' and admin.connection_types == []
     assert executor.knowledge.finished['status'] == 'failed'
+
+
+class SparqlTerputus:
+    """Instance lama sesudah DDL: sidik jari utuh gagal karena satu jalur mapping membaca kolom
+    yang sudah dihapus (temuan uji VM A007/A008); per predikat, hanya predikat itu yang gagal."""
+    def __init__(self, hasil, gagal=(), utuh_gagal=True):
+        self.hasil, self.gagal, self.utuh_gagal = dict(hasil), list(gagal), utuh_gagal
+        self.per_predikat = []
+
+    def fingerprint(self):
+        if self.utuh_gagal:
+            raise RuntimeError('500 TEIID: kolom tidak ada')
+        return dict(self.hasil)
+
+    def fingerprint_per_predicate(self, predicates):
+        self.per_predikat.append(list(predicates))
+        return ({p: n for p, n in self.hasil.items() if p in predicates},
+                [p for p in self.gagal if p in predicates])
+
+
+TIPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
+
+
+def buat_terputus(aktif, siaga):
+    knowledge, admin, agent = fx.FakeKnowledge(), fx.FakeAdmin(), FakeAgentBG()
+    executor = Executor(knowledge, admin, agent, aktif, obdf_id=1, sleep=lambda s: None,
+                        obda_strategy='bluegreen', sparql_for=lambda url: siaga)
+    return executor, knowledge
+
+
+def test_baseline_falls_back_to_per_predicate_fingerprint():
+    nik = TIPE                                   # predikat lain yang ada di daftar (rdf:type)
+    aktif = SparqlTerputus({nik: 15}, gagal=[fx.STATUS])
+    siaga = SparqlTerputus({nik: 15}, utuh_gagal=False)
+    executor, knowledge = buat_terputus(aktif, siaga)
+    assert executor.execute(fx.plan_drop())['status'] == 'succeeded'
+    # instance baru diperiksa dengan cara yang sama, atas daftar predikat dari ℳ, ℳ′, dan 𝒯
+    assert siaga.per_predikat and fx.STATUS in siaga.per_predikat[0] and nik in siaga.per_predikat[0]
+    rincian = next(s for s in knowledge.steps if s['name'] == 'verify')['detail']
+    assert rincian['sidik_jari'] == 'per_predikat' and rincian['gagal_sebelum'] == [fx.STATUS]
+
+
+def test_per_predicate_failure_on_new_instance_is_rolled_back():
+    nik = TIPE                                   # predikat lain yang ada di daftar (rdf:type)
+    aktif = SparqlTerputus({nik: 15}, gagal=[fx.STATUS])
+    siaga = SparqlTerputus({}, gagal=[nik], utuh_gagal=False)        # instance baru juga rusak
+    executor, _ = buat_terputus(aktif, siaga)
+    assert executor.execute(fx.plan_drop())['status'] == 'rolled_back'
+
+
+def test_unrelated_baseline_failure_must_be_answered_after_adaptation():
+    nik = TIPE                                   # predikat lain yang ada di daftar (rdf:type)
+    aktif = SparqlTerputus({}, gagal=[fx.STATUS, nik])               # nik gagal karena hal lain
+    executor, _ = buat_terputus(aktif, SparqlTerputus({}, utuh_gagal=False))
+    assert executor.execute(fx.plan_drop())['status'] == 'rolled_back'
+    executor, _ = buat_terputus(SparqlTerputus({}, gagal=[fx.STATUS, nik]),
+                                SparqlTerputus({nik: 15}, utuh_gagal=False))
+    assert executor.execute(fx.plan_drop())['status'] == 'succeeded'

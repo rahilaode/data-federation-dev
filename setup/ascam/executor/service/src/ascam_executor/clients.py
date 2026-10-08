@@ -213,6 +213,28 @@ class SparqlClient:
             hasil[baris['p']['value']] = int(baris['n']['value'])
         return hasil
 
+    def fingerprint_per_predicate(self, predicates: list[str],
+                                  workers: int = 8) -> tuple[dict[str, int], list[str]]:
+        """Sidik jari yang sama, dihitung satu kueri per predikat agar kegagalan satu jalur
+        mapping tidak menggagalkan seluruh sidik jari. -> (sidik jari, predikat yang gagal).
+        Predikat tanpa tripel tidak dicantumkan, sama seperti `fingerprint()`."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        def hitung(predikat: str) -> tuple[str, int | None]:
+            try:
+                response = self._client.get(
+                    self.url, params={'query': f'SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{predikat}> ?o }}'},
+                    headers={'Accept': 'application/sparql-results+json'})
+                response.raise_for_status()
+                baris = response.json()['results']['bindings']
+                return predikat, int(baris[0]['n']['value']) if baris else 0
+            except Exception:                        # noqa: BLE001 — dicatat sebagai gagal
+                return predikat, None
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            hasil = list(pool.map(hitung, predicates))
+        return ({p: n for p, n in hasil if n}, sorted(p for p, n in hasil if n is None))
+
 
 def decode_hash(value: str) -> str:
     return base64.b64decode(value).hex()

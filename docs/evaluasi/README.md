@@ -222,6 +222,16 @@ gagal (HTTP 500) walaupun view terbaca langsung lewat Teiid:
    pada Ontop 4.1.1 belum mendukung konversi itu. A008 dipindah ke `riwayat_perubahan_data.diubah_oleh`
    (`VARCHAR`), yang memang sudah memiliki kelas dan property di ontologi.
 
+**Temuan uji coba 20261009T032658.** A009 sesuai rancangan (HITL dengan alasan ekspresi view,
+rencana ditolak, tidak ada eksekusi, versi tetap). A007 dan A008 diputuskan otomatis dengan benar,
+tetapi eksekusinya `failed`. Dugaan kuat (menunggu rincian `failure`): Executor mengambil sidik jari
+dasar dari instance aktif SESUDAH DDL, dan kueri sidik jari `?s ?p ?o` menyapu semua mapping.
+Kolom view selalu nullable, sehingga Ontop harus membaca kolom yang sudah dihapus untuk menyaring
+`IS NOT NULL`, dan seluruh kueri gagal. Skenario lama lolos karena kolomnya dideklarasikan
+`not null` di VDB, sehingga Ontop tidak perlu membacanya. Perbaikan: bila sidik jari utuh gagal
+pada instance lama, sidik jari diambil per predikat (daftar dari ℳ, ℳ′, dan 𝒯); predikat yang
+gagal dicatat, dan instance baru diperiksa dengan cara yang sama.
+
 **Ketersediaan endpoint.** Setiap run perlakuan kini menjalankan probe berurutan setiap ±0,5 s
 dari DDL sampai eksekusi selesai, dengan kueri yang tidak disentuh skenario mana pun
 (`TransaksiBansos`). Dicatat persentase probe berhasil dan selang gagal terpanjang (dari probe

@@ -237,15 +237,19 @@
         rr:objectMap [ rr:column "no_kartu_keluarga" ]
     ] .
 
-<#MapPendudukTercatat> a rr:TriplesMap ;
-    rr:logicalTable [ rr:sqlQuery "SELECT * FROM layanan.v_penduduk_tercatat" ] ;
+<#MapRiwayat> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT * FROM layanan.v_riwayat_perubahan" ] ;
     rr:subjectMap [
-        rr:template "http://bansos.go.id/resource/penduduk/{nik}" ;
-        rr:class bansos:Penduduk ;
+        rr:template "http://bansos.go.id/resource/riwayat/{riwayat_id}" ;
+        rr:class bansos:RiwayatPerubahan ;
     ] ;
     rr:predicateObjectMap [
-        rr:predicate bansos:createdAt ;
-        rr:objectMap [ rr:column "waktu_pencatatan" ; rr:datatype xsd:dateTime ]
+        rr:predicate bansos:kolomDiubah ;
+        rr:objectMap [ rr:column "kolom_diubah" ]
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate bansos:diubahOleh ;
+        rr:objectMap [ rr:column "petugas" ]
     ] .
 
 <#MapProgramBerakhir> a rr:TriplesMap ;

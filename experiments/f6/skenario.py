@@ -203,26 +203,25 @@ def a007_pulihkan() -> str:
                                'WHERE no_kartu_keluarga IS NOT NULL')
 
 
-# A008: view dengan alias (created_at AS waktu_pencatatan) pada MySQL
+# A008: view dengan alias (diubah_oleh AS petugas) pada MySQL; mapping SELECT * atas view
 def a008_siapkan() -> str:
-    if not _my_ada('master_penduduk', 'created_at'):
+    if not _my_ada('riwayat_perubahan_data', 'diubah_oleh'):
         return 'kolom belum dipulihkan; cadangan tidak dibuat ulang'
-    return my('CREATE TABLE IF NOT EXISTS ascam_cadangan_created_at AS '
-              'SELECT nik, created_at FROM master_penduduk')
+    return my('CREATE TABLE IF NOT EXISTS ascam_cadangan_diubah_oleh AS '
+              'SELECT riwayat_id, diubah_oleh FROM riwayat_perubahan_data')
 
 
 def a008_terapkan() -> str:
-    return my('ALTER TABLE master_penduduk DROP COLUMN created_at')
+    return my('ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh')
 
 
 def a008_pulihkan() -> str:
-    if _my_ada('master_penduduk', 'created_at'):
+    if _my_ada('riwayat_perubahan_data', 'diubah_oleh'):
         return 'bersih'
-    my('ALTER TABLE master_penduduk ADD COLUMN created_at DATETIME DEFAULT NOW()')
-    my('UPDATE master_penduduk p JOIN ascam_cadangan_created_at c ON c.nik = p.nik '
-       'SET p.created_at = c.created_at')
-    return 'dipulihkan: ' + my('SELECT count(*) FROM master_penduduk p JOIN ascam_cadangan_created_at c '
-                               'ON c.nik = p.nik WHERE p.created_at = c.created_at')
+    my('ALTER TABLE riwayat_perubahan_data ADD COLUMN diubah_oleh VARCHAR(100)')
+    my('UPDATE riwayat_perubahan_data r JOIN ascam_cadangan_diubah_oleh c '
+       'ON c.riwayat_id = r.riwayat_id SET r.diubah_oleh = c.diubah_oleh')
+    return 'dipulihkan: ' + my('SELECT count(*) FROM riwayat_perubahan_data WHERE diubah_oleh IS NOT NULL')
 
 
 # A009: kolom dipakai di dalam ekspresi view (YEAR(periode_selesai)); kontrol negatif
@@ -289,11 +288,11 @@ SKENARIO = {
                      pulihkan=a007_pulihkan, view='layanan.v_penerima_aktif',
                      predikat='http://bansos.go.id/ontology/noKartuKeluarga',
                      catatan='view pass-through: proyeksi view dikecilkan (ALTER VIEW)'),
-    'a008': Skenario(kode='a008', judul='DROP COLUMN created_at lewat view v_penduduk_tercatat',
-                     pola='P-002', keputusan='auto', sumber='dukcapil', tabel='master_penduduk',
-                     kolom='created_at', siapkan=a008_siapkan, terapkan=a008_terapkan,
-                     pulihkan=a008_pulihkan, view='layanan.v_penduduk_tercatat',
-                     predikat='http://bansos.go.id/ontology/createdAt',
+    'a008': Skenario(kode='a008', judul='DROP COLUMN diubah_oleh lewat view v_riwayat_perubahan',
+                     pola='P-002', keputusan='auto', sumber='dukcapil', tabel='riwayat_perubahan_data',
+                     kolom='diubah_oleh', siapkan=a008_siapkan, terapkan=a008_terapkan,
+                     pulihkan=a008_pulihkan, view='layanan.v_riwayat_perubahan',
+                     predikat='http://bansos.go.id/ontology/diubahOleh',
                      catatan='view pass-through beralias; mapping SELECT * atas view'),
     'a009': Skenario(kode='a009', judul='DROP COLUMN periode_selesai yang dipakai ekspresi view',
                      pola='P-002', keputusan='hitl', sumber='kemensos', tabel='program_bansos',

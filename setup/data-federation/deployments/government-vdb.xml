@@ -23,8 +23,17 @@
                   tanggal_lahir date not null,
                   pekerjaan varchar(100) not null,
                   penghasilan integer not null,
-                  status_hidup varchar(20) not null,
-                  created_at timestamp
+                  status_hidup varchar(20) not null
+                 )OPTIONS(UPDATABLE 'FALSE');
+
+                CREATE FOREIGN TABLE riwayat_perubahan_data (
+                  riwayat_id integer not null primary key,
+                  nik varchar(16),
+                  kolom_diubah varchar(100),
+                  nilai_lama varchar(500),
+                  nilai_baru varchar(500),
+                  diubah_pada timestamp,
+                  diubah_oleh varchar(100)
                  )OPTIONS(UPDATABLE 'FALSE');
             ]]></metadata>   
     </model>
@@ -77,9 +86,9 @@
                   SELECT penerima_id, no_kartu_keluarga
                   FROM kemensos.penerima_manfaat WHERE aktif = TRUE;
 
-                CREATE VIEW v_penduduk_tercatat AS
-                  SELECT nik, created_at AS waktu_pencatatan
-                  FROM dukcapil.master_penduduk;
+                CREATE VIEW v_riwayat_perubahan AS
+                  SELECT riwayat_id, kolom_diubah, diubah_oleh AS petugas
+                  FROM dukcapil.riwayat_perubahan_data;
 
                 CREATE VIEW v_program_berakhir AS
                   SELECT program_id, YEAR(periode_selesai) AS tahun_berakhir

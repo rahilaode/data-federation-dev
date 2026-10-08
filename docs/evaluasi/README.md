@@ -180,14 +180,15 @@ sebagai jejak, tetapi tidak dipakai untuk paper.
 Studi kasus diberi model virtual `layanan` berisi tiga view yang dibaca TriplesMap baru.
 Kolomnya dipilih yang **tidak disentuh A001–A006** dan tidak dibaca TriplesMap lain, sehingga
 dampak yang teramati hanya berasal dari jalur lewat view dan enam skenario lama tidak berubah.
-Ketiga property (`noKartuKeluarga`, `createdAt`, `tahunBerakhir`) sudah atau baru ditambahkan
-pada ontologi; `createdAt` dan `periode_selesai` juga ditambahkan ke foreign table VDB karena
-kolom itu ada di sumber tetapi sebelumnya tidak dideklarasikan.
+Property yang dipakai (`noKartuKeluarga`, `kolomDiubah`, `diubahOleh`) sudah ada di ontologi tetapi
+belum dipakai mapping; hanya `tahunBerakhir` dan kelas `PenerimaAktif` yang ditambahkan. Foreign
+table `riwayat_perubahan_data` serta kolom `periode_mulai`/`periode_selesai` ditambahkan ke VDB
+karena ada di sumber (dan dipantau monitor) tetapi sebelumnya tidak dideklarasikan.
 
 | Skenario | View | Perubahan | DBMS | Keputusan yang diharapkan |
 |---|---|---|---|---|
 | A007 | `v_penerima_aktif`: `SELECT penerima_id, no_kartu_keluarga … WHERE aktif = TRUE` | `DROP COLUMN no_kartu_keluarga` | PostgreSQL | otomatis: proyeksi view dikecilkan, proyeksi eksplisit mapping ditulis ulang |
-| A008 | `v_penduduk_tercatat`: `SELECT nik, created_at AS waktu_pencatatan …` | `DROP COLUMN created_at` | MySQL | otomatis: kolom beralias dibuang dari view; mapping `SELECT *` atas view |
+| A008 | `v_riwayat_perubahan`: `SELECT riwayat_id, kolom_diubah, diubah_oleh AS petugas …` | `DROP COLUMN diubah_oleh` | MySQL | otomatis: kolom beralias dibuang dari view; mapping `SELECT *` atas view |
 | A009 | `v_program_berakhir`: `SELECT program_id, YEAR(periode_selesai) AS tahun_berakhir …` | `DROP COLUMN periode_selesai` | PostgreSQL | HITL dengan alasan "dipakai dalam ekspresi … layanan.v_program_berakhir" |
 
 A009 adalah kontrol negatif. Rencananya tidak lengkap (definisi view harus dibuat ulang manusia),
@@ -203,6 +204,23 @@ mengubah informasi kolom (teiid-documents, *Schema object DDL*, hlm. 356–357).
 `./experiments/f0/f0_8.sh` memeriksa pada VDB uji terpisah apakah Teiid 16 menerima
 `ALTER VIEW` yang mengecilkan proyeksi, dan bila tidak, apakah `DROP VIEW` lalu `CREATE VIEW`
 diterima. Hasilnya menentukan `ASCAM_EXEC_VIEW_STATEMENT` (`alter` atau `recreate`) pada Executor.
+
+**Temuan uji coba 2026-10-09 (sebelum evaluasi).** Pada kondisi dasar, ketiga kueri lewat view
+gagal (HTTP 500) walaupun view terbaca langsung lewat Teiid:
+
+1. *A007, A009*: `TEIID30088 Unrelated order by column (… || CAST(v1.penerima_id AS STRING))
+   cannot be used in … SELECT DISTINCT`. View yang kolomnya diturunkan dari kueri tidak memiliki
+   kunci, sehingga Ontop 4.1.1 tidak dapat menjamin tidak ada tripel ganda dan menambahkan
+   `SELECT DISTINCT`; `ORDER BY ?p` pada SPARQL diterjemahkan menjadi `ORDER BY` atas ekspresi IRI
+   yang tidak diproyeksikan, dan Teiid menolaknya. Kunci pada view Teiid hanya dapat dideklarasikan
+   bersama daftar kolom inline, padahal view berkolom inline tidak dapat dikecilkan dengan
+   `ALTER VIEW` (F0.8 v7). Untuk evaluasi, kueri lewat view ditulis tanpa `ORDER BY`; urutan tidak
+   memengaruhi penilaian karena answer set diurutkan oleh harness. Ini keterbatasan kombinasi
+   Ontop–Teiid (bukan ASCAM) yang dicatat sebagai ancaman validitas.
+2. *Rancangan awal A008* memetakan kolom `DATETIME` sebagai `xsd:dateTime`; reformulasi Ontop
+   gagal dengan `UnsupportedOperationException: Not yet supported by Teiid`, yaitu adaptor Teiid
+   pada Ontop 4.1.1 belum mendukung konversi itu. A008 dipindah ke `riwayat_perubahan_data.diubah_oleh`
+   (`VARCHAR`), yang memang sudah memiliki kelas dan property di ontologi.
 
 **Ketersediaan endpoint.** Setiap run perlakuan kini menjalankan probe berurutan setiap ±0,5 s
 dari DDL sampai eksekusi selesai, dengan kueri yang tidak disentuh skenario mana pun

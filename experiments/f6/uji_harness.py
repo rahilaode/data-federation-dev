@@ -37,7 +37,7 @@ def main() -> int:
     # selain itu harness menunggu event pemulihan yang tidak akan pernah datang.
     kondisi_dasar = {'email': '0', 'tipe_program': '1', 'tgl_lahir_ktp': '0',
                      'kode_pos': '0', 'status_hidup': '1', 'judul_program': '0',
-                     'no_kartu_keluarga': '1', 'created_at': '1', 'periode_selesai': '1'}
+                     'no_kartu_keluarga': '1', 'diubah_oleh': '1', 'periode_selesai': '1'}
     for kode, sk in skenario.SKENARIO.items():
         perintah: list[str] = []
 
@@ -60,7 +60,7 @@ def main() -> int:
     # "tidak ada perubahan", termasuk ketika klien (seperti MySQL) tidak mencetak apa pun.
     kondisi_perlakuan = {'email': '1', 'tipe_program': '0', 'tgl_lahir_ktp': '1',
                          'kode_pos': '1', 'status_hidup': '0', 'judul_program': '1',
-                         'no_kartu_keluarga': '0', 'created_at': '0', 'periode_selesai': '0'}
+                         'no_kartu_keluarga': '0', 'diubah_oleh': '0', 'periode_selesai': '0'}
     for kode, sk in skenario.SKENARIO.items():
         perintah = []
 

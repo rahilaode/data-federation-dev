@@ -155,15 +155,16 @@ def test_a007_drop_through_passthrough_view_postgresql(api, studi):
 
 
 def test_a008_drop_through_aliased_view_mysql(api, studi):
-    out = impact(api, studi, operation='drop', source='dukcapil', table='master_penduduk',
-                 column='created_at')
+    out = impact(api, studi, operation='drop', source='dukcapil', table='riwayat_perubahan_data',
+                 column='diubah_oleh')
     assert out['decision'] == 'auto', out['reasons']
     assert [(a['table'], a['body'], a['removed_columns']) for a in tindakan(out, 'alter_view')] == [
-        ('v_penduduk_tercatat', 'SELECT nik FROM dukcapil.master_penduduk', ['waktu_pencatatan'])]
+        ('v_riwayat_perubahan', 'SELECT riwayat_id, kolom_diubah FROM dukcapil.riwayat_perubahan_data',
+         ['petugas'])]
     assert tindakan(out, 'rewrite_logical_table') == []          # SELECT * atas view
     assert {ujung(a['triples_map_iri']) for a in tindakan(out, 'remove_predicate_object_map')} == {
-        'MapPendudukTercatat'}
-    assert [a['predicate_iri'] for a in tindakan(out, 'deprecate_property')] == [B + 'createdAt']
+        'MapRiwayat'}
+    assert [a['predicate_iri'] for a in tindakan(out, 'deprecate_property')] == [B + 'diubahOleh']
 
 
 def test_a009_drop_used_in_view_expression_needs_hitl(api, studi):
@@ -197,5 +198,5 @@ def test_real_artifacts_sync_without_errors(api, studi):
     assert [i for i in detail['issues'] if i['severity'] == 'error'] == []
     # ketiga property lewat view dikenali ontologi (tanpa peringatan kosakata)
     pesan = ' '.join(i['message'] for i in detail['issues'])
-    for nama in ('noKartuKeluarga', 'createdAt', 'tahunBerakhir', 'PenerimaAktif'):
+    for nama in ('noKartuKeluarga', 'diubahOleh', 'kolomDiubah', 'tahunBerakhir', 'PenerimaAktif'):
         assert nama not in pesan, detail['issues']

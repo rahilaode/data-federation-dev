@@ -1,6 +1,6 @@
 # ADR-0023: Penyesuaian view Teiid saat kolom sumber dihapus
 
-- **Status:** Diterima (uji kelayakan F0.8 dan skenario A007–A009 masih harus dijalankan di VM)
+- **Status:** Diterima; F0.8 lulus (2026-10-09), skenario A007–A009 belum dievaluasi
 - **Tanggal:** 2026-10-08
 - **Fase MAPE-K:** Analyze & Plan, Execute
 - **Terkait:** ADR-0002, ADR-0016, ADR-0022
@@ -45,7 +45,7 @@ hlm. 356–357; *DDL commands → Alter view*, hlm. 495).
 9. Fungsi penulisan ulang teks (`viewsql.py`) dipisahkan dari perambatan (`views.py`) agar uji
    kelayakan memakai kode yang sama persis dengan Knowledge.
 
-## Uji kelayakan F0.8 (belum dijalankan)
+## Uji kelayakan F0.8 (results/f0/f0_8_20261008T194940, lokal)
 
 Skrip: `experiments/f0/f0_8.sh` (memanggil `f0_8_teiid_alter_view.py` di kontainer sementara).
 VDB uji `f0av` berisi foreign table `penerima_manfaat`, view pass-through dengan `WHERE`, view
@@ -61,14 +61,25 @@ di `SYSADMIN.Views` dengan `viewsql.remove_projection`.
 | v5 | DROP + `ALTER VIEW` hanya view dasar | FAILED (perambatan diperlukan) |
 | v6–v7 | view berkolom inline, lalu DROP + `ALTER VIEW` | ACTIVE, lalu FAILED |
 
+Ketujuh kasus sesuai harapan. v3 ACTIVE dengan kolom view tinggal `penerima_id` dan 10 baris
+terbaca; v4 juga ACTIVE. v5 gagal pada view bertingkat (`TEIID31118`), sehingga perambatan wajib.
+v7 gagal dengan `TEIID30066 … does not have the correct number of projected symbols. Expected 2,
+but was 1`. Jadi larangan mengubah informasi kolom pada Reference Guide berlaku untuk view berkolom
+inline, bukan view yang kolomnya diturunkan dari kueri. `ASCAM_EXEC_VIEW_STATEMENT` tetap `alter`.
+
 ## Studi kasus dan evaluasi
 
-Model virtual `layanan` (tiga view) dan TriplesMap `MapPenerimaAktif`, `MapPendudukTercatat`,
+Model virtual `layanan` (tiga view) dan TriplesMap `MapPenerimaAktif`, `MapRiwayat`,
 `MapProgramBerakhir` ditambahkan ke artefak dasar, beserta skenario A007–A009 (lihat
 `docs/evaluasi/README.md`). `tests/test_studi_kasus_view.py` memeriksa keputusan dan rencana
 ketiga skenario atas artefak nyata di repositori, serta bahwa A002 dan A005 tidak menyentuh view.
 
 ## Konsekuensi
+
+- View tanpa kunci membuat Ontop 4.1.1 menambahkan `SELECT DISTINCT`, dan Teiid menolak
+  `ORDER BY` atas ekspresi IRI pada kueri semacam itu (`TEIID30088`). Kunci hanya dapat
+  dideklarasikan bersama kolom inline, yang justru tidak dapat dikecilkan dengan `ALTER VIEW`.
+  Ini kompromi rancangan yang dicatat, bukan diselesaikan, oleh ADR ini.
 
 - Penghapusan kolom yang diteruskan view kini teradaptasi otomatis; kasus yang mengubah baris
   atau arti nilai tetap memerlukan keputusan manusia.

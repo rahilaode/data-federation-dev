@@ -85,25 +85,27 @@ Q = {
         **KONTROL,
     },
     # A007-A009: kueri terdampak membaca predikat yang dibentuk dari VIEW; kueri tetangga membaca
-    # tabel dasar yang sama (A008, A009) atau kolom lain dari view yang sama (A007).
+    # kolom lain dari view yang sama (A007, A008) atau tabel dasar yang sama (A009).
+    # Tanpa ORDER BY: view tanpa kunci membuat Ontop 4.1.1 menambahkan SELECT DISTINCT, dan Teiid
+    # menolak ORDER BY atas ekspresi IRI yang tidak diproyeksikan (TEIID30088). Urutan tidak
+    # diperlukan karena jalankan() mengurutkan answer set sebelum dibandingkan.
     'a007': {
         'nokk_penerima_aktif': ('terdampak', B + 'SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; '
-                                            'bansos:noKartuKeluarga ?kk } ORDER BY ?p'),
-        'penerima_aktif': ('tetangga', B + 'SELECT ?p WHERE { ?p a bansos:PenerimaAktif } ORDER BY ?p'),
+                                            'bansos:noKartuKeluarga ?kk }'),
+        'penerima_aktif': ('tetangga', B + 'SELECT ?p WHERE { ?p a bansos:PenerimaAktif }'),
         'tautan_penduduk': ('kontrol', B + 'SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } '
                                        'ORDER BY ?p'),
         **KONTROL,
     },
     'a008': {
-        'waktu_pencatatan': ('terdampak', B + 'SELECT ?s ?t WHERE { ?s bansos:createdAt ?t } ORDER BY ?s'),
-        'nama_pekerjaan': ('tetangga', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
-                                       'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
+        'petugas_riwayat': ('terdampak', B + 'SELECT ?r ?petugas WHERE { ?r bansos:diubahOleh ?petugas }'),
+        'kolom_riwayat': ('tetangga', B + 'SELECT ?r ?kolom WHERE { ?r a bansos:RiwayatPerubahan ; '
+                                      'bansos:kolomDiubah ?kolom }'),
         'keluarga_wilayah': ('kontrol', B + 'SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k'),
         **KONTROL,
     },
     'a009': {
-        'tahun_berakhir': ('terdampak', B + 'SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th } '
-                                        'ORDER BY ?p'),
+        'tahun_berakhir': ('terdampak', B + 'SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th }'),
         'nama_program': ('tetangga', B + 'SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; '
                                      'bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p'),
         'transaksi_program': ('kontrol', B + 'SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } '

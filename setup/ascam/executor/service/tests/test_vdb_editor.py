@@ -91,3 +91,33 @@ def test_xml_declaration_and_indentation_are_preserved():
     baris_create = [b for b in hasil.splitlines() if 'CREATE FOREIGN TABLE' in b][0]
     spasi = lambda b: len(b) - len(b.lstrip())            # noqa: E731
     assert spasi(baris_alter) == spasi(baris_create)      # sejajar dengan DDL yang ada
+
+
+VDB_VIEW = VDB.replace('</vdb>', """  <model visible="true" name="v" type="VIRTUAL">
+    <metadata type="DDL"><![CDATA[
+      CREATE VIEW profil AS SELECT p.nik, p.pekerjaan FROM dukcapil.master_penduduk AS p;
+    ]]></metadata>
+  </model>
+</vdb>""")
+
+
+def test_alter_view_is_appended_to_the_view_model():
+    """ADR-0023: penghapusan kolom foreign table dan view dalam satu versi VDB baru."""
+    hasil, statements = vdb.apply_actions(VDB_VIEW, [
+        {'operation': 'drop_column', 'model': 'dukcapil', 'table': 'master_penduduk',
+         'column': 'pekerjaan'},
+        {'operation': 'alter_view', 'model': 'v', 'table': 'profil',
+         'body': 'SELECT p.nik FROM dukcapil.master_penduduk AS p'},
+    ], new_version='2')
+    assert statements[-1] == 'ALTER VIEW "profil" AS SELECT p.nik FROM dukcapil.master_penduduk AS p;'
+    model_v = [m for m in minidom.parseString(hasil).getElementsByTagName('model')
+               if m.getAttribute('name') == 'v'][0]
+    ddl = model_v.getElementsByTagName('metadata')[0].firstChild.data
+    assert 'CREATE VIEW profil AS SELECT p.nik, p.pekerjaan' in ddl     # definisi lama utuh
+    assert ddl.rstrip().endswith('ALTER VIEW "profil" AS SELECT p.nik FROM dukcapil.master_penduduk AS p;')
+    assert vdb.version_of(hasil) == '2'
+
+
+def test_alter_view_rejects_empty_body():
+    with pytest.raises(vdb.VdbError):
+        vdb.statement_alter_view('profil', ' ; ')

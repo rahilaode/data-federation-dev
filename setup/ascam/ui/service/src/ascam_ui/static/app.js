@@ -122,6 +122,8 @@ function jelaskan(a, plan) {
       return [`Tambahkan kolom ${p.column} pada tabel ${p.table}`, `Model VDB ${p.model}, tipe sumber ${p.column_type || '-'}; ditulis sebagai ALTER FOREIGN TABLE pada VDB versi baru`];
     case 'vdb:drop_column':
       return [`Hapus kolom ${p.column} dari tabel ${p.table}`, `Model VDB ${p.model}; versi VDB lama tetap tersedia untuk pemulihan`];
+    case 'vdb:alter_view':
+      return [`Keluarkan ${(p.removed_columns || []).join(', ')} dari view ${p.model}.${p.table}`, `Definisi baru: ${p.body}; ditulis sebagai ALTER VIEW pada VDB versi baru`];
     case 'vdb:set_name_in_source':
       return [`Arahkan ${p.table}.${p.column} ke nama baru di sumber, ${p.name_in_source}`, 'Nama kolom Teiid tidak berubah, sehingga mapping dan ontologi tetap utuh (strategi alias)'];
     case 'ontology:add_datatype_property': {

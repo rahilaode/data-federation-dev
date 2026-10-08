@@ -169,7 +169,14 @@ class Executor:
         hilang = sorted(set(sebelum) - set(sesudah))
         rincian = {'predikat_sebelum': len(sebelum), 'predikat_sesudah': len(sesudah),
                    'hilang': hilang, 'predikat_sasaran': predikat}
-        if pattern == 'P-002' and predikat:
+        usang = _predikat_usang(konteks.plan)
+        if pattern == 'P-002' and usang:
+            # Satu kolom dapat diekspos beberapa predikat, termasuk lewat view (ADR-0023):
+            # semua predikat yang di-deprecate harus hilang, dan hanya predikat itu yang boleh hilang.
+            ok = not (usang & set(sesudah)) and set(hilang) <= usang
+            rincian['predikat_sasaran'] = sorted(usang)
+            rincian['harapan'] = 'predikat sasaran hilang, predikat lain tetap'
+        elif pattern == 'P-002' and predikat:
             ok = predikat not in sesudah and hilang in ([], [predikat])
             rincian['harapan'] = 'predikat sasaran hilang, predikat lain tetap'
         elif pattern == 'P-003':
@@ -458,6 +465,13 @@ def _predikat(plan: dict) -> str | None:
         if params.get('iri'):
             return params['iri']
     return None
+
+
+def _predikat_usang(plan: dict) -> set[str]:
+    """Predikat yang di-deprecate rencana P-002 (tidak lagi diisi mapping mana pun)."""
+    return {(a.get('params') or {}).get('predicate_iri') for a in plan.get('actions', [])
+            if a.get('operation') == 'deprecate_property'
+            and (a.get('params') or {}).get('predicate_iri')}
 
 
 def _column_type(plan: dict) -> str | None:

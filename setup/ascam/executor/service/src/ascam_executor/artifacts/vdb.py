@@ -2,8 +2,8 @@
 Penyuntingan berkas VDB Teiid.
 
 Prinsip (ADR-0002): DDL yang sudah ada TIDAK diurai maupun ditulis ulang. Setiap perubahan
-hanya MENAMBAHKAN pernyataan `ALTER FOREIGN TABLE` di akhir blok metadata model yang
-bersangkutan. Struktur XML dimanipulasi dengan parser XML (minidom) sehingga blok CDATA tetap
+hanya MENAMBAHKAN pernyataan `ALTER FOREIGN TABLE` (dan `ALTER VIEW`, ADR-0023) di akhir
+blok metadata model yang bersangkutan. Struktur XML dimanipulasi dengan parser XML (minidom) sehingga blok CDATA tetap
 utuh. Seluruh identifier diberi tanda kutip ganda karena nama kolom sumber dapat berupa kata
 kunci Teiid (ADR-0003).
 
@@ -66,6 +66,14 @@ def statement_set_name_in_source(table: str, column: str, name_in_source: str) -
             f"OPTIONS (SET NAMEINSOURCE '{aman}');")
 
 
+def statement_alter_view(view: str, body: str) -> str:
+    """Definisi view diganti; daftar kolomnya diturunkan Teiid dari kueri baru (ADR-0023)."""
+    isi = body.strip().rstrip(';').strip()
+    if not isi:
+        raise VdbError(f'definisi baru view {view} kosong')
+    return f'ALTER VIEW {quote(view)} AS {isi};'
+
+
 def _indentasi(teks: str) -> str:
     """Indentasi baris DDL yang sudah ada, agar pernyataan baru menyatu rapi."""
     for baris in teks.splitlines():
@@ -117,6 +125,8 @@ def apply_actions(xml: str, actions: list[dict], type_lookup=None,
             statement = statement_add_column(table, action['column'], tipe)
         elif operation == 'drop_column':
             statement = statement_drop_column(table, action['column'])
+        elif operation == 'alter_view':
+            statement = statement_alter_view(table, action['body'])
         elif operation == 'set_name_in_source':
             statement = statement_set_name_in_source(table, action['column'],
                                                      action['name_in_source'])

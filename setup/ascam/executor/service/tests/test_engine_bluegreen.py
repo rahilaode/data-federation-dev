@@ -148,3 +148,16 @@ def test_add_pattern_succeeds_on_standby():
     executor, knowledge, _, agent, _ = buat(siaga=fx.BASELINE)
     assert executor.execute(fx.plan_add())['status'] == 'succeeded'
     assert 'rr:predicate bansos:email' in agent.files['r2rml']
+
+
+def test_drop_through_view_expects_every_deprecated_predicate_gone():
+    """ADR-0023: satu kolom, dua predikat; verifikasi menuntut keduanya hilang."""
+    LAIN = 'http://bansos.go.id/ontology/statusLain'
+    plan = fx.plan_drop()
+    plan['actions'] += [{'seq': 9, 'artifact': 'ontology', 'operation': 'deprecate_property',
+                         'params': {'predicate_iri': LAIN}}]
+    sebelum = {**fx.BASELINE, LAIN: 3}
+    executor, knowledge, _, _, _ = buat(aktif=sebelum, siaga={**fx.TANPA_STATUS, LAIN: 3})
+    assert executor.execute(plan)['status'] == 'rolled_back'          # LAIN masih ada
+    executor, knowledge, _, _, _ = buat(aktif=sebelum, siaga=fx.TANPA_STATUS)
+    assert executor.execute(plan)['status'] == 'succeeded'

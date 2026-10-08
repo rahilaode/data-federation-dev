@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .db import registry, spec
+from .views import plan_view_drops
 
 AUTO_ROLES = {'literal_value', 'projection_only'}
 HITL_ROLES = {'iri_template', 'join_key', 'sql_predicate', 'dynamic_predicate'}
@@ -282,11 +283,20 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
         report.actions.append({'artifact': 'vdb', 'operation': 'drop_column',
                                'model': target.model, 'table': target.table, 'column': target.column})
 
+    # View Teiid yang meneruskan kolom ikut disesuaikan (ADR-0023): proyeksinya dikecilkan
+    # dengan ALTER VIEW, dirambatkan ke view bertingkat; selain itu diserahkan ke administrator.
+    vdb_xml = db.execute(select(spec.Artifact.content).where(
+        spec.Artifact.spec_version_id == version.id, spec.Artifact.kind == 'vdb_xml')).scalar()
+    view_plan = plan_view_drops(db, version.id, column_ids, vdb_xml)
+    report.reasons.extend(view_plan.reasons)
+    report.actions.extend(view_plan.actions)
+
     # Logical table yang menyebut kolom secara eksplisit harus ikut ditulis ulang; tanpa itu
     # kueri masih merujuk kolom yang sudah hilang dan `ontop validate` menolak (temuan A002).
-    for target in targets:
+    # Termasuk kolom view yang ikut hilang karena penyesuaian view.
+    for column_id in sorted(column_ids | view_plan.view_column_ids):
         for triples_map_iri, nama_logis, status in _explicit_projections(db, version.id,
-                                                                        target.column_id):
+                                                                        column_id):
             if status == 'failed':
                 report.reasons.append(
                     f'logical table {triples_map_iri} memakai SQL yang tidak dapat diurai')

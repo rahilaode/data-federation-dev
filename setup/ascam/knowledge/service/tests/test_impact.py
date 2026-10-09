@@ -184,6 +184,24 @@ def test_add_targets_only_triples_maps_that_expose_new_columns(api, obdf):
     assert 'MapLinkPenerima' not in sasaran               # SELECT dengan daftar kolom eksplisit
 
 
+def test_add_is_hitl_when_exposing_maps_assign_several_classes(api, obdf):
+    """Domain property baru tidak dapat diturunkan dari DDL bila TriplesMap yang mengekspos
+    tabel memberi kelas berbeda; sebelumnya kelas pertama menurut abjad dipakai diam-diam."""
+    ganda = fx.MAPPING_TTL.replace(
+        'rr:subjectMap [ rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}" ]',
+        'rr:subjectMap [ rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}" ;'
+        ' rr:class bansos:Ringkasan ]')
+    assert ganda != fx.MAPPING_TTL
+    set_clients(api, agent=fx.FakeAgent(mapping=ganda))
+    assert api.post(f'/api/v1/obdf/{obdf}/sync').json()['changed']
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['decision'] == 'hitl'
+    assert any('lebih dari satu kelas' in r for r in out['reasons'])
+    lapisan = {(a['artifact'], a['operation']) for a in out['actions']}
+    assert ('ontology', 'add_datatype_property') in lapisan      # rencana tetap lengkap
+
+
 def test_add_is_hitl_when_no_mapping_exposes_new_columns(api, obdf):
     broken = fx.MAPPING_TTL.replace('SELECT * FROM kemensos.penerima_manfaat',
                                     'SELECT penerima_id, nik FROM kemensos.penerima_manfaat')

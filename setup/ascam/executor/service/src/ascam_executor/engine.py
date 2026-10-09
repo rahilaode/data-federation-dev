@@ -224,17 +224,17 @@ class Executor:
             rincian.update(sidik_jari='per_predikat', gagal_sebelum=sorted(gagal_sebelum),
                            gagal_sesudah=gagal)
         usang = _predikat_usang(konteks.plan)
-        if pattern == 'P-002' and usang:
+        if pattern == 'P-002':
             # Satu kolom dapat diekspos beberapa predikat, termasuk lewat view (ADR-0023):
             # semua predikat yang di-deprecate harus hilang, dan hanya predikat itu yang boleh hilang.
             # Predikat yang gagal pada instance lama dan bukan sasaran harus terjawab sekarang.
+            # Bila tidak ada yang di-deprecate (keep_property: predikat masih diisi mapping lain),
+            # usang = ∅ sehingga tidak boleh ada predikat yang hilang sama sekali.
             ok = (not gagal and not (usang & set(sesudah)) and set(hilang) <= usang
                   and (gagal_sebelum - usang) <= set(sesudah))
             rincian['predikat_sasaran'] = sorted(usang)
-            rincian['harapan'] = 'predikat sasaran hilang, predikat lain tetap'
-        elif pattern == 'P-002' and predikat:
-            ok = not gagal and predikat not in sesudah and hilang in ([], [predikat])
-            rincian['harapan'] = 'predikat sasaran hilang, predikat lain tetap'
+            rincian['harapan'] = ('predikat sasaran hilang, predikat lain tetap' if usang
+                                  else 'tidak ada predikat yang hilang (predikat masih dipakai)')
         elif pattern == 'P-003':
             # predikat yang gagal pada instance lama (kolom sudah berganti nama) tidak dapat
             # dibandingkan nilainya, tetapi harus kembali terjawab

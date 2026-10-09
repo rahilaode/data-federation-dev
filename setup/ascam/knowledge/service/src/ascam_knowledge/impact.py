@@ -393,9 +393,16 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
                                'table': target_table.table,
                                'triples_map_iri': triples_map['iri']})
     bentrok = any('sudah ada pada tabel Teiid' in r for r in report.reasons)
+    # TriplesMap yang mengekspos tabel dapat memberi kelas berbeda; domain property baru
+    # tidak dapat diturunkan dari DDL, jadi pilihannya diserahkan ke administrator.
+    kelas_ganda = len(classes) > 1
+    if kelas_ganda:
+        report.reasons.append(
+            f'TriplesMap yang mengekspos {target_table.table} memberi lebih dari satu kelas '
+            f'{classes}; rencana memakai {classes[0]} sebagai domain dan perlu ditinjau')
     if butuh_persetujuan:
         report.reasons.append('Penambahan kolom menambah property baru ke ontologi; kebijakan '
                               'adaptation.add_column mewajibkan persetujuan administrator atas '
                               'nama, domain, dan range property tersebut')
-    report.decision = 'hitl' if bentrok or butuh_persetujuan else 'auto'
+    report.decision = 'hitl' if bentrok or butuh_persetujuan or kelas_ganda else 'auto'
     return report

@@ -96,6 +96,21 @@ def test_verification_rules_follow_pattern():
     assert executor.execute(fx.plan_add())['status'] == 'rolled_back'
 
 
+def test_drop_keeping_shared_predicate_is_verified_without_disappearance():
+    """P-002 tanpa deprecate (keep_property): predikat masih diisi mapping lain, jadi jumlahnya
+    boleh turun tetapi predikat tidak boleh hilang. Aturan lama mensyaratkan predikat hilang
+    sehingga rencana yang benar di-rollback."""
+    rencana = fx.plan_drop()
+    rencana['actions'][2] = {'seq': 3, 'artifact': 'ontology', 'operation': 'keep_property',
+                             'params': {'predicate_iri': fx.STATUS, 'alasan': 'masih dipakai'}}
+    turun = {**fx.BASELINE, fx.STATUS: 9}
+    executor, _, _, _ = buat(sparql=fx.FakeSparql([fx.BASELINE, turun]))
+    assert executor.execute(rencana)['status'] == 'succeeded'
+    # predikat yang tidak di-deprecate tetap tidak boleh hilang
+    executor, _, _, _ = buat(sparql=fx.FakeSparql([fx.BASELINE, fx.TANPA_STATUS]))
+    assert executor.execute(rencana)['status'] == 'rolled_back'
+
+
 def test_failed_reload_is_reported():
     executor, knowledge, admin, agent = buat(agent=fx.FakeAgent(reload_ok=False))
     with pytest.raises(ExecutionError, match='muat ulang'):

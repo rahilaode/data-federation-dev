@@ -39,6 +39,20 @@ def kuartil(nilai: list) -> str:
     return f'{int(statistics.median(nilai))} ({int(q[0])}–{int(q[2])})'
 
 
+def batas_atas(k: int, n: int, alfa: float = 0.05) -> float:
+    """Batas atas Clopper-Pearson satu sisi (1 − alfa) untuk proporsi kegagalan k/n:
+    p sehingga P(X ≤ k | n, p) = alfa, dicari dengan bisection (tanpa scipy)."""
+    from math import comb
+    if k >= n:
+        return 1.0
+    cdf = lambda p: sum(comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(k + 1))  # noqa: E731
+    lo, hi = k / n, 1.0
+    for _ in range(100):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if cdf(mid) > alfa else (lo, mid)
+    return hi
+
+
 def muat(direktori: Path, pola: str) -> list[dict]:
     return [json.loads(p.read_text()) for p in sorted(direktori.glob(pola))]
 
@@ -148,8 +162,10 @@ def main() -> int:
         manual = sorted({r.get('n_manual', 0) for r in ok})
         print(f"| {kode.upper()} | {kuartil(dt)} | {kuartil(mesin)} | {max(dt) if dt else '-'} | "
               f"{sum(1 for v in dt if v < BATAS_DT)}/{len(dt)} | {', '.join(map(str, manual)) or '-'} | 0 |")
-    print('\nΔt_adapt = t_end − t_start (pers. 3.16): t_start saat DDL dieksekusi, t_end saat verifikasi '
-          'SPARQL pasca-muat-ulang selesai. Δt_adapt mesin tidak memuat jeda keputusan administrator.\n')
+    print('\nΔt_adapt = t_end − t_start (pers. 3.16): t_start saat DDL dieksekusi; t_end saat artefak baru '
+          'melayani kueri dan sudah terverifikasi, yaitu akhir langkah switch pada blue-green (ADR-0022) '
+          'atau akhir verifikasi pasca-muat-ulang pada strategi restart. Δt_adapt mesin tidak memuat jeda '
+          'keputusan administrator.\n')
     print('| Skenario | Deteksi (ms) | ' + ' | '.join(LANGKAH) + ' |')
     print('|---|---:|' + '---:|' * len(LANGKAH))
     for kode in skenario:
@@ -220,6 +236,21 @@ def main() -> int:
     # ── 7. anomali ───────────────────────────────────────────────────────────────
     anomali = [r for r in perlakuan if r.get('hasil') not in HASIL_SAH or not r.get('sesuai_harapan')
                or not (r.get('harapan') and all(r['harapan'].values()))]
+    # ── keandalan ────────────────────────────────────────────────────────────────
+    if perlakuan:
+        print('\n### Keandalan (batas atas Clopper-Pearson satu sisi 95 % untuk peluang gagal)\n')
+        print('| Kelompok | Gagal / n | Batas atas |')
+        print('|---|---:|---:|')
+        dieksekusi = [r for r in perlakuan if r.get('hasil') != 'ditolak']
+        kelompok = [('keputusan D11 (semua run)', [r for r in perlakuan], lambda r: r.get('sesuai_harapan')),
+                    ('eksekusi (run yang dieksekusi)', dieksekusi, lambda r: r.get('hasil') == 'succeeded')]
+        kelompok += [(f'eksekusi {k.upper()}', [r for r in dieksekusi if r['skenario'] == k],
+                      lambda r: r.get('hasil') == 'succeeded')
+                     for k in skenario if any(r['skenario'] == k for r in dieksekusi)]
+        for nama, runs, sukses in kelompok:
+            gagal = sum(1 for r in runs if not sukses(r))
+            print(f'| {nama} | {gagal}/{len(runs)} | {100 * batas_atas(gagal, len(runs)):.1f} % |')
+
     print(f'\n## 7. Anomali ({len(anomali)} dari {len(perlakuan)} run perlakuan)\n')
     for r in anomali:
         print(f"- {r['skenario']} run {r['run']}: hasil={r.get('hasil')}, keputusan={r.get('keputusan')}, "

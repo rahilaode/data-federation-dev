@@ -113,7 +113,7 @@ def main() -> int:
     ax.set_axisbelow(True)
     for sisi in ('top', 'right'):
         ax.spines[sisi].set_visible(False)
-    ax.legend(ncol=6, fontsize=6.6, frameon=False, loc='upper center',
+    ax.legend(ncol=4, fontsize=6.6, frameon=False, loc='upper center',
               bbox_to_anchor=(0.46, -0.62 / (0.53 * len(kode))),   # jarak tetap di bawah sumbu
               handlelength=1.5, columnspacing=0.9, handletextpad=0.4)
     fig.tight_layout()

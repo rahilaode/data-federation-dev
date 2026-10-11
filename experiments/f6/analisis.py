@@ -219,19 +219,24 @@ def main() -> int:
     # ── 6. perbandingan ──────────────────────────────────────────────────────────
     if baseline:
         print('## 6. Perbandingan baseline dan perlakuan\n')
-        print('| Operasi | ExecutionPreserved tanpa ASCAM | ExecutionPreserved dengan ASCAM | '
-              'ResultPreserved dengan ASCAM |')
-        print('|---|---:|---:|---:|')
+        # EP, RP, dan PR untuk kedua mode. PR memakai RP untuk P-003 dan EP untuk pola lain
+        # (kueri.nilai), sehingga PR tanpa ASCAM dihitung dengan aturan yang sama.
+        print('| Operasi | EP tanpa | RP tanpa | PR tanpa | EP dengan | RP dengan | PR dengan |')
+        print('|---|---:|---:|---:|---:|---:|---:|')
         for kode in skenario:
             def rata(runs, kunci):
                 p = [r['penilaian']['per_kueri'] for r in runs if r.get('penilaian')]
                 return (statistics.mean(100 * sum(v[kunci] for v in x.values()) / len(x) for x in p)
                         if p else None)
-            b = rata([r for r in baseline if r['skenario'] == kode], 'execution_preserved')
-            ep = rata([r for r in perlakuan if r['skenario'] == kode], 'execution_preserved')
-            rp = rata([r for r in perlakuan if r['skenario'] == kode], 'result_preserved')
+            dasar = [r for r in baseline if r['skenario'] == kode]
+            uji = [r for r in perlakuan if r['skenario'] == kode]
+            b_ep, b_rp = rata(dasar, 'execution_preserved'), rata(dasar, 'result_preserved')
+            ep, rp = rata(uji, 'execution_preserved'), rata(uji, 'result_preserved')
+            rename = any(r.get('penilaian', {}).get('metrik') == 'result_preserved' for r in uji)
+            b_pr, pr = (b_rp, rp) if rename else (b_ep, ep)
             f = lambda v: '-' if v is None else f'{v:.1f} %'               # noqa: E731
-            print(f'| {kode.upper()} / B{kode[1:]} | {f(b)} | {f(ep)} | {f(rp)} |')
+            print(f'| {kode.upper()} / B{kode[1:]} | {f(b_ep)} | {f(b_rp)} | {f(b_pr)} | '
+                  f'{f(ep)} | {f(rp)} | {f(pr)} |')
 
     # ── 7. anomali ───────────────────────────────────────────────────────────────
     anomali = [r for r in perlakuan if r.get('hasil') not in HASIL_SAH or not r.get('sesuai_harapan')

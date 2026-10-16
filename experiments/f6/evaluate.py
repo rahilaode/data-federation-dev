@@ -6,7 +6,8 @@ sepenuhnya dapat diatributkan pada ASCAM (§3.10.2, hlm. 104):
 
   baseline   Executor dijeda sepanjang run: DDL diterapkan pada sumber tanpa adaptasi, lalu
              Q_k dijalankan dan dicatat status HTTP, pesan galat, dan hasilnya (§3.10.1).
-  perlakuan  Siklus MAPE-K berjalan (A001 disetujui evaluator, ADR-0021). Dicatat keputusan
+  perlakuan  Siklus MAPE-K berjalan (ADD disetujui evaluator, ADR-0021; DROP/RENAME tak aman hanya
+             diberitahukan, ADR-0024). Dicatat keputusan
              D11, Δt_adapt, dekomposisi langkah, dan PreservationRatio atas Q_k (§3.11.2–3.11.3).
              Seluruh pesan Kafka selama perlakuan diaudit untuk C_safe (§3.11.1).
 
@@ -274,11 +275,12 @@ def _perlakuan_berjalan(sk, catatan: dict, t0: float, t0_wall: str, event_awal: 
                                        for r in (catatan['alasan'] or []))
         catatan['sesuai_harapan'] = catatan['sesuai_harapan'] and catatan['alasan_sesuai']
 
-    # HITL (ADR-0021): satu persetujuan = satu keputusan manual; penyuntingan artefak tetap nol
+    # HITL (ADR-0021): satu persetujuan = satu keputusan manual; penyuntingan artefak tetap nol.
+    # Notifikasi (ADR-0024) tidak menunggu keputusan apa pun.
     catatan['n_manual'] = 0
     catatan['keputusan_ms'] = 0
-    if rencana and rencana['status'] == 'pending_approval' and not sk.setujui:
-        return _tolak(sk, catatan, rencana, eksekusi_awal)
+    if rencana and rencana['status'] == 'notified':
+        return _amati_notifikasi(sk, catatan, rencana, eksekusi_awal)
     if rencana and rencana['status'] == 'pending_approval':
         t_rencana = time.perf_counter()
         hasil = api(f"/api/v1/plans/{rencana['id']}/approve", 'POST',
@@ -318,26 +320,28 @@ def _perlakuan_berjalan(sk, catatan: dict, t0: float, t0_wall: str, event_awal: 
     return catatan
 
 
-def _tolak(sk, catatan: dict, rencana: dict, eksekusi_awal: set, amati: float = 20.0) -> dict:
-    """Rencana yang tidak lengkap ditolak evaluator (A009): view harus didefinisikan ulang oleh
-    administrator, bukan disetujui apa adanya. Dicatat bahwa tidak ada eksekusi yang berjalan dan
-    versi OBDF tidak berubah; kueri sesudahnya menunjukkan kondisi yang harus ditangani manusia."""
+def _amati_notifikasi(sk, catatan: dict, rencana: dict, eksekusi_awal: set, amati: float = 20.0) -> dict:
+    """DROP/RENAME yang tidak terbukti aman (A009, ADR-0024): ASCAM tidak menyusun tindakan dan
+    hanya memberi tahu administrator. Dicatat bahwa rencana tidak memuat tindakan, notifikasinya
+    menyebut elemen terdampak, tidak ada eksekusi yang berjalan, dan versi OBDF tidak berubah;
+    kueri sesudahnya menunjukkan kondisi yang harus diperbaiki manusia."""
     kode = sk.kode
-    hasil = api(f"/api/v1/plans/{rencana['id']}/reject", 'POST',
-                {'note': 'rencana tidak lengkap: view harus didefinisikan ulang administrator '
-                         '(protokol F6)'})
-    catatan['n_manual'] = 1
-    catatan['ditolak_oleh'] = hasil.get('decided_by')
     time.sleep(amati)                               # beri kesempatan bila Executor keliru mengeksekusi
     baru = [e for e in api('/api/v1/obdf/1/executions?limit=10') if e['id'] not in eksekusi_awal]
     versi = api('/api/v1/obdf/1/versions?limit=1')
+    pesan = [n['message'] for n in api('/api/v1/obdf/1/notifications?limit=20')
+             if n['plan_id'] == rencana['id']]
+    catatan['notifikasi'] = pesan
+    catatan['terdampak'] = (rencana.get('impact') or {}).get('affected')
     catatan['eksekusi_baru'] = [{'id': e['id'], 'status': e['status']} for e in baru]
     catatan['versi_sesudah'] = versi[0]['version_no'] if isinstance(versi, list) and versi else None
-    catatan['hasil'] = 'ditolak' if not baru else 'dieksekusi_meski_ditolak'
+    catatan['hasil'] = 'dinotifikasi' if not baru else 'dieksekusi_meski_dinotifikasi'
     catatan['adaptasi_ms'] = catatan['dt_adapt_ms'] = catatan['dt_adapt_mesin_ms'] = None
     catatan['jawaban_sesudah'] = kueri.jalankan_himpunan(kode)
     catatan['penilaian'] = kueri.nilai(kode, catatan['jawaban_sebelum'], catatan['jawaban_sesudah'])
     catatan['harapan'] = {**kueri.sesuai_harapan(kode, catatan['jawaban_sesudah'], catatan['penilaian']),
+                          'tanpa_tindakan': not rencana.get('actions'),
+                          'notifikasi_menyebut_view': bool(sk.view) and any(sk.view in p for p in pesan),
                           'tidak_dieksekusi': not baru,
                           'versi_tidak_berubah': catatan['versi_sesudah'] == catatan.get('versi_dasar')}
     catatan['selesai'] = datetime.now(timezone.utc).isoformat()

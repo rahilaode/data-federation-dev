@@ -25,8 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 # verify, switch. Langkah yang tidak ada pada suatu strategi tercatat kosong.
 LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verify', 'switch', 'sync']
 BATAS_DT = 60_000
-# Hasil yang sah: 'ditolak' hanya terjadi pada skenario yang rencananya memang harus ditolak (A009)
-HASIL_SAH = {'succeeded', 'ditolak'}
+# Hasil yang sah tanpa eksekusi: 'dinotifikasi' untuk skenario yang memang tidak boleh diadaptasi
+# (A009, ADR-0024); 'ditolak' dipertahankan agar hasil lama (rencana A009 ditolak) tetap terbaca.
+HASIL_SAH = {'succeeded', 'dinotifikasi', 'ditolak'}
+TANPA_EKSEKUSI = {'dinotifikasi', 'ditolak'}
 
 
 def kuartil(nilai: list) -> str:
@@ -246,7 +248,7 @@ def main() -> int:
         print('\n### Keandalan (batas atas Clopper-Pearson satu sisi 95 % untuk peluang gagal)\n')
         print('| Kelompok | Gagal / n | Batas atas |')
         print('|---|---:|---:|')
-        dieksekusi = [r for r in perlakuan if r.get('hasil') != 'ditolak']
+        dieksekusi = [r for r in perlakuan if r.get('hasil') not in TANPA_EKSEKUSI]
         kelompok = [('keputusan D11 (semua run)', [r for r in perlakuan], lambda r: r.get('sesuai_harapan')),
                     ('eksekusi (run yang dieksekusi)', dieksekusi, lambda r: r.get('hasil') == 'succeeded')]
         kelompok += [(f'eksekusi {k.upper()}', [r for r in dieksekusi if r['skenario'] == k],

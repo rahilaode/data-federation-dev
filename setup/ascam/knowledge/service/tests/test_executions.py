@@ -7,8 +7,8 @@ from test_impact import obdf                          # noqa: F401 — fixture O
 
 def rencana_disetujui(api, obdf_id, hitl=False):
     if hitl:
-        plan = kirim(api, obdf_id, operation='drop', source='dukcapil',
-                     table='master_penduduk', column='nik')['plan']
+        plan = kirim(api, obdf_id, operation='add', source='kemensos', schema='public',
+                     table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
         api.post(f"/api/v1/plans/{plan['id']}/approve")
         return plan['id']
     return kirim(api, obdf_id, operation='drop', source='kemensos', schema='public',
@@ -83,8 +83,8 @@ def test_rollback_is_recorded(api, obdf):
 
 
 def test_only_approved_plans_can_be_executed(api, obdf):
-    plan = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
-                 column='nik')['plan']
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     assert plan['status'] == 'pending_approval'
     r = api.post(f"/api/v1/plans/{plan['id']}/executions")
     assert r.status_code == 409 and 'approved' in r.json()['detail']
@@ -113,3 +113,11 @@ def test_unknown_execution_is_404(api, obdf, path):
         {'validator': 'teiid_status', 'passed': True} if 'validations' in path
         else {'status': 'succeeded'})
     assert api.post(path, json=body).status_code == 404
+
+
+def test_notified_plan_cannot_be_executed(api, obdf):
+    plan = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
+                 column='nik')['plan']
+    assert plan['status'] == 'notified'
+    r = api.post(f"/api/v1/plans/{plan['id']}/executions")
+    assert r.status_code == 409

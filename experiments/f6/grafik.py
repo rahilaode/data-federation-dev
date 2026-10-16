@@ -34,7 +34,7 @@ LABEL = {'a001': 'ADD, PostgreSQL (A001)', 'a004': 'ADD, MySQL (A004)',
          'a002': 'DROP, PostgreSQL (A002)', 'a005': 'DROP, MySQL (A005)',
          'a006': 'RENAME, PostgreSQL (A003)', 'a003': 'RENAME, MySQL (A006)',
          'a007': 'DROP via view, PostgreSQL (A007)', 'a008': 'DROP via view, MySQL (A008)'}
-# A009 tidak digambar: rencananya ditolak sehingga tidak memiliki Δt_adapt.
+# A009 tidak digambar: perubahannya tidak diadaptasi sehingga tidak memiliki Δt_adapt.
 
 # (label legenda, kunci di ringkasan.json, warna isi, arsiran); label diawali "_" = tanpa legenda
 # Strategi restart (ADR-0001): Ontop tunggal dimuat ulang sesudah peralihan VDB.

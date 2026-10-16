@@ -20,6 +20,10 @@
   --berhasil-latar: #E4F2E8;
   --gagal: #B3261E;
   --gagal-latar: #FBE7E5;
+  --peringatan: #B4410C;
+  --peringatan-latar: #FDEBDD;
+  --sumber: #4A5568;
+  --sumber-latar: #EDF0F4;
   --netral-latar: #EDF0F4;
   --huruf: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --kode: "JetBrains Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
@@ -167,6 +171,8 @@ tr.dapat-dipilih:hover td { background: var(--kertas); }
 .tanda.sigma { background: var(--sigma-latar); color: var(--sigma); }
 .tanda.mapping { background: var(--mapping-latar); color: var(--mapping); }
 .tanda.ontologi { background: var(--ontologi-latar); color: var(--ontologi); }
+.tanda.peringatan { background: var(--peringatan-latar); color: var(--peringatan); }
+.navigasi .jumlah.peringatan { background: var(--peringatan); }
 
 /* ── tombol dan formulir ──────────────────────────────────────────────────── */
 button, .tombol {
@@ -188,6 +194,9 @@ button.setujui:hover { background: #662F86; }
 button.tolak { color: var(--gagal); border-color: #E6B5B1; }
 button.tolak:hover { border-color: var(--gagal); }
 button.kecil { padding: 0.25rem 0.625rem; font-size: var(--ukuran-kecil); }
+a.tombol { display: inline-block; text-decoration: none; }
+a.tombol:hover { border-color: var(--tinta); }
+.tombol-grup { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 label { display: block; font-weight: 600; font-size: var(--ukuran-kecil); margin-bottom: 0.25rem; }
 input, select, textarea {
   font: inherit;
@@ -291,7 +300,12 @@ a.tahap:hover .nama { text-decoration: underline; }
 .alasan { margin: 0; padding-left: 1.125rem; }
 .alasan li + li { margin-top: 0.25rem; }
 .keputusan-admin { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end; }
-.keputusan-admin .tombol-grup { display: flex; gap: 0.5rem; }
+.usulan.pemberitahuan { border-left-color: var(--peringatan); }
+.terdampak { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.terdampak li { display: grid; grid-template-columns: 9.5rem 1fr; gap: 1rem; align-items: baseline; }
+.terdampak li > .tanda { justify-self: start; }
+.pratinjau-property { color: var(--redup); }
+.pratinjau-property code { color: var(--tinta); word-break: break-all; }
 
 /* ── diff artefak ─────────────────────────────────────────────────────────── */
 .diff { margin: 0; padding: 0.75rem 0; background: #FBFCFD; border: 1px solid var(--garis); border-radius: var(--sudut); max-height: 34rem; overflow: auto; }
@@ -301,6 +315,50 @@ a.tahap:hover .nama { text-decoration: underline; }
 .diff .blok { color: var(--mapping); background: var(--mapping-latar); }
 .diff .kepala { color: var(--redup); }
 pre.artefak { margin: 0; padding: 1rem; background: #FBFCFD; border: 1px solid var(--garis); border-radius: var(--sudut); max-height: 34rem; overflow: auto; }
+
+/* ── lineage kolom: lima lapisan dari sumber sampai ontologi ──────────────── */
+.lineage-panel { overflow-x: auto; }
+.lineage {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(9.5rem, 1fr));
+  column-gap: 3.5rem;
+  min-width: 62rem;
+}
+.lineage-garis { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.lineage-garis path { fill: none; stroke: var(--garis-kuat); stroke-width: 1.4; }
+.lineage-garis path.lemah { stroke-dasharray: 5 4; stroke: #C9865E; }
+.lineage-garis path.terang { stroke: var(--tinta); stroke-width: 2.2; }
+.lineage-garis path.lemah.terang { stroke: var(--peringatan); }
+.lineage-garis path.pudar { opacity: 0.18; }
+.lineage-kolom { display: flex; flex-direction: column; gap: 0.4rem; position: relative; }
+.lineage-kolom h3 { color: var(--redup); font-weight: 600; margin-bottom: 0.35rem; }
+.simpul {
+  text-align: left;
+  font-family: var(--kode);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--garis-kuat);
+  border-left-width: 3px;
+  background: var(--permukaan);
+  word-break: break-all;
+  position: relative;
+}
+.simpul.sumber { border-left-color: var(--sumber); background: var(--sumber-latar); }
+.simpul.sigma { border-left-color: var(--sigma); background: var(--sigma-latar); }
+.simpul.mapping { border-left-color: var(--mapping); background: var(--mapping-latar); }
+.simpul.ontologi { border-left-color: var(--ontologi); background: var(--ontologi-latar); }
+.simpul.tak-terpakai { border-style: dashed; color: var(--redup); }
+.simpul.usang { text-decoration: line-through; }
+.simpul.terang { border-color: var(--tinta); box-shadow: 0 0 0 1px var(--tinta); }
+.simpul.pudar { opacity: 0.35; }
+.legenda .garis-l { width: 1.5rem; height: 0; border-top: 2px solid var(--garis-kuat); border-radius: 0; vertical-align: 3px; }
+.legenda .garis-l.lemah { border-top: 2px dashed #C9865E; }
+.legenda .kotak-l { width: 0.875rem; height: 0.625rem; border: 1px solid var(--garis-kuat); background: var(--permukaan); }
+.legenda .kotak-l.tak-terpakai { border-style: dashed; }
+.legenda .kotak-l.usang { background: linear-gradient(to bottom, transparent 45%, var(--tinta) 45%, var(--tinta) 55%, transparent 55%); }
 
 /* ── notifikasi sementara dan masuk ───────────────────────────────────────── */
 .kabar {
@@ -317,6 +375,7 @@ pre.artefak { margin: 0; padding: 1rem; background: #FBFCFD; border: 1px solid v
 }
 .kabar.gagal { background: var(--gagal); }
 .kabar.keputusan { background: var(--keputusan); }
+.kabar.peringatan { background: var(--peringatan); }
 .kabar a { color: #fff; font-weight: 700; }
 .masuk { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
 .masuk form { width: min(24rem, 100%); background: var(--permukaan); border: 1px solid var(--garis); border-radius: var(--sudut); padding: 2rem; }
@@ -340,6 +399,7 @@ pre.artefak { margin: 0; padding: 1rem; background: #FBFCFD; border: 1px solid v
   .grid-dua { grid-template-columns: 1fr; }
   .tindakan li { grid-template-columns: 1fr; gap: 0.35rem; }
   .keputusan-admin { grid-template-columns: 1fr; }
+  .terdampak li { grid-template-columns: 1fr; gap: 0.25rem; }
   .garis-waktu li { grid-template-columns: 1fr; gap: 0.25rem; }
 }
 @media (prefers-reduced-motion: no-preference) {

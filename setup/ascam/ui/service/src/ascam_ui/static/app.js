@@ -3,7 +3,7 @@
    Seluruh data dinamis melewati esc() sebelum masuk ke HTML, karena isi event, rencana, dan
    artefak berasal dari sistem lain dan tidak boleh dipercaya sebagai markup. */
 
-const S = { user: null, obdf: null, oid: null, menunggu: null, tipe: {}, events: {}, pemutar: null };
+const S = { user: null, obdf: null, oid: null, menunggu: null, belumDibaca: null, tipe: {}, events: {}, rencana: {}, pemutar: null };
 const LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify', 'sync', 'rollback'];
 const NAMA_LANGKAH = {
   deploy_vdb: 'Deploy VDB', validate: 'Validasi', start_ontop: 'Nyalakan Ontop siaga', switch: 'Pindah koneksi', reload_ontop: 'Muat ulang Ontop',
@@ -21,6 +21,20 @@ const STATUS = {
   received: ['Diterima', ''], running: ['Berjalan', 'keputusan'], succeeded: ['Berhasil', 'berhasil'],
   rolled_back: ['Dipulihkan', 'gagal'], active: ['Aktif', 'berhasil'], candidate: ['Kandidat', ''],
   auto: ['Otomatis', ''], hitl: ['Perlu persetujuan', 'keputusan'],
+  notify: ['Notifikasi', 'peringatan'], notified: ['Diberitahukan', 'peringatan'], revised: ['Direvisi', ''],
+};
+const LAPISAN_LINEAGE = [
+  { kunci: 'source', judul: 'Kolom sumber', kelas: 'sumber' },
+  { kunci: 'foreign', judul: 'Foreign table (Σ_S)', kelas: 'sigma' },
+  { kunci: 'view', judul: 'View (Σ_V)', kelas: 'sigma' },
+  { kunci: 'mapping', judul: 'TriplesMap (ℳ)', kelas: 'mapping' },
+  { kunci: 'ontology', judul: 'Property (𝒯)', kelas: 'ontologi' },
+];
+const PERAN = {
+  literal_value: 'nilai literal', iri_template: 'template IRI', join_key: 'kunci join', sql_predicate: 'predikat SQL',
+  dynamic_predicate: 'predikat dinamis', projection_only: 'hanya diproyeksikan',
+  maps_to: 'dipetakan ke property', name_in_source: 'NAMEINSOURCE', direct: 'langsung',
+  passthrough: 'pass-through', star: 'SELECT *', expression: 'ekspresi', predicate: 'klausa WHERE/JOIN',
 };
 
 const JENIS_TARGET = {
@@ -199,19 +213,27 @@ function baris_eksekusi(e) {
     <td>${esc(durasi(e.timings && e.timings.total_ms))}</td><td>${batangLangkah(e)}</td></tr>`;
 }
 
+function ruteSekarang() {
+  return (location.hash.replace(/^#\//, '') || 'ringkasan').split('?')[0];
+}
 async function halamanRingkasan() {
   const [r, sehat] = await Promise.all([api('/api/ui/overview'), api('/api/ui/health')]);
+  // pembaruan berkala yang selesai setelah pengguna pindah halaman tidak boleh menimpa halaman baru
+  if (RUTE[ruteSekarang()] && ruteSekarang() !== 'ringkasan') return;
   const ev = r.events[0];
   const eks = r.executions[0];
   const exe = sehat.executor || {};
   const versi = r.active_version || {};
+  const pemberitahuan = r.notifications.filter((n) => !r.pending.some((p) => p.id === n.plan_id)).length;
   const tahap = [
     { nama: 'Monitor', nilai: r.events.length ? relatif(ev.received_at) : '-',
       ket: ev ? kalimatEvent(ev.structured) : 'Belum ada perubahan skema', tautan: '#/perubahan' },
     { nama: 'Analisis', nilai: ev ? (STATUS[ev.status] || [ev.status])[0] : '-',
       ket: ev && ev.ignore_reason ? ev.ignore_reason : 'Dampak dihitung dari lineage kolom', tautan: '#/adaptasi' },
-    { nama: 'Keputusan', nilai: `${r.pending.length} menunggu`, perhatian: r.pending.length > 0,
-      ket: r.pending.length ? 'Usulan perubahan menunggu persetujuan Anda' : 'Tidak ada usulan yang menunggu', tautan: '#/persetujuan' },
+    { nama: 'Keputusan', nilai: `${r.pending.length} menunggu`, perhatian: r.pending.length > 0 || pemberitahuan > 0,
+      ket: [r.pending.length ? 'Penambahan kolom menunggu persetujuan Anda' : 'Tidak ada usulan yang menunggu',
+        pemberitahuan ? `${pemberitahuan} notifikasi perubahan yang tidak diadaptasi` : ''].filter(Boolean).join('; '),
+      tautan: r.pending.length || !pemberitahuan ? '#/persetujuan' : '#/notifikasi' },
     { nama: 'Eksekusi', nilai: eks ? (STATUS[eks.status] || [eks.status])[0] : '-', bermasalah: eks && ['failed', 'rolled_back'].includes(eks.status),
       ket: eks ? `Rencana ${eks.plan_id}, ${durasi(eks.timings && eks.timings.total_ms)}${exe.paused ? '; executor dijeda' : ''}` : 'Belum ada eksekusi', tautan: '#/adaptasi' },
     { nama: 'Pengetahuan', nilai: versi.version_no ? `Versi ${versi.version_no}` : '-',
@@ -262,17 +284,86 @@ async function periksaTarget() {
   tombol.textContent = 'Periksa koneksi Teiid, Ontop, dan Kafka';
 }
 
-/* ── halaman: persetujuan (HITL) ───────────────────────────────────────────── */
+/* ── halaman: persetujuan (hanya penambahan kolom, ADR-0024) ───────────────── */
+function camel(kolom) {
+  return String(kolom || '').split('_').map((b, i) => (i ? b.charAt(0).toUpperCase() + b.slice(1).toLowerCase() : b)).join('');
+}
+function tautanLineage(plan) {
+  const s = (S.events[plan.event_id] || {}).structured;
+  if (!s || !s.table) return '';
+  const q = new URLSearchParams({ sumber: s.source || '', tabel: s.table, kolom: s.column || '' });
+  return `<p style="margin-top:0.75rem"><a href="#/lineage?${esc(q.toString())}">Lihat jalurnya pada lineage kolom</a></p>`;
+}
+function daftarTerdampak(plan, { tautan = true } = {}) {
+  const a = plan.impact && plan.impact.affected;
+  if (!a) return '';
+  const kelompok = [['columns', 'Kolom (Σ_S)', 'sigma'], ['views', 'View (Σ_V)', 'sigma'],
+    ['triples_maps', 'TriplesMap (ℳ)', 'mapping'], ['predicates', 'Property (𝒯)', 'ontologi']]
+    .filter(([kunci]) => a[kunci] && a[kunci].length);
+  if (!kelompok.length) return '';
+  return `<section><h3>Elemen OBDF yang terdampak</h3><ul class="terdampak">${kelompok.map(([kunci, judul, kelas]) => `
+    <li><span class="tanda ${kelas}">${esc(judul)}</span><span>${a[kunci].map((x) => esc(['columns', 'views'].includes(kunci) ? x : pendek(x))).join(', ')}</span></li>`).join('')}</ul>
+    ${tautan ? tautanLineage(plan) : ''}</section>`;
+}
+function formulirProperty(plan) {
+  const o = plan.impact && plan.impact.add_options;
+  if (!o) return '';
+  if (!o.triples_maps || !o.triples_maps.length || !o.namespace || !o.iri_template) {
+    return `<section><h3>Property baru di ontologi</h3><p class="redup">Tidak ada property yang dapat ditambahkan:
+      ${!o.triples_maps || !o.triples_maps.length ? 'tidak ada TriplesMap yang otomatis memuat kolom baru, sehingga persetujuan hanya menambah kolom pada VDB.' : 'kebijakan penamaan atau namespace ontologi belum diatur.'}</p></section>`;
+  }
+  const id = esc(plan.id);
+  const domain = o.proposed_domain || (o.classes || [])[0] || '';
+  return `<section><h3>Property baru di ontologi</h3>
+    <p class="redup kecil" style="margin-bottom:0.75rem">${o.proposed_iri ? 'Usulan ASCAM dari kebijakan penamaan. Ubah bila perlu; persetujuan dengan nama atau domain lain dicatat sebagai rencana revisi.'
+      : 'ASCAM tidak dapat mengusulkan nama yang bebas bentrok. Tentukan nama property sebelum menyetujui.'}</p>
+    <div class="baris-formulir">
+      <div><label for="prop-${id}">Nama property</label>
+        <input id="prop-${id}" data-property="${id}" value="${esc(o.proposed_iri ? pendek(o.proposed_iri) : '')}" placeholder="${esc(camel(o.column))}" maxlength="100" autocomplete="off" spellcheck="false"></div>
+      <div><label for="dom-${id}">Domain (kelas subjek)</label>${(o.classes || []).length
+        ? `<select id="dom-${id}" data-property="${id}">${o.classes.map((c) => `<option value="${esc(c)}" ${c === domain ? 'selected' : ''}>${esc(pendek(c))}</option>`).join('')}</select>`
+        : '<p class="kecil redup" style="padding-top:0.5rem">TriplesMap pengekspos tidak memberi kelas, sehingga property tanpa domain.</p>'}</div>
+    </div>
+    <p class="kecil pratinjau-property" id="pratinjau-${id}"></p></section>`;
+}
+function pilihanProperty(id) {
+  const plan = S.rencana[id];
+  const o = plan && plan.impact && plan.impact.add_options;
+  const masukan = $(`#prop-${id}`);
+  if (!o || !masukan) return null;
+  const pilih = $(`#dom-${id}`);
+  return { o, nama: masukan.value.trim(), domain: pilih ? pilih.value : null };
+}
+function pratinjauProperty(id) {
+  const p = pilihanProperty(id);
+  if (!p) return;
+  const el = $(`#pratinjau-${id}`);
+  if (!/^[A-Za-z_][A-Za-z0-9_-]{0,99}$/.test(p.nama)) {
+    el.innerHTML = '<span style="color:var(--gagal)">Nama diawali huruf atau garis bawah, lalu huruf, angka, garis bawah, atau tanda hubung.</span>';
+    return;
+  }
+  const iri = p.o.iri_template.replace('{namespace}', p.o.namespace).replace('{column_camel}', p.nama).replace('{column}', p.nama);
+  const tm = p.o.triples_maps.filter((t) => !p.domain || !t.classes.length || t.classes.includes(p.domain)).map((t) => pendek(t.iri));
+  el.innerHTML = `IRI <code>${esc(iri)}</code>; kolom ${esc(p.o.column)} dipetakan pada ${tm.length ? tm.map(esc).join(', ') : '<strong>tidak ada TriplesMap</strong>'}.`;
+}
+
 function dokumenUsulan(plan, { dapatDiputuskan, pratinjau = false }) {
   const ev = S.events[plan.event_id];
   const struktur = ev ? ev.structured : null;
-  return `<article class="usulan" id="usulan-${esc(plan.id)}">
+  const notifikasi = plan.decision === 'notify' || plan.status === 'notify';
+  const judulTindakan = notifikasi ? 'Tindakan ASCAM' : ['executed', 'failed'].includes(plan.status) ? 'Yang dilakukan ASCAM' : 'Yang akan dilakukan ASCAM';
+  const tindakan = notifikasi && !(plan.actions || []).length
+    ? '<p class="redup">ASCAM tidak mengubah OBDF untuk perubahan ini. Perbaiki spesifikasi secara manual pada elemen yang terdampak, lalu jalankan sinkronisasi agar Knowledge memuat versi barunya.</p>'
+    : daftarTindakan(plan);
+  const judulAlasan = dapatDiputuskan ? 'Mengapa butuh keputusan Anda' : notifikasi ? 'Mengapa tidak diadaptasi otomatis' : 'Catatan analisis';
+  return `<article class="usulan ${notifikasi ? 'pemberitahuan' : ''}" id="usulan-${esc(plan.id)}">
     <header><h2>${esc(kalimatEvent(struktur))}</h2>${tanda(plan.status)}
       <span class="kecil redup">${pratinjau ? `Pola ${esc(plan.pattern || '-')}, dihitung terhadap versi spesifikasi ${esc(plan.base_spec_version_id)}`
-        : `Rencana ${esc(plan.id)}, pola ${esc(plan.pattern || '-')}, disusun ${esc(relatif(plan.created_at))} di atas versi spesifikasi ${esc(plan.base_spec_version_id)}`}</span></header>
-    <section><h3>${['executed', 'failed'].includes(plan.status) ? 'Yang dilakukan ASCAM' : 'Yang akan dilakukan ASCAM'}</h3>${daftarTindakan(plan)}</section>
-    ${dapatDiputuskan ? `<section><h3>Mengapa butuh keputusan Anda</h3>${daftarAlasan(plan.reasons)}</section>`
-      : plan.reasons && plan.reasons.length ? `<section><h3>Catatan analisis</h3>${daftarAlasan(plan.reasons)}</section>` : ''}
+        : `Rencana ${esc(plan.id)}${plan.revision_of ? ` (revisi rencana ${esc(plan.revision_of)})` : ''}, pola ${esc(plan.pattern || '-')}, disusun ${esc(relatif(plan.created_at))} di atas versi spesifikasi ${esc(plan.base_spec_version_id)}`}</span></header>
+    <section><h3>${judulTindakan}</h3>${tindakan}</section>
+    ${dapatDiputuskan ? formulirProperty(plan) : ''}
+    ${plan.reasons && plan.reasons.length ? `<section><h3>${judulAlasan}</h3>${daftarAlasan(plan.reasons)}</section>` : ''}
+    ${daftarTerdampak(plan)}
     ${plan.impact && plan.impact.targets && plan.impact.targets.length ? `<section><h3>Pemakaian kolom saat ini</h3>${tabelPemakaian(plan.impact)}</section>` : ''}
     ${dapatDiputuskan ? `<section class="keputusan-admin">
       <div><label for="catatan-${esc(plan.id)}">Catatan keputusan (disimpan di jejak audit)</label>
@@ -289,17 +380,20 @@ async function halamanPersetujuan() {
   await Promise.all([muatEvents(), muatTipe()]);
   const [menunggu, semua] = await Promise.all([k(`obdf/${S.oid}/plans?status=pending_approval`),
     k(`obdf/${S.oid}/plans?limit=40`)]);
-  const diputuskan = semua.filter((p) => p.decided_by && p.decision === 'hitl').slice(0, 8);
+  for (const p of menunggu) S.rencana[p.id] = p;
+  const diputuskan = semua.filter((p) => p.decided_by && p.decision === 'hitl' && p.status !== 'revised').slice(0, 8);
   isi().innerHTML = `
     <div class="kepala-halaman"><div><h1>Persetujuan</h1>
-      <p class="redup">Usulan adaptasi yang tidak dijalankan otomatis. Periksa apa yang akan diubah pada setiap lapisan OBDF, lalu setujui atau tolak. Keputusan dicatat atas nama Anda.</p></div></div>
+      <p class="redup">Penambahan kolom menambah property baru ke ontologi, sehingga selalu menunggu keputusan Anda. Periksa nama dan domain property serta tindakan pada setiap lapisan OBDF, lalu setujui atau tolak. Perubahan yang tidak dapat diadaptasi otomatis tidak muncul di sini, melainkan di halaman Notifikasi.</p></div></div>
     ${menunggu.length ? menunggu.map((p) => dokumenUsulan(p, { dapatDiputuskan: true })).join('')
-      : '<div class="panel"><p class="kosong">Tidak ada usulan yang menunggu keputusan. Perubahan yang memerlukan persetujuan, seperti penambahan kolom, akan muncul di sini.</p></div>'}
+      : '<div class="panel"><p class="kosong">Tidak ada usulan yang menunggu keputusan. Penambahan kolom pada tabel yang difederasikan akan muncul di sini.</p></div>'}
     ${diputuskan.length ? `<div class="panel" style="margin-top:1.25rem"><h3>Keputusan terakhir</h3><table>
       <thead><tr><th>Rencana</th><th>Perubahan</th><th>Keputusan</th><th>Oleh</th><th>Waktu</th></tr></thead><tbody>
-      ${diputuskan.map((p) => `<tr><td>${esc(p.id)}</td><td>${esc(kalimatEvent((S.events[p.event_id] || {}).structured))}</td>
+      ${diputuskan.map((p) => `<tr><td>${esc(p.id)}${p.revision_of ? ` <span class="kecil redup">revisi ${esc(p.revision_of)}</span>` : ''}</td><td>${esc(kalimatEvent((S.events[p.event_id] || {}).structured))}</td>
         <td>${tanda(p.status)}</td><td>${esc(p.decided_by)}</td><td>${esc(waktu(p.decided_at))}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
   isi().querySelectorAll('[data-putuskan]').forEach((b) => b.addEventListener('click', putuskan));
+  isi().querySelectorAll('[data-property]').forEach((el) => el.addEventListener('input', () => pratinjauProperty(el.dataset.property)));
+  menunggu.forEach((p) => pratinjauProperty(String(p.id)));
 }
 
 async function putuskan(ev) {
@@ -312,17 +406,203 @@ async function putuskan(ev) {
     $(`#catatan-${id}`).focus();
     return;
   }
+  const body = { note: catatan || null };
+  const pilihan = aksi === 'approve' ? pilihanProperty(id) : null;
+  if (pilihan) {
+    if (!pilihan.nama) {
+      kabar('Tentukan nama property sebelum menyetujui.', 'gagal');
+      $(`#prop-${id}`).focus();
+      return;
+    }
+    body.property_name = pilihan.nama;
+    body.domain = pilihan.domain;
+  }
   isi().querySelectorAll(`[data-plan="${id}"]`).forEach((b) => { b.disabled = true; });
   try {
-    await k(`plans/${id}/${aksi}`, { method: 'POST', body: { note: catatan || null } });
-    kabar(aksi === 'approve' ? 'Disetujui. Executor akan menerapkan rencana ini dalam beberapa detik.' : 'Ditolak. Rencana tidak akan diterapkan.',
-      aksi === 'approve' ? 'keputusan' : '', aksi === 'approve' ? ['#/adaptasi', 'Pantau eksekusi'] : null);
+    const hasil = await k(`plans/${id}/${aksi}`, { method: 'POST', body });
+    kabar(aksi === 'reject' ? 'Ditolak. Rencana tidak akan diterapkan.'
+      : hasil.revision_of ? `Disetujui dengan revisi sebagai rencana ${hasil.id}. Executor akan menerapkannya dalam beberapa detik.`
+        : 'Disetujui. Executor akan menerapkan rencana ini dalam beberapa detik.',
+    aksi === 'approve' ? 'keputusan' : '', aksi === 'approve' ? ['#/adaptasi', 'Pantau eksekusi'] : null);
     await segarkanLencana();
     await halamanPersetujuan();
   } catch (e) {
     kabar(e.message, 'gagal');
     isi().querySelectorAll(`[data-plan="${id}"]`).forEach((b) => { b.disabled = false; });
   }
+}
+
+/* ── halaman: notifikasi (DROP/RENAME yang tidak aman, ADR-0024) ───────────── */
+async function halamanNotifikasi() {
+  const semua = (location.hash.split('?')[1] || '').includes('semua=1');
+  await muatEvents();
+  const [daftar, rencana] = await Promise.all([
+    k(`obdf/${S.oid}/notifications?limit=100${semua ? '' : '&unread=true'}`), k(`obdf/${S.oid}/plans?limit=200`)]);
+  for (const p of rencana) S.rencana[p.id] = p;
+  isi().innerHTML = `
+    <div class="kepala-halaman"><div><h1>Notifikasi</h1>
+      <p class="redup">Perubahan skema yang tidak dapat dibuktikan aman tidak diadaptasi dan tidak perlu disetujui. ASCAM memberi tahu elemen OBDF yang terdampak; perbaiki spesifikasinya secara manual, lalu jalankan sinkronisasi.</p></div>
+      <div class="aksi"><a class="tombol" href="#/notifikasi${semua ? '' : '?semua=1'}">${semua ? 'Hanya yang belum dibaca' : 'Tampilkan semua'}</a>
+        <button class="utama-aksi" id="tombol-sync" type="button">Jalankan sinkronisasi</button></div></div>
+    ${daftar.length ? daftar.map((n) => kartuNotifikasi(n, S.rencana[n.plan_id])).join('')
+      : `<div class="panel"><p class="kosong">${semua ? 'Belum ada notifikasi.' : 'Tidak ada notifikasi yang belum dibaca.'}</p></div>`}`;
+  isi().querySelectorAll('[data-baca]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      await k(`notifications/${b.dataset.baca}/ack`, { method: 'POST', body: {} });
+      await segarkanLencana();
+      await halamanNotifikasi();
+    } catch (e) { kabar(e.message, 'gagal'); b.disabled = false; }
+  }));
+  $('#tombol-sync').addEventListener('click', async (ev) => {
+    const tombol = ev.currentTarget;
+    tombol.disabled = true;
+    try {
+      const h = await k(`obdf/${S.oid}/sync`, { method: 'POST', body: {} });
+      kabar(h.changed ? `Sinkronisasi selesai: versi spesifikasi ${h.version_no} kini aktif.` : 'Sinkronisasi selesai: spesifikasi OBDF tidak berubah.');
+      await segarkanLencana();
+    } catch (e) { kabar(e.message, 'gagal'); }
+    tombol.disabled = false;
+  });
+}
+
+function kartuNotifikasi(n, plan) {
+  const s = plan ? (S.events[plan.event_id] || {}).structured : null;
+  const tindak = !plan ? '' : plan.status === 'pending_approval'
+    ? '<a class="tombol" href="#/persetujuan">Tinjau usulan</a>'
+    : plan.decision === 'notify' && s && s.table
+      ? `<a class="tombol" href="#/lineage?${esc(new URLSearchParams({ sumber: s.source || '', tabel: s.table, kolom: s.column || '' }).toString())}">Lihat lineage</a>` : '';
+  const badan = plan && plan.decision === 'notify'
+    ? `${daftarTerdampak(plan, { tautan: false })}${plan.reasons && plan.reasons.length ? `<section><h3>Mengapa tidak diadaptasi otomatis</h3>${daftarAlasan(plan.reasons)}</section>` : ''}`
+    : `<p style="margin-top:0.75rem">${esc(n.message)}</p>`;
+  return `<article class="usulan ${plan && plan.decision === 'notify' ? 'pemberitahuan' : ''}">
+    <header><h2>${esc(s ? kalimatEvent(s) : 'Pemberitahuan')}</h2>${plan ? tanda(plan.status) : tanda(n.severity)}
+      <span class="kecil redup">${esc(relatif(n.created_at))}${plan ? `, rencana ${esc(plan.id)}` : ''}${n.acknowledged ? `; dibaca oleh ${esc(n.acknowledged_by)}` : ''}</span></header>
+    ${badan}
+    <div class="tombol-grup" style="margin-top:1rem">${tindak}${n.acknowledged ? '' : `<button type="button" data-baca="${esc(n.id)}">Tandai sudah dibaca</button>`}</div>
+  </article>`;
+}
+
+/* ── halaman: lineage kolom spesifikasi aktif ──────────────────────────────── */
+function lapisanSimpul(n) {
+  if (n.layer === 'sigma') return n.kind === 'view_column' ? 'view' : 'foreign';
+  return n.layer;
+}
+async function halamanLineage() {
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  const data = await k(`obdf/${S.oid}/lineage`);
+  const simpul = Object.fromEntries(data.nodes.map((n) => [n.id, n]));
+  const tabel = [...new Set(data.paths.map((p) => { const n = simpul[p.nodes[0]]; return `${n.source}|${n.table}`; }))].sort();
+  const pilihTabel = q.get('sumber') && q.get('tabel') ? `${q.get('sumber')}|${q.get('tabel')}` : tabel[0];
+  isi().innerHTML = `
+    <div class="kepala-halaman"><div><h1>Lineage kolom</h1>
+      <p class="redup">Jalur setiap kolom sumber sampai property ontologi pada versi spesifikasi ${esc(data.version_no)} yang sedang aktif. Pilih sebuah simpul untuk menyorot semua jalur yang melewatinya; kumpulan jalur itulah yang terdampak bila kolomnya dihapus atau diganti nama.</p></div></div>
+    <div class="panel"><div class="baris-formulir" style="margin-bottom:0">
+      <div><label for="l-tabel">Tabel sumber</label><select id="l-tabel">
+        ${tabel.map((t) => { const [a, b] = t.split('|'); return `<option value="${esc(t)}" ${t === pilihTabel ? 'selected' : ''}>${esc(a)}: ${esc(b)}</option>`; }).join('')}
+        <option value="*" ${pilihTabel === '*' ? 'selected' : ''}>Semua tabel</option></select></div>
+      <div><label for="l-kolom">Sorot kolom sumber</label><select id="l-kolom"></select></div>
+    </div></div>
+    <div class="panel lineage-panel"><div class="lineage" id="lineage"></div>${legendaLineage()}</div>
+    <div class="panel" id="lineage-rincian"></div>`;
+  const gambar = () => {
+    const t = $('#l-tabel').value;
+    const jalur = data.paths.filter((p) => { const n = simpul[p.nodes[0]]; return t === '*' || `${n.source}|${n.table}` === t; });
+    const kolom = [...new Set(jalur.map((p) => simpul[p.nodes[0]].column))].sort();
+    const sorot = q.get('kolom') && kolom.includes(q.get('kolom')) ? q.get('kolom') : '';
+    q.delete('kolom');
+    $('#l-kolom').innerHTML = `<option value="">Tidak ada</option>${kolom.map((c) => `<option value="${esc(c)}" ${c === sorot ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+    gambarLineage(jalur, simpul, data.edges);
+    const awal = jalur.find((p) => simpul[p.nodes[0]].column === sorot);
+    sorotLineage(awal ? awal.nodes[0] : null);
+  };
+  $('#l-tabel').addEventListener('change', gambar);
+  $('#l-kolom').addEventListener('change', () => {
+    const c = $('#l-kolom').value;
+    const awal = S.lineage.jalur.find((p) => S.lineage.simpul[p.nodes[0]].column === c);
+    sorotLineage(c && awal ? awal.nodes[0] : null);
+  });
+  gambar();
+}
+
+function legendaLineage() {
+  return `<div class="legenda">
+    <span><i class="garis-l"></i>Pass-through atau tepi langsung</span>
+    <span><i class="garis-l lemah"></i>Ekspresi atau predikat SQL (tidak aman untuk adaptasi otomatis)</span>
+    <span><i class="kotak-l tak-terpakai"></i>Kolom yang tidak dipetakan ke ontologi</span>
+    <span><i class="kotak-l usang"></i>Property usang (owl:deprecated)</span></div>`;
+}
+
+const LEMAH = new Set(['expression', 'predicate', 'iri_template', 'join_key', 'sql_predicate', 'dynamic_predicate']);
+function gambarLineage(jalur, simpul, edges) {
+  const wadah = $('#lineage');
+  const dipakai = new Set(jalur.flatMap((p) => p.nodes));
+  const urutan = new Map();
+  jalur.forEach((p) => p.nodes.forEach((id) => { if (!urutan.has(id)) urutan.set(id, urutan.size); }));
+  const kolomTakTerpakai = new Set(jalur.filter((p) => p.role === null).map((p) => p.nodes[1]));
+  wadah.innerHTML = `<svg class="lineage-garis" aria-hidden="true"></svg>${LAPISAN_LINEAGE.map((l) => {
+    const isiLapisan = [...dipakai].filter((id) => lapisanSimpul(simpul[id]) === l.kunci).sort((a, b) => urutan.get(a) - urutan.get(b));
+    return `<div class="lineage-kolom"><h3 class="kecil">${esc(l.judul)}</h3>${isiLapisan.map((id) => {
+      const n = simpul[id];
+      const label = n.kind === 'source_column' ? n.column : n.kind.endsWith('_column') ? `${n.table.split('.').pop()}.${n.column}` : n.label;
+      const kelas = [l.kelas, kolomTakTerpakai.has(id) ? 'tak-terpakai' : '', n.deprecated ? 'usang' : ''].join(' ');
+      return `<button type="button" class="simpul ${kelas}" data-simpul="${esc(id)}" title="${esc(n.iri || n.label)}">${esc(label)}</button>`;
+    }).join('') || '<p class="kecil redup">-</p>'}</div>`;
+  }).join('')}`;
+  S.lineage = { jalur, simpul, edges: edges.filter((e) => dipakai.has(e.from) && dipakai.has(e.to)), terpilih: null };
+  wadah.querySelectorAll('[data-simpul]').forEach((b) => b.addEventListener('click', () => {
+    sorotLineage(S.lineage.terpilih === b.dataset.simpul ? null : b.dataset.simpul);
+  }));
+  garisLineage();
+}
+
+function garisLineage() {
+  const wadah = $('#lineage');
+  if (!wadah || !S.lineage) return;
+  const svg = wadah.querySelector('svg');
+  const kotak = wadah.getBoundingClientRect();
+  svg.setAttribute('width', wadah.scrollWidth);
+  svg.setAttribute('height', wadah.scrollHeight);
+  const titik = (id, sisi) => {
+    const el = wadah.querySelector(`[data-simpul="${CSS.escape(id)}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return [(sisi === 'kanan' ? r.right : r.left) - kotak.left + wadah.scrollLeft, r.top + r.height / 2 - kotak.top + wadah.scrollTop];
+  };
+  const terang = S.lineage.terang || null;
+  svg.innerHTML = S.lineage.edges.map((e) => {
+    const a = titik(e.from, 'kanan');
+    const b = titik(e.to, 'kiri');
+    if (!a || !b) return '';
+    const dx = Math.max(24, (b[0] - a[0]) / 2);
+    const kelas = [LEMAH.has(e.kind) ? 'lemah' : '', terang ? (terang.has(`${e.from}>${e.to}`) ? 'terang' : 'pudar') : ''].join(' ');
+    return `<path class="${kelas}" d="M${a[0]},${a[1]} C${a[0] + dx},${a[1]} ${b[0] - dx},${b[1]} ${b[0]},${b[1]}"><title>${esc(PERAN[e.kind] || e.kind)}</title></path>`;
+  }).join('');
+}
+
+function sorotLineage(id) {
+  const L = S.lineage;
+  L.terpilih = id;
+  const kena = id ? L.jalur.filter((p) => p.nodes.includes(id)) : [];
+  L.terang = id ? new Set(kena.flatMap((p) => p.nodes.slice(1).map((n, i) => `${p.nodes[i]}>${n}`))) : null;
+  const simpulTerang = new Set(kena.flatMap((p) => p.nodes));
+  $('#lineage').querySelectorAll('[data-simpul]').forEach((b) => {
+    b.classList.toggle('terang', simpulTerang.has(b.dataset.simpul));
+    b.classList.toggle('pudar', Boolean(id) && !simpulTerang.has(b.dataset.simpul));
+    b.setAttribute('aria-pressed', b.dataset.simpul === id ? 'true' : 'false');
+  });
+  garisLineage();
+  const rincian = $('#lineage-rincian');
+  if (!id) {
+    rincian.innerHTML = '<p class="redup">Pilih simpul pada lineage untuk melihat jalur yang melewatinya.</p>';
+    return;
+  }
+  rincian.innerHTML = `<h3>${esc(kena.length)} jalur melewati ${esc(L.simpul[id].label)}</h3><div class="gulir"><table>
+    <thead><tr><th>Jalur</th><th>Peran di mapping</th><th>Tepi terlemah</th></tr></thead><tbody>
+    ${kena.map((p) => `<tr><td>${p.nodes.map((n) => esc(L.simpul[n].label)).join(' <span class="redup">⊳</span> ')}</td>
+      <td>${p.role ? esc(PERAN[p.role] || p.role) : '<span class="redup">tidak dipetakan</span>'}</td>
+      <td>${p.weakest_link ? `<span class="${LEMAH.has(p.weakest_link) ? 'tanda peringatan' : ''}">${esc(PERAN[p.weakest_link] || p.weakest_link)}</span>` : '-'}</td></tr>`).join('')}
+    </tbody></table></div>`;
 }
 
 /* ── halaman: perubahan skema ──────────────────────────────────────────────── */
@@ -447,17 +727,15 @@ async function halamanDampak() {
 async function halamanKonfigurasi() {
   const [sumber, target, pengaturan, penamaan] = await Promise.all([
     k(`obdf/${S.oid}/sources`), k(`obdf/${S.oid}/targets`), k(`obdf/${S.oid}/settings`), k(`obdf/${S.oid}/naming-policy`)]);
-  const add = (pengaturan.find((p) => p.key === 'adaptation.add_column') || { value: { mode: 'auto' } }).value.mode;
   isi().innerHTML = `
     <div class="kepala-halaman"><div><h1>Konfigurasi</h1>
-      <p class="redup">Sumber yang dipantau, komponen OBDF yang dikelola ASCAM, dan kebijakan adaptasi.</p></div></div>
-    <form class="panel" id="formulir-kebijakan"><h3>Kebijakan penambahan kolom</h3>
-      <p class="redup" style="margin-bottom:1rem">Penambahan kolom menambah kosakata baru ke ontologi (IRI, domain, range). Pilih apakah ASCAM menerapkannya langsung atau menunggu persetujuan Anda.</p>
-      <div class="pilihan">
-        <label><input type="radio" name="mode-add" value="hitl" ${add === 'hitl' ? 'checked' : ''}><span><strong>Perlu persetujuan</strong><br><span class="redup kecil">Usulan muncul di halaman Persetujuan dan baru diterapkan setelah disetujui.</span></span></label>
-        <label><input type="radio" name="mode-add" value="auto" ${add === 'auto' ? 'checked' : ''}><span><strong>Otomatis</strong><br><span class="redup kecil">Diterapkan langsung bila tidak ada bentrok nama atau domain.</span></span></label>
-      </div>
-      <p style="margin-top:1rem"><button class="utama-aksi" type="submit">Simpan kebijakan</button></p></form>
+      <p class="redup">Sumber yang dipantau, komponen OBDF yang dikelola ASCAM, dan aturan keputusan adaptasi.</p></div></div>
+    <div class="panel"><h3>Kebijakan adaptasi</h3>
+      <table><tbody>
+        <tr><td>${tanda('auto')}</td><td>Perubahan yang dampaknya tertelusuri penuh, ditentukan oleh DDL, dan tidak mengubah identitas, baris, atau nilai elemen lain. Diterapkan langsung.</td></tr>
+        <tr><td>${tanda('hitl')}</td><td>Penambahan kolom. Nama dan domain property baru adalah keputusan pemodelan, sehingga usulan ASCAM menunggu persetujuan Anda dan dapat direvisi.</td></tr>
+        <tr><td>${tanda('notify')}</td><td>Penghapusan atau penggantian nama kolom yang tidak terbukti aman. ASCAM tidak mengubah OBDF; elemen yang terdampak dilaporkan di halaman Notifikasi.</td></tr>
+      </tbody></table></div>
     <div class="grid-dua">
       <div class="panel gulir"><h3>Sumber data</h3><table><thead><tr><th>Nama</th><th>DBMS</th><th>Skema bawaan</th><th>Topik monitor</th></tr></thead><tbody>
         ${sumber.map((s) => `<tr><td>${esc(s.logical_name)}</td><td>${esc(s.dbms)}</td><td>${esc(s.default_schema)}</td><td class="kecil pecah"><code>${esc(s.kafka_topic)}</code></td></tr>`).join('')}</tbody></table></div>
@@ -470,14 +748,6 @@ async function halamanKonfigurasi() {
       ${target.map((t) => `<tr><td>${esc(JENIS_TARGET[t.kind] || t.kind)}</td><td class="kecil"><code>${esc(t.endpoint.host)}:${esc(t.endpoint.port)}${esc(t.endpoint.path || '')}</code></td>
         <td>${t.enabled ? 'ya' : 'tidak'}</td><td><button class="kecil" type="button" data-periksa="${esc(t.id)}">Periksa</button>
         <span class="kecil" id="periksa-${esc(t.id)}"></span></td></tr>`).join('')}</tbody></table></div>`;
-  $('#formulir-kebijakan').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const mode = isi().querySelector('input[name="mode-add"]:checked').value;
-    try {
-      await k(`obdf/${S.oid}/settings/adaptation.add_column`, { method: 'PUT', body: { value: { mode } } });
-      kabar(mode === 'hitl' ? 'Disimpan. Penambahan kolom kini menunggu persetujuan.' : 'Disimpan. Penambahan kolom kini diterapkan otomatis.');
-    } catch (e) { kabar(e.message, 'gagal'); }
-  });
   isi().querySelectorAll('[data-periksa]').forEach((b) => b.addEventListener('click', async () => {
     const id = b.dataset.periksa;
     $(`#periksa-${id}`).textContent = ' memeriksa';
@@ -504,10 +774,11 @@ async function halamanAudit() {
 const RUTE = {
   ringkasan: halamanRingkasan, persetujuan: halamanPersetujuan, perubahan: halamanPerubahan, adaptasi: halamanAdaptasi,
   versi: halamanVersi, dampak: halamanDampak, konfigurasi: halamanKonfigurasi, audit: halamanAudit,
+  notifikasi: halamanNotifikasi, lineage: halamanLineage,
 };
 
 async function tampilkanRute() {
-  const nama = (location.hash.replace(/^#\//, '') || 'ringkasan').split('?')[0];
+  const nama = ruteSekarang();
   const halaman = RUTE[nama] || halamanRingkasan;
   document.querySelectorAll('.navigasi a[data-rute]').forEach((a) => {
     if (a.dataset.rute === nama) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -529,9 +800,15 @@ async function segarkanLencana() {
     const lencana = $('#jumlah-menunggu');
     lencana.textContent = jumlah;
     lencana.hidden = jumlah === 0;
-    // hanya memberi kabar bila ada usulan BARU sejak pemeriksaan sebelumnya
-    if (S.menunggu !== null && jumlah > S.menunggu) kabar(`${jumlah} usulan perubahan menunggu persetujuan Anda.`, 'keputusan', ['#/persetujuan', 'Tinjau']);
+    // hanya memberi kabar bila ada usulan atau notifikasi BARU sejak pemeriksaan sebelumnya
+    if (S.menunggu !== null && jumlah > S.menunggu) kabar(`${jumlah} usulan penambahan kolom menunggu persetujuan Anda.`, 'keputusan', ['#/persetujuan', 'Tinjau']);
     S.menunggu = jumlah;
+    const pemberitahuan = r.notifications.filter((n) => !r.pending.some((p) => p.id === n.plan_id)).length;
+    const lencanaN = $('#jumlah-notifikasi');
+    lencanaN.textContent = pemberitahuan;
+    lencanaN.hidden = pemberitahuan === 0;
+    if (S.belumDibaca !== null && pemberitahuan > S.belumDibaca) kabar('Ada perubahan skema yang tidak dapat diadaptasi otomatis.', 'peringatan', ['#/notifikasi', 'Lihat']);
+    S.belumDibaca = pemberitahuan;
     const v = r.active_version || {};
     $('#versi-aktif').textContent = v.version_no ? `Versi spesifikasi ${v.version_no}, VDB v${v.teiid_vdb_version}` : 'Belum ada versi aktif';
     const exe = sehat.executor || {};
@@ -592,6 +869,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) { kabar(e.message, 'gagal'); }
   });
   window.addEventListener('hashchange', tampilkanRute);
+  window.addEventListener('resize', () => { if ($('#lineage')) garisLineage(); });
   setInterval(segarkanLencana, 8000);
   try { await mulaiKonsol(await api('/api/ui/me')); } catch { tampilkanMasuk(); }
 });

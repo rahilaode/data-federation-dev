@@ -32,6 +32,27 @@ def _plan_out(db: Session, plan: ops.AdaptationPlan) -> PlanOut:
         update={'actions': [PlanActionOut.model_validate(a) for a in actions]})
 
 
+def _objek(struktur: dict) -> str:
+    return '.'.join(x for x in (struktur.get('schema'), struktur.get('table'),
+                                struktur.get('column')) if x)
+
+
+def _pesan_notifikasi(source: str, struktur: dict, report) -> str:
+    operasi = struktur.get('operation', '').upper()
+    alasan = '; '.join(report.reasons)[:300]
+    if report.decision == 'hitl':
+        return (f'Perubahan {operasi} pada {source}:{_objek(struktur)} menunggu persetujuan '
+                f'({len(report.actions)} tindakan direncanakan). Alasan: {alasan}')
+    # notify: tidak ada tindakan; pesan menyebut 𝒟(c, ℱ) agar administrator tahu yang harus diperbaiki
+    dampak = report.affected or {}
+    bagian = [f"{judul} {', '.join(x.rsplit('#', 1)[-1].rsplit('/', 1)[-1] for x in dampak[k])}"
+              for k, judul in (('views', 'view'), ('triples_maps', 'TriplesMap'),
+                               ('predicates', 'property')) if dampak.get(k)]
+    return (f'Perubahan {operasi} pada {source}:{_objek(struktur)} tidak dapat diadaptasi otomatis '
+            f'dan tidak dieksekusi. Terdampak: {"; ".join(bagian) or "-"}. Alasan: {alasan}. '
+            'Perbaiki spesifikasi OBDF secara manual, lalu jalankan sinkronisasi.')
+
+
 @router.post('/obdf/{obdf_id}/events', response_model=EventResultOut)
 def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
                  actor: str = Depends(current_actor)):
@@ -69,9 +90,10 @@ def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
         db.flush()
         return EventResultOut(event=EventOut.model_validate(event))
 
+    status = {'auto': 'approved', 'hitl': 'pending_approval', 'notify': 'notified'}[report.decision]
     plan = ops.AdaptationPlan(
         event_id=event.id, base_spec_version_id=report.spec_version_id, pattern=report.pattern,
-        decision=report.decision, status='approved' if report.decision == 'auto' else 'pending_approval',
+        decision=report.decision, status=status,
         impact=report.as_dict(), reasons=report.reasons, created_at=datetime.now(timezone.utc))
     db.add(plan)
     db.flush()
@@ -80,15 +102,9 @@ def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
         db.add(ops.PlanAction(plan_id=plan.id, seq=seq, artifact=action['artifact'],
                               operation=action['operation'], params=params))
     event.status = 'planned'
-    if report.decision == 'hitl':
-        struktur = body.structured()
-        objek = '.'.join(x for x in (struktur.get('schema'), struktur.get('table'),
-                                     struktur.get('column')) if x)
-        db.add(ops.Notification(
-            obdf_id=obdf_id, plan_id=plan.id, severity='warning',
-            message=(f"Perubahan {struktur.get('operation', '').upper()} pada {body.source}:{objek} "
-                     f'menunggu persetujuan ({len(report.actions)} tindakan direncanakan). '
-                     f"Alasan: {'; '.join(report.reasons)[:300]}")))
+    if report.decision in ('hitl', 'notify'):
+        db.add(ops.Notification(obdf_id=obdf_id, plan_id=plan.id, severity='warning',
+                                message=_pesan_notifikasi(body.source, body.structured(), report)))
     svc.audit(db, actor, 'plan_created', obdf_id, 'adaptation_plan', str(plan.id),
               decision=report.decision, pattern=report.pattern)
     db.flush()
@@ -124,7 +140,9 @@ def get_plan(plan_id: int, db: Session = Depends(get_db)):
     return _plan_out(db, plan)
 
 
-def _decide(db: Session, plan_id: int, actor: str, approve: bool, note: str | None) -> PlanOut:
+def _decide(db: Session, plan_id: int, actor: str, approve: bool,
+            body: DecisionIn | None) -> PlanOut:
+    note = body.note if body else None
     plan = db.get(ops.AdaptationPlan, plan_id)
     if plan is None:
         raise svc.NotFound(f'rencana {plan_id} tidak ditemukan')
@@ -143,17 +161,59 @@ def _decide(db: Session, plan_id: int, actor: str, approve: bool, note: str | No
             db.commit()
             raise HTTPException(409, 'spesifikasi sudah berubah sejak rencana dibuat; '
                                      'rencana ditandai superseded dan perlu disusun ulang')
-    plan.status = 'approved' if approve else 'rejected'
-    plan.decided_by, plan.decided_at = actor, datetime.now(timezone.utc)
+    pilihan = body is not None and body.property_name is not None
+    if pilihan and not approve:
+        raise HTTPException(422, 'nama dan domain property hanya diberikan saat menyetujui')
+    if pilihan and plan.pattern != 'P-001':
+        raise HTTPException(422, 'nama dan domain property hanya berlaku untuk penambahan kolom')
+    now = datetime.now(timezone.utc)
+    decided = plan
+    if pilihan:
+        try:
+            iri, tindakan = impact_service.revise_add(db, plan, body.property_name.strip(), body.domain)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        usulan = (plan.impact or {}).get('add_options') or {}
+        if (iri, body.domain) != (usulan.get('proposed_iri'), usulan.get('proposed_domain')):
+            decided = _revisi(db, plan, actor, now, iri, body.domain, tindakan)
+    if decided is plan:
+        plan.status = 'approved' if approve else 'rejected'
+        plan.decided_by, plan.decided_at = actor, now
     for notification in db.execute(select(ops.Notification).filter_by(plan_id=plan.id,
                                                                      acknowledged=False)).scalars():
         notification.acknowledged = True
         notification.acknowledged_by = actor
-        notification.acknowledged_at = datetime.now(timezone.utc)
+        notification.acknowledged_at = now
     svc.audit(db, actor, 'plan_approved' if approve else 'plan_rejected', event.obdf_id,
-              'adaptation_plan', str(plan.id), note=note)
+              'adaptation_plan', str(decided.id), note=note,
+              revision_of=plan.id if decided is not plan else None)
     db.flush()
-    return _plan_out(db, plan)
+    return _plan_out(db, decided)
+
+
+def _revisi(db: Session, plan: ops.AdaptationPlan, actor: str, now: datetime, iri: str,
+            domain: str | None, tindakan: list[dict]) -> ops.AdaptationPlan:
+    """Rencana ADD yang direvisi administrator. Baris ops bersifat append-only, sehingga revisi
+    menjadi rencana baru (`revision_of`) dan rencana asal berstatus `revised`."""
+    impact = dict(plan.impact or {})
+    impact['admin_choice'] = {'iri': iri, 'domain': domain}
+    revisi = ops.AdaptationPlan(
+        event_id=plan.event_id, base_spec_version_id=plan.base_spec_version_id,
+        pattern=plan.pattern, decision=plan.decision, status='approved', impact=impact,
+        reasons=[*plan.reasons, f"direvisi administrator: property {iri}, domain {domain or '-'}"],
+        created_at=now, decided_by=actor, decided_at=now, revision_of=plan.id)
+    db.add(revisi)
+    db.flush()
+    lama = db.execute(select(ops.PlanAction).filter_by(plan_id=plan.id, artifact='vdb')
+                      .order_by(ops.PlanAction.seq)).scalars().all()
+    baru = [{'artifact': a.artifact, 'operation': a.operation, **a.params} for a in lama] + tindakan
+    for seq, action in enumerate(baru, start=1):
+        params = {k: v for k, v in action.items() if k not in ('artifact', 'operation')}
+        db.add(ops.PlanAction(plan_id=revisi.id, seq=seq, artifact=action['artifact'],
+                              operation=action['operation'], params=params))
+    plan.status = 'revised'
+    plan.decided_by, plan.decided_at = actor, now
+    return revisi
 
 
 @router.post('/plans/{plan_id}/supersede', response_model=PlanOut)
@@ -181,13 +241,13 @@ def supersede_plan(plan_id: int, body: DecisionIn | None = None, db: Session = D
 @router.post('/plans/{plan_id}/approve', response_model=PlanOut)
 def approve_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Depends(get_db),
                  actor: str = Depends(current_actor)):
-    return _decide(db, plan_id, actor, True, body.note if body else None)
+    return _decide(db, plan_id, actor, True, body)
 
 
 @router.post('/plans/{plan_id}/reject', response_model=PlanOut)
 def reject_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Depends(get_db),
                 actor: str = Depends(current_actor)):
-    return _decide(db, plan_id, actor, False, body.note if body else None)
+    return _decide(db, plan_id, actor, False, body)
 
 
 @router.get('/obdf/{obdf_id}/notifications', response_model=list[NotificationOut])

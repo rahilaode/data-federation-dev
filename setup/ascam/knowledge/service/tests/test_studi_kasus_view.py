@@ -167,12 +167,14 @@ def test_a008_drop_through_aliased_view_mysql(api, studi):
     assert [a['predicate_iri'] for a in tindakan(out, 'deprecate_property')] == [B + 'diubahOleh']
 
 
-def test_a009_drop_used_in_view_expression_needs_hitl(api, studi):
+def test_a009_drop_used_in_view_expression_is_notified(api, studi):
     out = impact(api, studi, operation='drop', source='kemensos', table='program_bansos',
                  column='periode_selesai')
-    assert out['decision'] == 'hitl'
+    assert out['decision'] == 'notify' and out['actions'] == []
     assert any('ekspresi' in r and 'layanan.v_program_berakhir' in r for r in out['reasons'])
-    assert tindakan(out, 'alter_view') == []
+    # 𝒟(c, ℱ) yang dilaporkan ke administrator memuat view dan property yang terdampak
+    assert 'layanan.v_program_berakhir' in out['affected']['views']
+    assert B + 'tahunBerakhir' in out['affected']['predicates']
 
 
 @pytest.mark.parametrize('source, table, column', [
@@ -185,10 +187,10 @@ def test_existing_drop_scenarios_do_not_touch_views(api, studi, source, table, c
     assert tindakan(out, 'alter_view') == []
 
 
-def test_where_column_of_view_still_needs_hitl(api, studi):
+def test_where_column_of_view_is_still_notified(api, studi):
     out = impact(api, studi, operation='drop', source='kemensos', table='penerima_manfaat',
                  column='aktif')
-    assert out['decision'] == 'hitl'
+    assert out['decision'] == 'notify'
     assert any('layanan.v_penerima_aktif' in r for r in out['reasons'])
 
 

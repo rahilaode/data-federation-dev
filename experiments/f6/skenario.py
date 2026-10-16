@@ -47,10 +47,8 @@ class Skenario:
     catatan: str = ''
     # Mengisi data pada kolom baru agar "kueri baru mengembalikan hasil" dapat diuji (A001)
     isi_data: Callable[[], str] | None = None
-    # Tindakan evaluator bila rencana menunggu persetujuan: True = disetujui (A001, A004),
-    # False = ditolak karena rencana tidak lengkap dan view harus didefinisikan ulang manusia (A009)
-    setujui: bool = True
-    # Potongan teks yang harus muncul pada alasan HITL (memeriksa alasan, bukan hanya keputusan)
+    # Potongan teks yang harus muncul pada alasan keputusan non-otomatis (memeriksa alasan,
+    # bukan hanya keputusan)
     alasan_memuat: tuple[str, ...] = ()
     view: str | None = None             # view Teiid yang dilalui kolom (A007-A009)
 
@@ -295,10 +293,11 @@ SKENARIO = {
                      predikat='http://bansos.go.id/ontology/diubahOleh',
                      catatan='view pass-through beralias; mapping SELECT * atas view'),
     'a009': Skenario(kode='a009', judul='DROP COLUMN periode_selesai yang dipakai ekspresi view',
-                     pola='P-002', keputusan='hitl', sumber='kemensos', tabel='program_bansos',
+                     # ADR-0024: DROP yang tidak terbukti aman hanya diberitahukan, tanpa tindakan
+                     pola='P-002', keputusan='notify', sumber='kemensos', tabel='program_bansos',
                      kolom='periode_selesai', siapkan=a009_siapkan, terapkan=a009_terapkan,
                      pulihkan=a009_pulihkan, view='layanan.v_program_berakhir',
-                     predikat='http://bansos.go.id/ontology/tahunBerakhir', setujui=False,
+                     predikat='http://bansos.go.id/ontology/tahunBerakhir',
                      alasan_memuat=('ekspresi', 'layanan.v_program_berakhir'),
-                     catatan='kontrol negatif: rencana tidak lengkap, evaluator menolak'),
+                     catatan='kontrol negatif: tidak diadaptasi, administrator diberi tahu'),
 }

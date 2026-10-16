@@ -325,6 +325,8 @@ class ImpactOut(BaseModel):
     reasons: list[str]
     actions: list[dict[str, Any]]
     targets: list[TargetOutcome]
+    affected: dict[str, list[str]] = Field(default_factory=dict, description='𝒟(c, ℱ) per lapisan')
+    add_options: dict[str, Any] | None = Field(default=None, description='usulan dan pilihan ADD')
 
 
 # ── event skema dan rencana adaptasi ─────────────────────────────────────────────
@@ -374,6 +376,7 @@ class PlanOut(Out):
     created_at: datetime
     decided_by: str | None
     decided_at: datetime | None
+    revision_of: int | None = None
     actions: list[PlanActionOut] = Field(default_factory=list)
 
 
@@ -397,6 +400,10 @@ class EventResultOut(BaseModel):
 
 class DecisionIn(BaseModel):
     note: str | None = None
+    # Hanya untuk rencana ADD (P-001): nama lokal dan domain property pilihan administrator.
+    # Bila berbeda dari usulan, persetujuan menghasilkan rencana revisi (ADR-0024).
+    property_name: str | None = Field(default=None, max_length=100)
+    domain: str | None = Field(default=None, max_length=2000)
 
 
 # ── eksekusi rencana ─────────────────────────────────────────────────────────────

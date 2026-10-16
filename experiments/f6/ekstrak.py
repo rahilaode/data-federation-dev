@@ -33,8 +33,10 @@ OPERASI = {'a001': 'ADD', 'a002': 'DROP', 'a003': 'RENAME',
 SUMBER = {'a001': 'PostgreSQL', 'a002': 'PostgreSQL', 'a006': 'PostgreSQL',
           'a003': 'MySQL', 'a004': 'MySQL', 'a005': 'MySQL',
           'a007': 'PostgreSQL', 'a008': 'MySQL', 'a009': 'PostgreSQL'}
-# Hasil yang sah: 'ditolak' hanya terjadi pada skenario yang rencananya memang harus ditolak (A009)
-HASIL_SAH = {'succeeded', 'ditolak'}
+# Hasil yang sah tanpa eksekusi: 'dinotifikasi' untuk skenario yang memang tidak boleh diadaptasi
+# (A009, ADR-0024); 'ditolak' dipertahankan agar hasil lama (rencana A009 ditolak) tetap terbaca.
+HASIL_SAH = {'succeeded', 'dinotifikasi', 'ditolak'}
+TANPA_EKSEKUSI = {'dinotifikasi', 'ditolak'}
 
 
 def statistik(nilai: list) -> dict | None:

@@ -3,8 +3,8 @@ Konsol administrator ASCAM: backend-for-frontend.
 
 Peramban tidak pernah memegang token layanan. Administrator masuk dengan kata sandi; sesi
 disimpan pada cookie HttpOnly bertanda tangan (SameSite=Strict). Permintaan ke Knowledge
-diteruskan lewat DAFTAR IZIN: hanya pembacaan, keputusan rencana, notifikasi, pemeriksaan
-koneksi, sync, analisis dampak, dan kebijakan adaptasi. Setiap permintaan yang mengubah
+diteruskan lewat DAFTAR IZIN: hanya pembacaan (termasuk lineage kolom), keputusan rencana,
+notifikasi, pemeriksaan koneksi, sync, analisis dampak, dan kebijakan adaptasi. Setiap permintaan yang mengubah
 keadaan wajib membawa header `X-ASCAM-UI`, yang tidak dapat dikirim lintas situs tanpa CORS.
 Nama administrator diteruskan sebagai `X-ASCAM-User` sehingga jejak audit mencatat manusianya.
 """
@@ -28,7 +28,7 @@ IZIN = {
     'GET': [
         r'obdf', r'obdf/\d+',
         r'obdf/\d+/(sources|targets|credentials|settings|naming-policy|type-mappings|audit|'
-        r'versions|events|plans|executions|notifications|sync-runs)',
+        r'versions|events|plans|executions|notifications|sync-runs|lineage)',
         r'versions/\d+', r'versions/\d+/artifacts/[a-z0-9_]+', r'plans/\d+',
     ],
     'POST': [

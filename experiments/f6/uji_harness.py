@@ -127,21 +127,21 @@ def main() -> int:
                 sesudah[terdampak] = ok(3, 'e')
             if pola == 'P-002':
                 sesudah[terdampak] = ok(0)
-            ditolak = not skenario.SKENARIO[kode].setujui
-            if ditolak:                                 # A009: rencana ditolak, view tetap rusak
+            tanpa_adaptasi = skenario.SKENARIO[kode].keputusan == "notify"
+            if tanpa_adaptasi:                          # A009: tidak diadaptasi, view tetap rusak
                 sesudah = dict(rusak)
             penilaian = kueri.nilai(kode, sebelum, sesudah)
             harapan = kueri.sesuai_harapan(kode, sesudah, penilaian)
             assert all(harapan.values()), (kode, harapan)
             (sementara / f'run-{kode}-01.json').write_text(json.dumps({
                 'mode': 'perlakuan', 'skenario': kode, 'judul': kode, 'run': 1,
-                'hasil': 'ditolak' if ditolak else 'succeeded',
+                'hasil': 'dinotifikasi' if tanpa_adaptasi else 'succeeded',
                 'ketersediaan': {'n_probe': 10, 'n_gagal': 0, 'ketersediaan_persen': 100.0,
                                  'selang_gagal_terpanjang_ms': 0, 'jeda_probe_s': 0.5},
                 'keputusan': skenario.SKENARIO[kode].keputusan, 'pola': skenario.SKENARIO[kode].pola,
                 'sesuai_harapan': True, 'n_manual': 0, 'keputusan_ms': 0, 'deteksi_ms': 1,
-                'dt_adapt_ms': None if ditolak else 1, 'dt_adapt_mesin_ms': None if ditolak else 1,
-                'langkah': {} if ditolak else {'validate': 1},
+                'dt_adapt_ms': None if tanpa_adaptasi else 1, 'dt_adapt_mesin_ms': None if tanpa_adaptasi else 1,
+                'langkah': {} if tanpa_adaptasi else {'validate': 1},
                 'jawaban_sebelum': sebelum, 'jawaban_sesudah': sesudah, 'penilaian': penilaian,
                 'harapan': harapan}))
         hasil = subprocess.run([sys.executable, str(F6 / 'analisis.py'), str(sementara)],
@@ -155,7 +155,7 @@ def main() -> int:
         assert hasil.returncode == 0, hasil.stderr
         ringkas = json.loads((sementara / 'ringkasan' / 'ringkasan.json').read_text())['skenario']
         assert all(v['berhasil'] == 1 for v in ringkas.values()), ringkas
-        print('ekstrak.py menghitung run yang ditolak (A009) sebagai hasil sah')
+        print('ekstrak.py menghitung run yang dinotifikasi (A009) sebagai hasil sah')
         print('analisis berjalan ujung ke ujung atas hasil tiruan; harapan teoretis terpenuhi')
     finally:
         shutil.rmtree(sementara, ignore_errors=True)

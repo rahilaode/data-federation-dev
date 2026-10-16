@@ -39,11 +39,29 @@ def test_event_is_idempotent(api, obdf):
     assert len(api.get(f'/api/v1/obdf/{obdf}/plans').json()) == 1
 
 
-def test_hitl_event_waits_for_approval(api, obdf):
+def test_unsafe_drop_is_notified_without_actions(api, obdf):
+    """ADR-0024: DROP yang tidak terbukti aman tidak menghasilkan rencana yang dapat disetujui,
+    hanya notifikasi yang menyebut elemen terdampak."""
     out = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk', column='nik')
     plan = out['plan']
-    assert plan['decision'] == 'hitl' and plan['status'] == 'pending_approval'
+    assert plan['decision'] == 'notify' and plan['status'] == 'notified' and plan['actions'] == []
     assert any('kunci primer' in r for r in plan['reasons'])
+    assert plan['impact']['affected']['triples_maps']
+    assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'pending_approval'}).json() == []
+    assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json() == []
+    for aksi in ('approve', 'reject'):
+        assert api.post(f"/api/v1/plans/{plan['id']}/{aksi}").status_code == 409
+    pesan = [n['message'] for n in api.get(f'/api/v1/obdf/{obdf}/notifications').json()
+             if n['plan_id'] == plan['id']]
+    assert pesan and 'tidak dieksekusi' in pesan[0] and 'TriplesMap' in pesan[0]
+    assert 'sinkronisasi' in pesan[0]
+
+
+def test_hitl_event_waits_for_approval(api, obdf):
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    assert plan['decision'] == 'hitl' and plan['status'] == 'pending_approval'
+    assert any('keputusan pemodelan' in r for r in plan['reasons'])
     pending = api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'pending_approval'}).json()
     assert [p['id'] for p in pending] == [plan['id']]
 
@@ -54,8 +72,8 @@ def test_hitl_event_waits_for_approval(api, obdf):
 
 
 def test_plan_can_be_rejected(api, obdf):
-    plan = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
-                 column='nik')['plan']
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     rejected = api.post(f"/api/v1/plans/{plan['id']}/reject", json={'note': 'tidak disetujui'}).json()
     assert rejected['status'] == 'rejected'
     assert api.post(f"/api/v1/plans/{plan['id']}/approve").status_code == 409
@@ -63,8 +81,8 @@ def test_plan_can_be_rejected(api, obdf):
 
 def test_stale_plan_cannot_be_approved(api, obdf):
     """Spesifikasi berubah sejak rencana dibuat: rencana ditandai superseded."""
-    plan = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
-                 column='nik')['plan']
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     set_clients(api, meta=fx.FakeMetadata(fx.metadata(extra_column=True)))
     assert api.post(f'/api/v1/obdf/{obdf}/sync').json()['changed']
     r = api.post(f"/api/v1/plans/{plan['id']}/approve")
@@ -89,7 +107,7 @@ def test_add_event_plans_property_and_mapping(api, obdf):
     plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat_lengkap',
                  column_type='varchar(200)')['plan']
-    assert plan['decision'] == 'auto' and plan['pattern'] == 'P-001'
+    assert plan['decision'] == 'hitl' and plan['pattern'] == 'P-001'
     ontology = [a for a in plan['actions'] if a['artifact'] == 'ontology'][0]
     assert ontology['params']['iri'].endswith('/alamatLengkap')
 
@@ -115,7 +133,7 @@ def test_event_uses_source_column_name_not_teiid_name(api, obdf):
 
 
 def test_deterministic_uuid_and_unsupported_operation(api, obdf):
-    """UUID versi 5 (deterministik) diterima; DDL tak didukung tetap masuk antrean HITL."""
+    """UUID versi 5 (deterministik) diterima; DDL tak didukung diberitahukan ke administrator."""
     import uuid as _uuid
     uid = str(_uuid.uuid5(_uuid.NAMESPACE_URL, 'ascam:topik:0:42:0'))
     first = kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
@@ -123,7 +141,7 @@ def test_deterministic_uuid_and_unsupported_operation(api, obdf):
                   raw={'ddl_command': 'ALTER TABLE penerima_manfaat ALTER COLUMN x TYPE text'})
     assert first['event']['status'] == 'planned'
     plan = first['plan']
-    assert plan['decision'] == 'hitl' and plan['pattern'] is None and plan['actions'] == []
+    assert plan['decision'] == 'notify' and plan['pattern'] is None and plan['actions'] == []
     assert any('tidak didukung' in r for r in plan['reasons'])
     assert kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
                  table='penerima_manfaat')['duplicate'] is True
@@ -155,7 +173,6 @@ def test_uid_reuse_with_different_content_is_flagged(api, obdf):
 
 
 def test_hitl_add_creates_descriptive_notification_and_can_be_acknowledged(api, obdf):
-    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
     plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     assert plan['status'] == 'pending_approval' and len(plan['actions']) >= 3
@@ -172,7 +189,6 @@ def test_hitl_add_creates_descriptive_notification_and_can_be_acknowledged(api, 
 
 
 def test_approval_acknowledges_plan_notification(api, obdf):
-    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
     plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     api.post(f"/api/v1/plans/{plan['id']}/approve", json={'note': 'nama property sudah tepat'})
@@ -182,7 +198,6 @@ def test_approval_acknowledges_plan_notification(api, obdf):
 
 def test_only_ui_client_may_assert_human_actor(api, obdf):
     """Persetujuan HITL tercatat atas nama administrator, bukan hanya nama klien token."""
-    api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'hitl'}})
     plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
@@ -191,8 +206,64 @@ def test_only_ui_client_may_assert_human_actor(api, obdf):
 
 
 def test_malformed_actor_header_is_ignored(api, obdf):
-    plan = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
-                 column='nik')['plan']
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     hasil = api.post(f"/api/v1/plans/{plan['id']}/reject",
                      headers={'X-ASCAM-User': 'admin\nPALSU: disetujui'}).json()
     assert hasil['decided_by'] == 'ui'                  # header berbahaya diabaikan
+
+
+# ── revisi rencana ADD oleh administrator (ADR-0024) ───────────────────────────
+def test_admin_can_rename_property_when_approving(api, obdf):
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    usulan = plan['impact']['add_options']
+    assert usulan['proposed_iri'].endswith('/alamat')
+    hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                     json={'note': 'nama dibuat lebih jelas', 'property_name': 'alamatDomisili',
+                           'domain': usulan['proposed_domain']})
+    assert hasil.status_code == 200, hasil.text
+    revisi = hasil.json()
+    assert revisi['id'] != plan['id'] and revisi['revision_of'] == plan['id']
+    assert revisi['status'] == 'approved' and revisi['decided_by'] == 'ui:penguji'
+    iri = 'http://bansos.go.id/ontology/alamatDomisili'
+    assert [(a['seq'], a['artifact'], a['operation']) for a in revisi['actions']][:2] == [
+        (1, 'vdb', 'add_column'), (2, 'ontology', 'add_datatype_property')]
+    assert all(a['params'].get('predicate_iri', iri) == iri and a['params'].get('iri', iri) == iri
+               for a in revisi['actions'] if a['artifact'] != 'vdb')
+    assert {a['params']['triples_map_iri'].rsplit('#', 1)[-1] for a in revisi['actions']
+            if a['artifact'] == 'r2rml'} == {'MapPenerima', 'MapRingkas'}
+    asal = api.get(f"/api/v1/plans/{plan['id']}").json()
+    assert asal['status'] == 'revised'
+    disetujui = api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json()
+    assert [p['id'] for p in disetujui] == [revisi['id']]
+    assert api.post(f"/api/v1/plans/{plan['id']}/approve").status_code == 409
+
+
+def test_unchanged_choice_approves_original_plan(api, obdf):
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    usulan = plan['impact']['add_options']
+    hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                     json={'property_name': 'alamat', 'domain': usulan['proposed_domain']}).json()
+    assert hasil['id'] == plan['id'] and hasil['status'] == 'approved'
+
+
+@pytest.mark.parametrize('pilihan, potongan', [
+    ({'property_name': '1salah'}, 'diawali huruf'),
+    ({'property_name': 'nik', 'domain': 'http://bansos.go.id/ontology/PenerimaBansos'}, 'domain berbeda'),
+    ({'property_name': 'alamatBaru', 'domain': 'http://bansos.go.id/ontology/KelasLain'}, 'salah satu kelas'),
+])
+def test_invalid_admin_choice_is_refused(api, obdf, pilihan, potongan):
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    r = api.post(f"/api/v1/plans/{plan['id']}/approve", json=pilihan)
+    assert r.status_code == 422 and potongan in r.json()['detail']
+    assert api.get(f"/api/v1/plans/{plan['id']}").json()['status'] == 'pending_approval'
+
+
+def test_property_choice_only_for_add_and_approval(api, obdf):
+    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    r = api.post(f"/api/v1/plans/{plan['id']}/reject", json={'property_name': 'alamatBaru'})
+    assert r.status_code == 422

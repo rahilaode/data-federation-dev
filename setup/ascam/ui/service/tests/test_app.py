@@ -69,6 +69,20 @@ def test_approval_carries_admin_identity_and_note(masuk, palsu):
     assert palsu.permintaan[-1].headers['Content-Type'] == 'application/json'
 
 
+def test_approval_forwards_property_choice(masuk, palsu):
+    pilihan = {'note': None, 'property_name': 'alamatDomisili',
+               'domain': 'http://bansos.go.id/ontology/PenerimaBansos'}
+    r = masuk.post('/api/k/plans/5/approve', headers=UBAH, json=pilihan)
+    assert r.status_code == 200 and r.json()['terima'] == pilihan
+
+
+def test_lineage_is_readable(masuk, palsu):
+    masuk.get('/api/k/obdf/1/lineage', params={'source': 'kemensos', 'table': 'program_bansos'})
+    terakhir = palsu.permintaan[-1]
+    assert terakhir.url.path == '/api/v1/obdf/1/lineage'
+    assert terakhir.url.params['table'] == 'program_bansos'
+
+
 def test_policy_change_is_allowed(masuk, palsu):
     r = masuk.put('/api/k/obdf/1/settings/adaptation.add_column', headers=UBAH,
                   json={'value': {'mode': 'hitl'}})

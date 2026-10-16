@@ -186,8 +186,8 @@ def sesuai_harapan(kode: str, sesudah: dict, penilaian: dict) -> dict:
     """Harapan teoretis skenario perlakuan menurut polanya (proposal §3.10.2, hlm. 104)."""
     from skenario import SKENARIO
     q = sesudah.get(terdampak(kode)) or {}
-    if not SKENARIO[kode].setujui:
-        # Rencana ditolak: OBDF tidak berubah, sehingga kueri yang melewati view rusak tetap gagal
+    if SKENARIO[kode].keputusan == 'notify':
+        # Tidak diadaptasi (ADR-0024): OBDF tidak berubah, sehingga kueri yang melewati view rusak tetap gagal
         # sampai administrator mendefinisikan ulang view (perilaku sama dengan baseline). Kueri
         # lain dicatat di `penilaian` tanpa harapan: bergantung pada apakah Teiid memangkas
         # kolom view yang tidak diminta sebelum push-down.

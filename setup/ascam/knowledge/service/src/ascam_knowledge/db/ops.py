@@ -45,12 +45,16 @@ class SchemaEvent(Base):
     ignore_reason: Mapped[str | None] = mapped_column(Text)
 
 
-PLAN_STATUS = ('pending_approval', 'approved', 'rejected', 'superseded', 'executed', 'failed')
+# notified: keputusan `notify`, tidak ada yang dieksekusi (ADR-0024)
+# revised: rencana ADD yang digantikan revisi administrator saat persetujuan (ADR-0024)
+PLAN_STATUS = ('pending_approval', 'approved', 'rejected', 'superseded', 'executed', 'failed',
+               'notified', 'revised')
+PLAN_DECISION = ('auto', 'hitl', 'notify')
 
 
 class AdaptationPlan(Base):
     __tablename__ = 'adaptation_plan'
-    __table_args__ = (one_of('decision', ('auto', 'hitl')), one_of('status', PLAN_STATUS), S)
+    __table_args__ = (one_of('decision', PLAN_DECISION), one_of('status', PLAN_STATUS), S)
     id: Mapped[int] = pk_id()
     event_id: Mapped[int] = mapped_column(ForeignKey('ops.schema_event.id', ondelete='RESTRICT'), index=True)
     base_spec_version_id: Mapped[int] = mapped_column(
@@ -63,6 +67,9 @@ class AdaptationPlan(Base):
     created_at: Mapped[datetime] = created_at()
     decided_by: Mapped[str | None] = mapped_column(Text)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision_of: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey('ops.adaptation_plan.id', ondelete='RESTRICT'),
+        comment='rencana ADD yang direvisi administrator saat persetujuan')
 
 
 class PlanAction(Base):

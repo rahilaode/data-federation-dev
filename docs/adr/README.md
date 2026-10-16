@@ -26,6 +26,9 @@ Format mengikuti pola MADR (https://adr.github.io/madr/).
 | [0019](0019-penyuntingan-artefak.md) | Cara menyunting VDB, ontologi, dan mapping | Execute | F4b |
 | [0020](0020-executor-blue-green.md) | Mesin eksekusi rencana adaptasi | Execute | F4c |
 | [0021](0021-hitl-add-dan-konsol.md) | Penambahan kolom memerlukan persetujuan lewat konsol web | Plan, Knowledge | F5 |
+| [0022](0022-blue-green-lapisan-obda.md) | Blue-green pada lapisan OBDA (dua instance Ontop di belakang proxy) | Execute | – |
+| [0023](0023-penyesuaian-view.md) | Penyesuaian view Teiid saat kolom sumber dihapus | Analyze, Plan, Execute | F0.8 |
+| [0024](0024-notifikasi-dan-lineage-konsol.md) | Persetujuan hanya untuk ADD, notifikasi untuk DROP/RENAME tak aman, lineage di konsol | Plan, Knowledge | F6 |
 
 Skrip uji kelayakan berada di `experiments/f0/`; hasil mentah disimpan lokal di
 `results/f0/` (tidak di-commit).

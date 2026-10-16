@@ -103,15 +103,15 @@ def test_drop_through_passthrough_views_is_automatic_and_rewrites_views(api):
     assert tindakan(out, 'drop_column')[0]['column'] == 'pekerjaan'
 
 
-def test_drop_used_in_view_expression_needs_hitl(api):
+def test_drop_used_in_view_expression_is_notified(api):
     oid = siapkan(api)
     out = impact(api, oid, operation='drop', source='dukcapil', table='master_penduduk',
                  column='alamat')
-    assert out['decision'] == 'hitl'
+    assert out['decision'] == 'notify' and out['actions'] == []
     assert any('ekspresi' in r and 'v.label' in r for r in out['reasons'])
 
 
-def test_drop_through_view_with_inline_columns_needs_hitl(api):
+def test_drop_through_view_with_inline_columns_is_notified(api):
     xml = ('<?xml version="1.0"?><vdb name="government" version="1"><model name="v" type="VIRTUAL">'
            '<metadata type="DDL"><![CDATA[CREATE VIEW profil (nik string, pekerjaan string, '
            'alamat string) AS SELECT p.nik, p.pekerjaan, p.alamat FROM dukcapil.master_penduduk AS p;'
@@ -119,15 +119,15 @@ def test_drop_through_view_with_inline_columns_needs_hitl(api):
     oid = siapkan(api, vdb_xml=xml)
     out = impact(api, oid, operation='drop', source='dukcapil', table='master_penduduk',
                  column='pekerjaan')
-    assert out['decision'] == 'hitl'
+    assert out['decision'] == 'notify' and out['actions'] == []
     assert any('inline' in r and 'v.profil' in r for r in out['reasons'])
 
 
-def test_existing_view_predicate_case_still_needs_hitl(api):
+def test_existing_view_predicate_case_is_still_notified(api):
     oid = siapkan(api)
     out = impact(api, oid, operation='drop', source='dukcapil', table='master_penduduk',
                  column='tgl_lahir_ktp')
-    assert out['decision'] == 'hitl'
+    assert out['decision'] == 'notify' and out['actions'] == []
     assert any('WHERE/JOIN view v.penduduk_ringkas' in r for r in out['reasons'])
 
 

@@ -6,7 +6,7 @@ set -Eeuo pipefail
 cd "$(dirname "$0")"
 trap 'echo; echo "GAGAL pada langkah: $LANGKAH"; exit 1' ERR
 
-if docker compose version >/dev/null 2>&1; then DC=(docker compose); else DC=(docker-compose); fi
+if command -v docker-compose >/dev/null 2>&1; then DC=(docker-compose); else DC=(docker compose); fi
 compose() { "${DC[@]}" -f "$1" "${@:2}"; }
 SECRETS=setup/ascam/knowledge/secrets
 KNOWLEDGE=http://127.0.0.1:18000

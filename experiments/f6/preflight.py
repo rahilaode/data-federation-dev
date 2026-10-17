@@ -191,13 +191,17 @@ def uji_rantai(batas: float = 60.0, diam: bool = False) -> tuple[bool, str]:
     lapor = (lambda *a: None) if diam else print
     ui = token('knowledge_api_tokens', 'ui')
     pesan_awal = pesan_orchestrator()
-    sebelum = {e['id'] for e in http(KNOWLEDGE, '/api/v1/obdf/1/events?limit=200', ui)}
+    awal = http(KNOWLEDGE, '/api/v1/obdf/1/events?limit=200', ui)
+    if not isinstance(awal, list):
+        return False, f'Knowledge tidak menjawab: {awal}'
+    sebelum = {e['id'] for e in awal}
     pg(f'CREATE TABLE IF NOT EXISTS public.{PROBE} (id serial primary key)')
     kolom = f'uji_{int(time.time())}'
     pg(f'ALTER TABLE public.{PROBE} ADD COLUMN {kolom} varchar(10)')
     mulai = time.perf_counter()
     while time.perf_counter() - mulai < batas:
-        for peristiwa in http(KNOWLEDGE, '/api/v1/obdf/1/events?limit=20', ui):
+        terbaru = http(KNOWLEDGE, '/api/v1/obdf/1/events?limit=20', ui)
+        for peristiwa in terbaru if isinstance(terbaru, list) else []:
             if peristiwa['id'] in sebelum:
                 continue
             struktur = peristiwa.get('structured') or {}

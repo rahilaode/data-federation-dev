@@ -394,7 +394,8 @@ def main() -> int:
     if not args.lewati_periksa:
         print('===== pemeriksaan awal =====')
         siap, masalah = periksa()
-        rantai_ok, keterangan = uji_rantai()
+        # uji rantai mengirim DDL nyata; tidak ada gunanya bila komponen ASCAM belum berjalan
+        rantai_ok, keterangan = uji_rantai() if siap else (True, '')
         if not siap or not rantai_ok:
             print('\nEvaluasi dibatalkan:')
             for m in masalah + ([] if rantai_ok else [f'rantai event terputus: {keterangan}']):

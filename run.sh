@@ -8,11 +8,13 @@
 set -e
 
 # Jaringan bersama semua stack (abaikan bila sudah ada, agar aman dengan set -e)
+if command -v docker-compose >/dev/null 2>&1; then COMPOSE=(docker-compose); else COMPOSE=(docker compose); fi
+
 docker network create ascam-networks >/dev/null 2>&1 || true
 
 # data source
-docker compose -f ./setup/data-source/docker-compose.yaml down -v
-docker compose -f ./setup/data-source/docker-compose.yaml up -d
+"${COMPOSE[@]}" -f ./setup/data-source/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/data-source/docker-compose.yaml up -d
 
 # data federation
 # Siapkan folder deployment scanner: bersihkan marker lama, lalu minta
@@ -25,8 +27,8 @@ touch "$DEPLOY_DIR"/government-vdb.xml.dodeploy
 # agar scanner bisa membuat/menghapus marker (cukup untuk lingkungan riset).
 chmod 777 "$DEPLOY_DIR"
 
-docker compose -f ./setup/data-federation/docker-compose.yaml down -v
-docker compose -f ./setup/data-federation/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/data-federation/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/data-federation/docker-compose.yaml up --build --detach
 
 # tunggu VDB awal ter-deploy sebelum Ontop dinyalakan
 echo "Menunggu VDB government ter-deploy..."
@@ -48,12 +50,12 @@ fi
 # (blok terkelola ASCAM pada mapping dan ontologi) harus ikut dikembalikan ke isi di git;
 # tanpa itu mapping merujuk kolom yang sudah tidak ada dan Ontop gagal.
 git checkout -- ./setup/vkg-system/config/mapping.ttl ./setup/vkg-system/config/ontology_file.ttl
-docker compose -f ./setup/vkg-system/docker-compose.yaml down -v
-docker compose -f ./setup/vkg-system/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/vkg-system/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/vkg-system/docker-compose.yaml up --build --detach
 
 # ascam schema monitor
-docker compose -f ./setup/ascam/schema-monitor/docker-compose.yaml down -v
-docker compose -f ./setup/ascam/schema-monitor/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/ascam/schema-monitor/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/ascam/schema-monitor/docker-compose.yaml up --build --detach
 
 sleep 40
 
@@ -69,20 +71,20 @@ curl -X POST -H "Content-Type: application/json" \
 
 
 # ascam ontop agent (membaca artefak OBDA di host Ontop; ADR-0011)
-docker compose -f ./setup/ascam/ontop-agent/docker-compose.yaml down -v
-docker compose -f ./setup/ascam/ontop-agent/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/ascam/ontop-agent/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/ascam/ontop-agent/docker-compose.yaml up --build --detach
 
 # ascam orchestrator (konsumsi event DDL -> Knowledge; ADR-0017)
-docker compose -f ./setup/ascam/orchestrator/docker-compose.yaml down -v
-docker compose -f ./setup/ascam/orchestrator/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/ascam/orchestrator/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/ascam/orchestrator/docker-compose.yaml up --build --detach
 
 # ascam executor (menjalankan rencana adaptasi; ADR-0020)
-docker compose -f ./setup/ascam/executor/docker-compose.yaml down -v
-docker compose -f ./setup/ascam/executor/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/ascam/executor/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/ascam/executor/docker-compose.yaml up --build --detach
 
 # konsol administrator ASCAM (ADR-0021): http://127.0.0.1:18400
-docker compose -f ./setup/ascam/ui/docker-compose.yaml down -v
-docker compose -f ./setup/ascam/ui/docker-compose.yaml up --build --detach
+"${COMPOSE[@]}" -f ./setup/ascam/ui/docker-compose.yaml down -v
+"${COMPOSE[@]}" -f ./setup/ascam/ui/docker-compose.yaml up --build --detach
 
 # ascam adaptive engine (iterasi 1) TIDAK dijalankan lagi: mesin tersebut mengubah mapping
 # .obda, sedangkan ℳ kini berupa R2RML (ADR-0005, ADR-0010). Penggantinya (Orchestrator dan

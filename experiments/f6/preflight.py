@@ -174,7 +174,7 @@ def diagnosis(kolom: str, pesan_awal: int | None) -> list[str]:
     else:
         temuan.append('[debezium/kafka/orchestrator] pesan TIDAK sampai ke Orchestrator. '
                       'Bila konektor RUNNING, kemungkinan konsumen Orchestrator macet: '
-                      'docker compose -f setup/ascam/orchestrator/docker-compose.yaml restart')
+                      'docker-compose -f setup/ascam/orchestrator/docker-compose.yaml restart')
     status = http(CONNECT, '/connectors/postgres-connector/status')
     for tugas in status.get('tasks', []):
         if tugas.get('trace'):
@@ -236,8 +236,8 @@ def main() -> int:
         for m in masalah:
             print(f'  - {m}')
         print('\nPerbaikan umum:')
-        print('  docker compose -f setup/ascam/schema-monitor/docker-compose.yaml up -d')
-        print('  docker compose -f setup/ascam/orchestrator/docker-compose.yaml restart')
+        print('  docker-compose -f setup/ascam/schema-monitor/docker-compose.yaml up -d')
+        print('  docker-compose -f setup/ascam/orchestrator/docker-compose.yaml restart')
         print('  experiments/f3/verify_orchestrator.sh --no-ddl   # mendaftarkan ulang konektor')
         return 1
     print('\nSemua siap untuk evaluasi.')

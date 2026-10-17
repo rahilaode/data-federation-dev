@@ -25,7 +25,10 @@ if [ "$KONFIRMASI" -eq 1 ]; then
   [ "$jawaban" = "hapus" ] || { echo "Dibatalkan."; exit 1; }
 fi
 
-compose() { docker compose -f "$1" "${@:2}"; }
+# Lingkungan lab memakai `docker-compose` (biner terpisah); `docker compose` (plugin) hanya
+# dipakai bila biner itu tidak ada. `--wait` hanya ada pada Compose v2, sehingga diperiksa dulu.
+if command -v docker-compose >/dev/null 2>&1; then COMPOSE=(docker-compose); else COMPOSE=(docker compose); fi
+compose() { "${COMPOSE[@]}" -f "$1" "${@:2}"; }
 
 tunggu() {  # $1 deskripsi, $2 batas detik, sisanya perintah yang harus berhasil
   local deskripsi="$1" batas="$2"; shift 2

@@ -53,7 +53,11 @@ trap 'echo; echo "GAGAL pada langkah: $LANGKAH_SAAT_INI"; echo "Periksa log kont
 
 judul() { LANGKAH_SAAT_INI="$1"; printf '\n==== %s ====\n' "$1"; }
 info() { printf '  %s\n' "$*"; }
-compose() { docker compose -f "$1" "${@:2}"; }
+# Lingkungan lab memakai `docker-compose` (biner terpisah); `docker compose` (plugin) hanya
+# dipakai bila biner itu tidak ada. `--wait` hanya ada pada Compose v2, sehingga diperiksa dulu.
+if command -v docker-compose >/dev/null 2>&1; then COMPOSE=(docker-compose); else COMPOSE=(docker compose); fi
+compose() { "${COMPOSE[@]}" -f "$1" "${@:2}"; }
+if "${COMPOSE[@]}" up --help 2>/dev/null | grep -q -- '--wait'; then TUNGGU=(--wait); else TUNGGU=(); fi
 
 tunggu() {  # $1 deskripsi, $2 batas detik, sisanya perintah yang harus berhasil
   local nama="$1" batas="$2" i=0
@@ -79,6 +83,12 @@ teiid_vdb_aktif() {
 sparql_siap() { curl -sf -G "$SPARQL" --data-urlencode 'query=ASK { ?s ?p ?o }' -H 'Accept: application/sparql-results+json'; }
 connect_siap() { curl -sf "$CONNECT/connectors"; }
 knowledge_siap() { curl -sf "$KNOWLEDGE/ready"; }
+kontainer_siap() {  # sehat bila kontainer punya healthcheck, berjalan bila tidak
+  local status
+  status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null)"
+  [ "$status" = healthy ] || [ "$status" = running ]
+}
+log_galat() { for k in "$@"; do echo "  --- docker logs $k (40 baris terakhir)"; docker logs --tail 40 "$k" 2>&1 | sed 's/^/    /'; done; }
 # Keluaran disimpan dulu, lalu dicocokkan: `docker ps | grep -q` di bawah pipefail dapat
 # gagal palsu karena docker menerima SIGPIPE ketika grep -q keluar lebih awal.
 kontainer_ada() { local semua; semua="$(docker ps -a --format '{{.Names}}')"; grep -qx "$1" <<< "$semua"; }
@@ -149,20 +159,24 @@ done
 compose setup/ascam/knowledge/docker-compose.yaml down -v --remove-orphans >/dev/null 2>&1 || true
 info "layanan ASCAM dihentikan; basis data Knowledge dihapus"
 
-compose setup/ascam/knowledge/docker-compose.yaml up -d --build --wait 2>&1 | tail -n 3 | sed 's/^/  /'
-tunggu "Knowledge Service" 120 knowledge_siap
+compose setup/ascam/knowledge/docker-compose.yaml up -d --build ${TUNGGU[@]+"${TUNGGU[@]}"} 2>&1 | tail -n 3 | sed 's/^/  /'
+tunggu "Knowledge Service" 120 knowledge_siap || { log_galat ascam-knowledge-migrate ascam-knowledge-service; false; }
 docker logs ascam-knowledge-migrate 2>&1 | tail -n 1 | sed 's/^/  migrasi: /'
 docker logs ascam-knowledge-service 2>&1 | grep bootstrap | tail -n 1 | sed 's/^/  /' || true
 
-compose setup/ascam/ontop-agent/docker-compose.yaml up -d --build --wait 2>&1 | tail -n 1 | sed 's/^/  /'
+compose setup/ascam/ontop-agent/docker-compose.yaml up -d --build ${TUNGGU[@]+"${TUNGGU[@]}"} 2>&1 | tail -n 1 | sed 's/^/  /'
 
 GENERASI="$(date +%Y%m%dT%H%M%S)"
 ASCAM_ORCH_GROUP_ID="ascam-orchestrator-$GENERASI" ASCAM_ORCH_OFFSET_RESET=latest \
-  compose setup/ascam/orchestrator/docker-compose.yaml up -d --build --wait 2>&1 | tail -n 1 | sed 's/^/  /'
+  compose setup/ascam/orchestrator/docker-compose.yaml up -d --build ${TUNGGU[@]+"${TUNGGU[@]}"} 2>&1 | tail -n 1 | sed 's/^/  /'
 info "Orchestrator: grup konsumen ascam-orchestrator-$GENERASI, mulai dari pesan terbaru"
 
-compose setup/ascam/executor/docker-compose.yaml up -d --build --wait 2>&1 | tail -n 1 | sed 's/^/  /'
-compose setup/ascam/ui/docker-compose.yaml up -d --build --wait 2>&1 | tail -n 1 | sed 's/^/  /'
+compose setup/ascam/executor/docker-compose.yaml up -d --build ${TUNGGU[@]+"${TUNGGU[@]}"} 2>&1 | tail -n 1 | sed 's/^/  /'
+compose setup/ascam/ui/docker-compose.yaml up -d --build ${TUNGGU[@]+"${TUNGGU[@]}"} 2>&1 | tail -n 1 | sed 's/^/  /'
+# tanpa --wait (Compose v1) kesiapan diperiksa dari status healthcheck tiap kontainer
+for k in ascam-ontop-agent ascam-orchestrator ascam-executor ascam-ui; do
+  tunggu "$k" 120 kontainer_siap "$k" || { log_galat "$k"; false; }
+done
 
 # ── 4. Knowledge: sinkronisasi awal dari OBDF yang sedang berjalan ────────────
 judul "4) sinkronisasi awal Knowledge"

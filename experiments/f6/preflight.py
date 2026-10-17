@@ -119,8 +119,16 @@ def periksa(diam: bool = False) -> tuple[bool, list[str]]:
         lapor(f"  view {skenario_view} ({nama}): HTTP {hasil['status']} baris={hasil['n']}"
               f"{' | ' + galat if galat else ''}")
         if not hasil['ok'] or not hasil['n']:
-            masalah.append(f'kueri dasar {skenario_view} ({nama}) tidak menghasilkan baris; '
-                           'view studi kasus belum termuat (jalankan start.sh)')
+            from skenario import SKENARIO, _my_ada, _pg_ada
+            sk = SKENARIO[skenario_view]
+            ada = (_pg_ada if sk.sumber == 'kemensos' else _my_ada)(sk.tabel, sk.kolom)
+            if not ada:
+                # sisa run yang terhenti sebelum pemulihan: sumber belum di kondisi dasar
+                masalah.append(f'kolom sumber {sk.tabel}.{sk.kolom} ({skenario_view}) tidak ada; '
+                               'jalankan python3 experiments/f6/pulihkan_sumber.py lalu ./jalankan.sh')
+            else:
+                masalah.append(f'kueri dasar {skenario_view} ({nama}) tidak menghasilkan baris; '
+                               'view studi kasus belum termuat (jalankan start.sh)')
 
     versi = http(KNOWLEDGE, '/api/v1/obdf/1/versions?limit=1', token('knowledge_api_tokens', 'ui'))
     if isinstance(versi, list) and versi:

@@ -1,0 +1,7 @@
+# marker deployment scanner WildFly
+*.deployed
+*.failed
+*.isdeploying
+*.dodeploy
+*.pending
+*.undeployed

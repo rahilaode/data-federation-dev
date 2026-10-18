@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VDB `nasional`: satu multi-source model (`dinsos`) atas tiga basis data berskema identik.
+  Rujukan: teiid-documents, bagian "MultiSource Models", hlm. 366-367.
+-->
+<vdb name="nasional" version="1">
+    <model visible="true" name="dinsos">
+        <!-- menandai model sebagai multi-source; cukup juga dengan >1 <source> -->
+        <property name="multisource" value="true"/>
+        <!-- nama kolom asal-sumber (bawaan: SOURCE_NAME) -->
+        <property name="multisource.columnName" value="provinsi"/>
+
+        <!-- nama source (unik dalam model) menjadi nilai kolom `provinsi` -->
+        <source name="sulsel" translator-name="postgresql" connection-jndi-name="java:/dinsos-sulsel"/>
+        <source name="jabar"  translator-name="postgresql" connection-jndi-name="java:/dinsos-jabar"/>
+        <source name="dki"    translator-name="postgresql" connection-jndi-name="java:/dinsos-dki"/>
+
+        <metadata type="DDL"><![CDATA[
+                CREATE FOREIGN TABLE penerima_manfaat (
+                  penerima_id  integer not null,
+                  nik          varchar(16) not null,
+                  nama_lengkap varchar(255),
+                  email        varchar(100),
+                  provinsi     string
+                ) OPTIONS(UPDATABLE 'FALSE');
+        ]]></metadata>
+        <!--
+          - `provinsi` dideklarasikan manual: kolom bernama sama dengan multisource.columnName
+            dianggap kolom asal-sumber dan tidak dibaca dari tabel fisik (hlm. 366), serta
+            tercatat di metadata sistem (SYS.Columns) (hlm. 367).
+          - Tanpa primary key: setelah digabung, penerima_id = 1 ada di setiap sumber.
+        -->
+    </model>
+</vdb>

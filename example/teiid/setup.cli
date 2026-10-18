@@ -1,0 +1,16 @@
+connect
+
+# Driver JDBC PostgreSQL (berkas yang sama dengan setup/data-federation/jdbc)
+deploy /opt/jboss/jdbc/postgresql-42.2.14.jre7.jar
+
+# Satu datasource untuk setiap sumber pada multi-source model:
+# "You must deploy a separate data source for each source defined in the xml file"
+# (teiid-documents, bagian "MultiSource Models", hlm. 366).
+/subsystem=datasources/data-source=dinsos-sulsel-ds:add(jndi-name=java:/dinsos-sulsel, enabled=true, use-java-context=true, driver-name=postgresql-42.2.14.jre7.jar, connection-url="jdbc:postgresql://example-pgsql:5432/dinsos_sulsel", user-name=postgres, password=postgres)
+/subsystem=datasources/data-source=dinsos-sulsel-ds:enable
+
+/subsystem=datasources/data-source=dinsos-jabar-ds:add(jndi-name=java:/dinsos-jabar, enabled=true, use-java-context=true, driver-name=postgresql-42.2.14.jre7.jar, connection-url="jdbc:postgresql://example-pgsql:5432/dinsos_jabar", user-name=postgres, password=postgres)
+/subsystem=datasources/data-source=dinsos-jabar-ds:enable
+
+/subsystem=datasources/data-source=dinsos-dki-ds:add(jndi-name=java:/dinsos-dki, enabled=true, use-java-context=true, driver-name=postgresql-42.2.14.jre7.jar, connection-url="jdbc:postgresql://example-pgsql:5432/dinsos_dki", user-name=postgres, password=postgres)
+/subsystem=datasources/data-source=dinsos-dki-ds:enable

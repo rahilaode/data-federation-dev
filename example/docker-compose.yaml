@@ -1,0 +1,60 @@
+# =============================================================================
+# Contoh Teiid multi-source model, terpisah dari OBDF utama (setup/).
+#
+#   example-pgsql  satu server PostgreSQL berisi tiga basis data berskema identik:
+#                  dinsos_sulsel, dinsos_jabar, dinsos_dki
+#   example-teiid  Teiid 16.0.0 dengan VDB `nasional`; model `dinsos` adalah
+#                  multi-source model atas ketiga basis data tersebut
+#
+# Jaringan, volume, nama kontainer, dan port berbeda dari setup/, sehingga contoh ini
+# dapat berjalan bersamaan dengan OBDF utama tanpa saling mengganggu.
+#
+# Pemakaian (dari folder example/):
+#   docker-compose up -d --build
+#   ./uji.sh
+#   docker-compose down -v
+# =============================================================================
+services:
+  example-pgsql:
+    image: postgres:15
+    container_name: example-pgsql
+    ports:
+      - '25432:5432'
+    networks:
+      - example-net
+    volumes:
+      - ./source:/docker-entrypoint-initdb.d
+      - example-data-pgsql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d dinsos_dki']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  example-teiid:
+    build:
+      context: ./teiid
+      dockerfile: Dockerfile
+    container_name: example-teiid
+    depends_on:
+      - example-pgsql
+    ports:
+      - '31100:31000'   # JDBC Teiid
+      - '35532:35432'   # ODBC Teiid (protokol PostgreSQL; dipakai uji.sh)
+      - '18180:8080'
+      - '19190:9990'    # management console
+    networks:
+      - example-net
+    volumes:
+      # nasional-vdb.xml di-deploy otomatis oleh deployment scanner WildFly
+      - ./teiid/deployments:/opt/jboss/wildfly/standalone/deployments
+
+networks:
+  example-net: {}
+
+volumes:
+  example-data-pgsql: {}

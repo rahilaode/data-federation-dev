@@ -44,4 +44,11 @@ docker-compose down -v           # hapus kontainer dan data contoh
    dapat sekaligus memiliki dan tidak memiliki kolom tersebut; karena itu ASCAM hanya
    memberi notifikasi untuk perubahan pada multi-source model (Table 1 paper).
 
+## Temuan
+
+Pada Teiid 16.0.0, filter negasi atas kolom asal-sumber (`WHERE provinsi <> 'jabar'` atau
+`WHERE NOT (provinsi = 'jabar')`) mengembalikan **0 baris tanpa galat**, juga ketika ketiga
+sumber sehat. Filter `=` dan `IN ('sulsel', 'dki')` memberi hasil yang benar. Karena itu
+`uji.sh` memakai `IN` untuk membatasi sumber.
+
 Rujukan konfigurasi: `teiid-documents.pdf`, bagian *MultiSource Models*, hlm. 366–367.

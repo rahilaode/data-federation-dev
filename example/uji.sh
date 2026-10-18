@@ -63,8 +63,11 @@ drop() {
   echo; echo "== 6. kueri tanpa email: tetap berjalan (Teiid hanya meminta kolom yang dipakai) =="
   teiid "SELECT provinsi, nik, nama_lengkap FROM dinsos.penerima_manfaat ORDER BY provinsi"
 
-  echo; echo "== 7. kueri email yang dibatasi ke sumber lain: berjalan =="
-  teiid "SELECT provinsi, nik, email FROM dinsos.penerima_manfaat WHERE provinsi <> 'jabar' ORDER BY provinsi"
+  echo; echo "== 7. kueri email yang dibatasi ke sumber lain (IN): berjalan, 3 baris =="
+  # Catatan: pada Teiid 16.0.0, filter negasi atas kolom asal-sumber (provinsi <> 'jabar',
+  # NOT (provinsi = 'jabar')) teramati mengembalikan 0 baris tanpa galat, juga saat semua
+  # sumber sehat. Karena itu dipakai IN.
+  teiid "SELECT provinsi, nik, email FROM dinsos.penerima_manfaat WHERE provinsi IN ('sulsel', 'dki') ORDER BY provinsi"
 
   echo; echo "== 8. pemulihan kolom email di jabar =="
   sumber dinsos_jabar "ALTER TABLE penerima_manfaat ADD COLUMN email VARCHAR(100)"

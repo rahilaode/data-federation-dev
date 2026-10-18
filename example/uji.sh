@@ -23,10 +23,14 @@ sumber() {  # kueri langsung ke salah satu basis data sumber
 
 echo "== menunggu VDB nasional aktif di Teiid (maks. 240 s) =="
 for i in $(seq 1 48); do
-  if teiid "SELECT 1" >/dev/null 2>&1; then echo "siap"; break; fi
+  if galat=$(teiid "SELECT 1" 2>&1); then echo "siap"; break; fi
   if [ "$i" -eq 48 ]; then
-    echo "VDB belum aktif. Periksa: docker logs example-teiid | grep -i -E 'nasional|error'"
-    echo "dan status deployment: ls teiid/deployments (nasional-vdb.xml.deployed / .failed)"
+    echo "VDB belum aktif setelah 240 s. Galat terakhir dari Teiid:"
+    echo "$galat"
+    echo; echo "-- marker deployment (teiid/deployments):"
+    ls -la teiid/deployments
+    echo; echo "-- log Teiid yang relevan:"
+    docker logs example-teiid 2>&1 | grep -i -E 'nasional|TEIID[0-9]+|ERROR|WFLYDS' | tail -40
     exit 1
   fi
   sleep 5

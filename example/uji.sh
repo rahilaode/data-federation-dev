@@ -7,7 +7,7 @@
 #
 # Kueri dikirim ke Teiid lewat transport ODBC (protokol PostgreSQL, port 35432), memakai
 # klien psql di kontainer example-pgsql yang satu jaringan dengan example-teiid.
-# Jalankan dari folder example/ setelah: docker-compose up -d --build
+# Jalankan dari folder example/ setelah: ./mulai.sh
 # =============================================================================
 set -uo pipefail
 cd "$(dirname "$0")"

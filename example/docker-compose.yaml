@@ -10,7 +10,7 @@
 # dapat berjalan bersamaan dengan OBDF utama tanpa saling mengganggu.
 #
 # Pemakaian (dari folder example/):
-#   docker-compose up -d --build
+#   ./mulai.sh      (chmod 777 teiid/deployments, lalu docker-compose up -d --build)
 #   ./uji.sh
 #   docker-compose down -v
 # =============================================================================

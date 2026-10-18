@@ -13,13 +13,14 @@ dijalankan bersamaan tanpa saling mengganggu.
 | `teiid/Dockerfile` | image Teiid, sama dengan `setup/data-federation/Dockerfile` |
 | `teiid/setup.cli` | driver JDBC dan satu datasource untuk setiap sumber |
 | `teiid/deployments/nasional-vdb.xml` | VDB `nasional` dengan multi-source model `dinsos` |
+| `mulai.sh` | memberi izin tulis folder `teiid/deployments`, lalu `docker-compose up -d --build` |
 | `uji.sh` | kueri uji dan skenario *drop* pada satu sumber |
 
 ## Menjalankan
 
 ```bash
 cd example
-docker-compose up -d --build     # build pertama mengunduh Teiid, beberapa menit
+./mulai.sh                       # izin folder deployments + docker-compose up -d --build
 ./uji.sh                         # kueri dasar
 ./uji.sh drop                    # skenario: hanya Jawa Barat menghapus kolom email
 docker-compose down -v           # hapus kontainer dan data contoh

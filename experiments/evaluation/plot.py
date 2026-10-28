@@ -28,11 +28,11 @@ from matplotlib import rcParams  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 # bottom to top; the PostgreSQL/MySQL pair of every operator sits together, ADD at the top
 ORDER = ['a008', 'a007', 'a003', 'a006', 'a005', 'a002', 'a004', 'a001']
-# Paper numbering: A001-A003 PostgreSQL, A004-A006 MySQL, so harness a006 = A003 and a003 = A006.
-PAPER = {'a001': 'A001', 'a002': 'A002', 'a006': 'A003', 'a004': 'A004', 'a005': 'A005', 'a003': 'A006'}
+# Scenario codes as printed in the paper (the same as the harness codes, in upper case).
+PAPER = {'a001': 'A001', 'a002': 'A002', 'a003': 'A003', 'a004': 'A004', 'a005': 'A005', 'a006': 'A006'}
 LABEL = {'a001': 'ADD, PostgreSQL (A001)', 'a004': 'ADD, MySQL (A004)',
          'a002': 'DROP, PostgreSQL (A002)', 'a005': 'DROP, MySQL (A005)',
-         'a006': 'RENAME, PostgreSQL (A003)', 'a003': 'RENAME, MySQL (A006)',
+         'a006': 'RENAME, PostgreSQL (A006)', 'a003': 'RENAME, MySQL (A003)',
          'a007': 'DROP via view, PostgreSQL (A007)', 'a008': 'DROP via view, MySQL (A008)'}
 # A009 is not drawn: its change is not adapted, so it has no Δt_adapt.
 

@@ -13,21 +13,20 @@ mechanism of the DBMS (an event trigger in PostgreSQL, polling every 10 s in MyS
 change columns that the mapping reads through Teiid views of the service model `layanan`
 (ADR-0023).
 
-| Paper | Harness | Change on the source | DBMS | Pattern | Expected decision |
-|---|---|---|---|---|---|
-| A001 | `a001` | `ADD COLUMN email` on `penerima_manfaat` | PostgreSQL | P-001 | `hitl` (ADR-0021) |
-| A002 | `a002` | `DROP COLUMN tipe_program` on `program_bansos` (explicit projection) | PostgreSQL | P-002 | `auto` |
-| A003 | `a006` | `RENAME COLUMN nama_program` on `program_bansos` (explicit projection) | PostgreSQL | P-003 | `auto` |
-| A004 | `a004` | `ADD COLUMN kode_pos` on `master_wilayah` | MySQL | P-001 | `hitl` |
-| A005 | `a005` | `DROP COLUMN status_hidup` on `master_penduduk` (`SELECT *`) | MySQL | P-002 | `auto` |
-| A006 | `a003` | `RENAME COLUMN tanggal_lahir` on `master_penduduk` (`SELECT *`) | MySQL | P-003 | `auto` |
-| A007 | `a007` | `DROP COLUMN no_kartu_keluarga`, read through the pass-through view `v_penerima_aktif` | PostgreSQL | P-002 | `auto` (the view is narrowed with `ALTER VIEW`) |
-| A008 | `a008` | `DROP COLUMN diubah_oleh`, read through the aliased view `v_riwayat_perubahan` | MySQL | P-002 | `auto` (the aliased column is removed from the view; the mapping runs `SELECT *` over it) |
-| A009 | `a009` | `DROP COLUMN periode_selesai`, used in the expression `YEAR(periode_selesai)` of `v_program_berakhir` | PostgreSQL | P-002 | `notify` (ADR-0024; negative control) |
+| Scenario | Change on the source | DBMS | Pattern | Expected decision |
+|---|---|---|---|---|
+| A001 | `ADD COLUMN email` on `penerima_manfaat` | PostgreSQL | P-001 | `hitl` (ADR-0021) |
+| A002 | `DROP COLUMN tipe_program` on `program_bansos` (explicit projection) | PostgreSQL | P-002 | `auto` |
+| A003 | `RENAME COLUMN tanggal_lahir` on `master_penduduk` (`SELECT *`) | MySQL | P-003 | `auto` |
+| A004 | `ADD COLUMN kode_pos` on `master_wilayah` | MySQL | P-001 | `hitl` |
+| A005 | `DROP COLUMN status_hidup` on `master_penduduk` (`SELECT *`) | MySQL | P-002 | `auto` |
+| A006 | `RENAME COLUMN nama_program` on `program_bansos` (explicit projection) | PostgreSQL | P-003 | `auto` |
+| A007 | `DROP COLUMN no_kartu_keluarga`, read through the pass-through view `v_penerima_aktif` | PostgreSQL | P-002 | `auto` (the view is narrowed with `ALTER VIEW`) |
+| A008 | `DROP COLUMN diubah_oleh`, read through the aliased view `v_riwayat_perubahan` | MySQL | P-002 | `auto` (the aliased column is removed from the view; the mapping runs `SELECT *` over it) |
+| A009 | `DROP COLUMN periode_selesai`, used in the expression `YEAR(periode_selesai)` of `v_program_berakhir` | PostgreSQL | P-002 | `notify` (ADR-0024; negative control) |
 
-The harness codes come from the order in which the scenarios were written; the paper numbers them
-by DBMS. `experiments/evaluation/plot.py` uses the paper numbers in its labels (dictionary
-`PAPER`). The baseline runs of a scenario carry the code `b` + number (for example `b002`).
+The paper uses the same scenario codes; the harness writes them in lower case (`a001`), and
+the baseline run of a scenario carries the code `b` + number (for example `b002`).
 
 The view scenarios use columns that A001–A006 do not touch and that no other TriplesMap reads, so
 what is observed comes only from the path through the view. The properties they use
@@ -219,21 +218,21 @@ These are the exact statements the harness sends, printed from `scenarios.py`. E
 writes a backup of the column before the run (DROP scenarios), fills three rows after an ADD, and
 restores the column after the run.
 
-| Harness | Paper | Source | Statement applied to the source |
-|---|---|---|---|
-| a001 | A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
-| a002 | A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
-| a003 | A006 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
-| a004 | A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
-| a005 | A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
-| a006 | A003 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
-| a007 | A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
-| a008 | A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
-| a009 | A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
+| Scenario | Source | Statement applied to the source |
+|---|---|---|
+| A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
+| A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
+| A003 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
+| A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
+| A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
+| A006 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
+| A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
+| A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
+| A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
 
 ### Full statements per scenario
 
-#### a001 (paper A001): ADD COLUMN email on penerima_manfaat
+#### A001: ADD COLUMN email on penerima_manfaat
 
 Pattern `P-001`, expected decision `hitl`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/email`.
 
@@ -254,7 +253,7 @@ ALTER TABLE public.penerima_manfaat DROP COLUMN email;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a002 (paper A002): DROP COLUMN tipe_program on program_bansos
+#### A002: DROP COLUMN tipe_program on program_bansos
 
 Pattern `P-002`, expected decision `auto`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/tipeProgram`.
 
@@ -277,7 +276,7 @@ SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a003 (paper A006): RENAME COLUMN tanggal_lahir on master_penduduk
+#### A003: RENAME COLUMN tanggal_lahir on master_penduduk
 
 Pattern `P-003`, expected decision `auto`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/tanggalLahir`.
 
@@ -296,7 +295,7 @@ ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a004 (paper A004): ADD COLUMN kode_pos on master_wilayah
+#### A004: ADD COLUMN kode_pos on master_wilayah
 
 Pattern `P-001`, expected decision `hitl`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/kodePos`.
 
@@ -317,7 +316,7 @@ ALTER TABLE master_wilayah DROP COLUMN kode_pos;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a005 (paper A005): DROP COLUMN status_hidup on master_penduduk
+#### A005: DROP COLUMN status_hidup on master_penduduk
 
 Pattern `P-002`, expected decision `auto`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/statusHidup`.
 
@@ -340,7 +339,7 @@ SELECT count(*) FROM master_penduduk WHERE status_hidup IS NOT NULL;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a006 (paper A003): RENAME COLUMN nama_program on program_bansos
+#### A006: RENAME COLUMN nama_program on program_bansos
 
 Pattern `P-003`, expected decision `auto`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/namaProgram`.
 
@@ -359,7 +358,7 @@ ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a007 (paper A007): DROP COLUMN no_kartu_keluarga through view v_penerima_aktif
+#### A007: DROP COLUMN no_kartu_keluarga through view v_penerima_aktif
 
 Pattern `P-002`, expected decision `auto`, source `kemensos`, view `layanan.v_penerima_aktif`. Predicate: `http://bansos.go.id/ontology/noKartuKeluarga`.
 
@@ -382,7 +381,7 @@ SELECT count(*) FROM public.penerima_manfaat WHERE no_kartu_keluarga IS NOT NULL
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a008 (paper A008): DROP COLUMN diubah_oleh through view v_riwayat_perubahan
+#### A008: DROP COLUMN diubah_oleh through view v_riwayat_perubahan
 
 Pattern `P-002`, expected decision `auto`, source `dukcapil`, view `layanan.v_riwayat_perubahan`. Predicate: `http://bansos.go.id/ontology/diubahOleh`.
 
@@ -405,7 +404,7 @@ SELECT count(*) FROM riwayat_perubahan_data WHERE diubah_oleh IS NOT NULL;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### a009 (paper A009): DROP COLUMN periode_selesai used in a view expression
+#### A009: DROP COLUMN periode_selesai used in a view expression
 
 Pattern `P-002`, expected decision `notify`, source `kemensos`, view `layanan.v_program_berakhir`. Predicate: `http://bansos.go.id/ontology/tahunBerakhir`.
 
@@ -596,17 +595,43 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?t WHERE { ?t a bansos:TransaksiBansos } LIMIT 1
 ```
 
+## Results of the final evaluation
+
+Run `20261028T214208` on branch `eval/final` (commit `a1e9b0a`), 28 October 2026, 14:42–18:38 UTC,
+on one Linux host with 72 logical CPUs (Intel Xeon E5-2695 v4, 2.1 GHz) and 125.5 GiB of memory;
+45 baseline runs (9 × 5) and 180 treatment runs (9 × 20), random-delay seed 1793198525. Every
+restore was detected, no run started from a tainted state, and there were no anomalies.
+
+| Scenario | EP / RP / PR without | EP / RP / PR with | Decision | Adaptation | Detection, median (s) | Δt_adapt, median (max) (s) |
+|---|---|---|---|---|---:|---:|
+| A001 | 100 / 100 / 100 | 100 / 80 / 100 | 20/20 `hitl` | 20/20 | 1.3 | 29.4 (32.1) |
+| A002 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 1.3 | 29.1 (32.6) |
+| A003 | 80 / 80 / 80 | 100 / 100 / 100 | 20/20 `auto` | 20/20 | 7.3 | 35.2 (41.4) |
+| A004 | 100 / 100 / 100 | 100 / 80 / 100 | 20/20 `hitl` | 20/20 | 6.3 | 36.5 (40.8) |
+| A005 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 5.3 | 34.0 (39.9) |
+| A006 | 80 / 80 / 80 | 100 / 100 / 100 | 20/20 `auto` | 20/20 | 1.3 | 29.5 (31.9) |
+| A007 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 1.3 | 32.1 (33.7) |
+| A008 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 5.3 | 36.2 (41.2) |
+| A009 | 80 / 80 / 80 | 80 / 80 / 80 | 20/20 `notify` | not adapted | 1.3 | – |
+
+EP, RP, and PR were identical in every run of a scenario. Detection took 1.27–1.32 s on
+PostgreSQL and 1.2–11.4 s on MySQL. Starting the standby Ontop instance (median 14.5–15.4 s) and
+validating ℳ′ and 𝒯′ (8.3–8.7 s) make up most of Δt_adapt. All 11 905 availability probes
+succeeded. Kafka carried 360 log messages (180 treatment changes and 180 restores) and no
+production row (C_safe met). One-sided 95 % Clopper–Pearson upper bounds on the failure
+probability: 1.7 % for decisions (0/180), 1.9 % for adaptations (0/160), 13.9 % for one scenario
+(0/20).
+
 ## Threats to validity and findings
 
 The findings below come from trial and earlier evaluation runs. Result directories that were
-affected are kept as a record but are not used in the paper. Scenario codes in this section are
-harness codes: a003 is the MySQL RENAME (paper A006) and a006 the PostgreSQL RENAME (paper A003).
+affected are kept as a record but are not used in the paper.
 
 ### Threats
 
 1. **The restore step is itself a schema change.** Putting a column back between runs is seen by
    ASCAM as a new change and, left alone, is executed automatically, including an Ontop reload just
-   when the base answers are taken. In the first evaluation this made 3 of 20 a003 runs fail to take
+   when the base answers are taken. In the first evaluation this made 3 of 20 A003 runs fail to take
    their base answers (connection error), and they were wrongly classified as "not identical". The
    effect is largest on MySQL, whose detection time varies by 1–10 s. Handled by pausing the
    Executor and superseding the plans of the restore step (procedure steps 1–3).
@@ -628,11 +653,11 @@ harness codes: a003 is the MySQL RENAME (paper A006) and a006 the PostgreSQL REN
 
 ### Evaluation 20260922T150904
 
-Six of 60 treatment runs were not recorded as finished. Five (a002 run 9; a003 runs 1, 3, 8, 17)
+Six of 60 treatment runs were not recorded as finished. Five (A002 run 9; A003 runs 1, 3, 8, 17)
 came from a defect: Knowledge committed after sending its response, so `/finish` sometimes arrived
 before the commit of `/sync`, was refused with 409, and the Executor left the execution `running`
 (ADR-0008 and ADR-0020, revisions F6). The adaptations themselves had finished, sync included. One
-run (a003 run 12) produced no event, because the MySQL monitor recorded neither the restore rename
+run (A003 run 12) produced no event, because the MySQL monitor recorded neither the restore rename
 nor the treatment rename. Because these results came from defective code, the treatment runs were
 repeated after the fix.
 
@@ -655,10 +680,10 @@ evaluation when it does not.
 
 ### Evaluation 20260924T072348
 
-That check never applied to a003 at first: the MySQL client prints nothing when `ALTER` succeeds,
+That check never applied to A003 at first: the MySQL client prints nothing when `ALTER` succeeds,
 and the harness read empty output as "clean" (no change). The treatment DDL then ran about 9–10 s
 after the restore, only the duration of the OBDF reset, and both could fall into one scan window
-and cancel out. This explains a003 run 12 of the previous evaluation and a003 runs 1 and 2 of this
+and cancel out. This explains A003 run 12 of the previous evaluation and A003 runs 1 and 2 of this
 one (the `tanggal_lahir` query returned HTTP 200 before the DDL, the treatment DDL succeeded, but
 `ddl_event_log` held no row between 00:30:06 and 00:58:46). The restore contract is now explicit:
 `'clean'` means only that no DDL ran, and every path that runs DDL returns `restored: …`. The
@@ -681,12 +706,12 @@ PostgreSQL replication slot and publication, and changes neither the source data
 
 ### Evaluation 20260930T091536: scenarios sharing a table (not valid)
 
-In the 3 × 2 design, a002 and a006 use `program_bansos`, and a003 and a005 use `master_penduduk`.
+In the 3 × 2 design, A002 and A006 use `program_bansos`, and A003 and A005 use `master_penduduk`.
 Each run restored only its own column, so changes left by another scenario carried over: after
-b006, `nama_program` was still called `judul_program`, and the a002 neighbour query failed in 20 of
-20 runs; after a002, `tipe_program` was missing, and the a006 and b006 neighbour queries failed.
+B006, `nama_program` was still called `judul_program`, and the A002 neighbour query failed in 20 of
+20 runs; after A002, `tipe_program` was missing, and the A006 and B006 neighbour queries failed.
 Those failures happened BEFORE the treatment DDL, so they were not caused by an adaptation. The
-a002 timings were affected too (IQR 22.6–30.0 s, maximum 39.1 s).
+A002 timings were affected too (IQR 22.6–30.0 s, maximum 39.1 s).
 
 The preparation of every run now restores the columns of all scenarios (`restore_all`), each
 waiting for its own restore event, and records which were restored (`restored_scenarios`).
@@ -704,18 +729,18 @@ a view whose columns come from its query, and that it refuses one on a view with
 **Trial of 2026-10-09.** In the base state all three queries through views failed with HTTP 500,
 although the views could be read directly through Teiid:
 
-1. *a007, a009*: `TEIID30088 Unrelated order by column (… || CAST(v1.penerima_id AS STRING)) cannot
+1. *A007, A009*: `TEIID30088 Unrelated order by column (… || CAST(v1.penerima_id AS STRING)) cannot
    be used in … SELECT DISTINCT`. A view whose columns come from a query has no key, so Ontop 4.1.1
    cannot rule out duplicate triples and adds `SELECT DISTINCT`; `ORDER BY ?p` is translated into
    an `ORDER BY` over an IRI expression that is not projected, and Teiid refuses it. A key can only be
    declared together with inline columns, and a view with inline columns cannot be narrowed by
    `ALTER VIEW` (F0.8 v7). The queries through views are therefore written without `ORDER BY`.
-2. *The first design of a008* mapped a `DATETIME` column as `xsd:dateTime`; Ontop's reformulation
+2. *The first design of A008* mapped a `DATETIME` column as `xsd:dateTime`; Ontop's reformulation
    failed with `UnsupportedOperationException: Not yet supported by Teiid`, that is, the Teiid
-   adapter of Ontop 4.1.1 does not support that conversion. a008 was moved to
+   adapter of Ontop 4.1.1 does not support that conversion. A008 was moved to
    `riwayat_perubahan_data.diubah_oleh` (`VARCHAR`), which already had a class and a property.
 
-**Trial 20261009T032658.** a009 behaved as designed. a007 and a008 were decided automatically and
+**Trial 20261009T032658.** A009 behaved as designed. A007 and A008 were decided automatically and
 correctly, but their executions failed with `HTTPStatusError 500` on the base fingerprint query,
 after `validate` (`failure.after_step`). The Executor took the base fingerprint from the active
 instance AFTER the DDL, and the fingerprint query `?s ?p ?o` sweeps every mapping. View columns
@@ -723,13 +748,13 @@ are always nullable, so Ontop had to read the dropped column to filter `IS NOT N
 query failed. The older scenarios passed because their columns are declared `not null` in the VDB.
 Fix: when the full fingerprint fails on the old instance, it is taken per predicate (the list comes
 from ℳ, ℳ′, and 𝒯); failing predicates are recorded, and the new instance is checked the same way.
-Re-run 20261009T040048: a007, a008, and a002 (regression of the full-fingerprint path) `succeeded`
+Re-run 20261009T040048: A007, A008, and A002 (regression of the full-fingerprint path) `succeeded`
 with PreservationRatio 100 %.
 
 **Endpoint availability.** From then on every treatment run probes the endpoint about every 0.5 s
 with a query no scenario touches (`TransaksiBansos`), to test the ADR-0022 claim that an adaptation
 does not interrupt the endpoint.
 
-**a009 after ADR-0024.** Before ADR-0024, a009 was decided `hitl` with three incomplete actions and
+**A009 after ADR-0024.** Before ADR-0024, A009 was decided `hitl` with three incomplete actions and
 the evaluator rejected the plan in every run (older results record the outcome `rejected`, which
 `analyze.py` and `extract.py` still accept). Since ADR-0024 it is `notify` with no actions.

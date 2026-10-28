@@ -161,7 +161,7 @@ Three scripts cover day-to-day use:
 
 ### Trying a schema change by hand
 
-Rename a column that the mapping uses (scenario A003 of the paper), then watch the console
+Rename a column that the mapping uses (scenario A006), then watch the console
 (Schema changes, Plans and executions):
 
 ```bash
@@ -212,19 +212,17 @@ result names the code that produced it. Results of the earlier Indonesian-langua
 
 ### Schema changes (ALTER TABLE)
 
-The harness numbers the scenarios in the order they were written; the paper numbers them by DBMS.
-
-| Harness | Paper | Source | Statement applied to the source |
-|---|---|---|---|
-| a001 | A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
-| a002 | A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
-| a003 | A006 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
-| a004 | A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
-| a005 | A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
-| a006 | A003 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
-| a007 | A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
-| a008 | A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
-| a009 | A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
+| Scenario | Source | Statement applied to the source |
+|---|---|---|
+| A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
+| A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
+| A003 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
+| A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
+| A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
+| A006 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
+| A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
+| A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
+| A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
 
 Before a DROP the harness copies the column into a backup table (`ascam_backup_<column>`); after
 each run it puts the column back and waits for the monitor to report the restore. A001 and A004

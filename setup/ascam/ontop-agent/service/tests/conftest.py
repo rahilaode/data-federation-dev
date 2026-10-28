@@ -6,14 +6,14 @@ from ascam_ontop_agent.config import AgentConfig
 from ascam_ontop_agent.ontop_cli import CommandResult
 from ascam_ontop_agent.security import TokenRegistry
 
-TOKEN = 'token-uji'
+TOKEN = 'token-test'
 MAPPING = '@prefix rr: <http://www.w3.org/ns/r2rml#> .\n<#MapA> a rr:TriplesMap .\n'
-ONTOLOGY = '@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<http://contoh/ont> a owl:Ontology .\n'
-PROPERTIES = 'jdbc.url=jdbc:teiid:government@mm://teiid:31000\njdbc.password=SANGAT-RAHASIA\n'
+ONTOLOGY = '@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<http://example.org/ont> a owl:Ontology .\n'
+PROPERTIES = 'jdbc.url=jdbc:teiid:government@mm://teiid:31000\njdbc.password=VERY-SECRET\n'
 
 
 class FakeRunner:
-    """Pengganti OntopRunner: mencatat argumen tanpa menjalankan Docker."""
+    """Stand-in for OntopRunner: records the arguments without running Docker."""
     def __init__(self, result=None):
         self.calls = []
         self.result = result or CommandResult(True, 0, 'Validation completed', 1200)

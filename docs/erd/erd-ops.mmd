@@ -1,0 +1,116 @@
+erDiagram
+    spec_spec_version["spec.spec_version"]
+    registry_source_system["registry.source_system"]
+    registry_obdf_instance["registry.obdf_instance"]
+    ops_adaptation_plan["ops.adaptation_plan"] {
+        bigint id PK "not null"
+        bigint event_id FK "not null"
+        bigint base_spec_version_id FK "not null"
+        text pattern
+        text decision "not null"
+        text status "not null"
+        jsonb impact "not null"
+        jsonb reasons "not null"
+        timestamptz created_at "not null"
+        text decided_by
+        timestamptz decided_at
+        bigint revision_of FK
+    }
+    ops_audit_log["ops.audit_log"] {
+        bigint id PK "not null"
+        timestamptz at "not null"
+        bigint obdf_id FK
+        text actor "not null"
+        text action "not null"
+        text object_kind
+        text object_ref
+        jsonb detail "not null"
+    }
+    ops_execution["ops.execution"] {
+        bigint id PK "not null"
+        bigint plan_id FK "not null"
+        bigint candidate_spec_version_id FK
+        text status "not null"
+        jsonb timings "not null"
+        jsonb failure
+        timestamptz started_at "not null"
+        timestamptz finished_at
+    }
+    ops_execution_step["ops.execution_step"] {
+        bigint id PK "not null"
+        bigint execution_id FK,UK "not null"
+        integer seq UK "not null"
+        text name "not null"
+        text status "not null"
+        timestamptz started_at "not null"
+        timestamptz finished_at
+        jsonb detail "not null"
+    }
+    ops_notification["ops.notification"] {
+        bigint id PK "not null"
+        bigint obdf_id FK "not null"
+        bigint plan_id FK
+        text severity "not null"
+        text message "not null"
+        boolean acknowledged "not null"
+        text acknowledged_by
+        timestamptz acknowledged_at
+        timestamptz created_at "not null"
+    }
+    ops_plan_action["ops.plan_action"] {
+        bigint id PK "not null"
+        bigint plan_id FK,UK "not null"
+        integer seq UK "not null"
+        text artifact "not null"
+        text operation "not null"
+        jsonb params "not null"
+    }
+    ops_schema_event["ops.schema_event"] {
+        bigint id PK "not null"
+        uuid event_uid UK "not null"
+        bigint obdf_id FK "not null"
+        bigint source_system_id FK
+        jsonb raw_message "not null"
+        jsonb structured
+        timestamptz captured_at
+        timestamptz received_at "not null"
+        text status "not null"
+        text ignore_reason
+    }
+    ops_sync_run["ops.sync_run"] {
+        bigint id PK "not null"
+        bigint obdf_id FK "not null"
+        text trigger "not null"
+        text status "not null"
+        bigint produced_spec_version_id FK
+        boolean drift_detected
+        jsonb drift_summary
+        jsonb error
+        timestamptz started_at "not null"
+        timestamptz finished_at
+    }
+    ops_validation["ops.validation"] {
+        bigint id PK "not null"
+        bigint execution_id FK
+        bigint spec_version_id FK "not null"
+        text validator "not null"
+        boolean passed "not null"
+        jsonb details "not null"
+        timestamptz created_at "not null"
+    }
+    spec_spec_version ||--o{ ops_adaptation_plan : "base_spec_version_id"
+    ops_schema_event ||--o{ ops_adaptation_plan : "event_id"
+    ops_adaptation_plan |o--o{ ops_adaptation_plan : "revision_of"
+    registry_obdf_instance |o--o{ ops_audit_log : "obdf_id"
+    spec_spec_version |o--o{ ops_execution : "candidate_spec_version_id"
+    ops_adaptation_plan ||--o{ ops_execution : "plan_id"
+    ops_execution ||--o{ ops_execution_step : "execution_id"
+    registry_obdf_instance ||--o{ ops_notification : "obdf_id"
+    ops_adaptation_plan |o--o{ ops_notification : "plan_id"
+    ops_adaptation_plan ||--o{ ops_plan_action : "plan_id"
+    registry_obdf_instance ||--o{ ops_schema_event : "obdf_id"
+    registry_source_system |o--o{ ops_schema_event : "source_system_id"
+    registry_obdf_instance ||--o{ ops_sync_run : "obdf_id"
+    spec_spec_version |o--o{ ops_sync_run : "produced_spec_version_id"
+    ops_execution |o--o{ ops_validation : "execution_id"
+    spec_spec_version ||--o{ ops_validation : "spec_version_id"

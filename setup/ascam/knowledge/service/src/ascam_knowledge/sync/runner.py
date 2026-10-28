@@ -1,14 +1,14 @@
 """
-Sync: mengambil spesifikasi OBDF yang sedang berjalan dan menyimpannya sebagai satu versi
-spesifikasi baru di Knowledge (P2 pada docs/knowledge/README.md).
+Sync: reads the specification of the running OBDF and stores it as one new specification
+version in Knowledge (P2 in docs/knowledge-base.md).
 
-Alur:
-  1. catat ops.sync_run;
-  2. ambil Σ_S (ODBC + get-vdb), isi berkas VDB (read-content, diverifikasi SHA-1), serta
-     artefak ℳ dan 𝒯 dari agen Ontop (diverifikasi SHA-256);
-  3. hitung sidik jari isi; bila sama dengan versi aktif, TIDAK ada versi baru;
-  4. bila berbeda: buat versi `candidate`, isi Σ_S, artefak, triple RDF, dan masalah
-     konsistensi, lalu aktifkan (versi lama menjadi `superseded`).
+Steps:
+  1. record ops.sync_run;
+  2. read Σ_S (ODBC + get-vdb), the VDB file content (read-content, verified with SHA-1), and
+     the artifacts ℳ and 𝒯 from the Ontop agent (verified with SHA-256);
+  3. compute the content fingerprint; if it equals that of the active version, NO new version;
+  4. otherwise: create a `candidate` version, fill Σ_S, artifacts, RDF triples, and consistency
+     issues, then activate it (the old version becomes `superseded`).
 """
 import hashlib
 from dataclasses import dataclass, field
@@ -25,8 +25,8 @@ from .clients import OntopAgentClient, TeiidAdminClient, TeiidMetadataClient
 
 ARTIFACT_KINDS = {'r2rml': 'r2rml', 'ontology': 'ontology'}
 
-# Versi format isi versi spesifikasi. DINAIKKAN setiap kali bentuk data yang disimpan berubah
-# (mis. penambahan struktur ℳ/𝒯), agar sync membentuk versi baru meski OBDF tidak berubah.
+# Format version of the stored specification content. RAISED whenever the shape of the stored
+# data changes (e.g. new ℳ/𝒯 structures), so that a sync creates a new version even if the OBDF is unchanged.
 CONTENT_VERSION = 3
 
 
@@ -46,12 +46,12 @@ class SyncError(Exception):
 
 
 def default_clients(db: Session, obdf_id: int, box: SecretBox) -> dict:
-    """Membangun klien dari target terdaftar (kredensial didekripsi di dalam layanan)."""
+    """Builds the clients from the registered targets (credentials are decrypted inside the service)."""
     targets = {t.kind: t for t in db.execute(
         select(registry.Target).filter_by(obdf_id=obdf_id, enabled=True)).scalars()}
     missing = {'teiid_mgmt', 'teiid_odbc', 'ontop_agent'} - set(targets)
     if missing:
-        raise SyncError(f'target belum terdaftar atau nonaktif: {sorted(missing)}')
+        raise SyncError(f'targets not registered or disabled: {sorted(missing)}')
 
     def secret(target):
         cred = db.get(registry.Credential, target.credential_id)
@@ -68,7 +68,7 @@ def default_clients(db: Session, obdf_id: int, box: SecretBox) -> dict:
 
 
 def _identifier_cases(db: Session, obdf_id: int, models: list[dict]) -> tuple[dict, dict, list[dict]]:
-    """Memetakan model Teiid ke sumber terdaftar berdasarkan nama sumber pada VDB."""
+    """Maps Teiid models to registered sources by the source name in the VDB."""
     sources = {s.logical_name: s for s in db.execute(
         select(registry.SourceSystem).filter_by(obdf_id=obdf_id)).scalars()}
     cases, source_ids, defaults, issues = {}, {}, {}, []
@@ -85,7 +85,7 @@ def _identifier_cases(db: Session, obdf_id: int, models: list[dict]) -> tuple[di
         elif model['model_type'] == 'physical':
             issues.append({'code': 'source_system_unresolved', 'severity': 'warning',
                            'subject_kind': 'teiid_model', 'subject_ref': model['name'],
-                           'message': f"model fisik {model['name']} tidak terpetakan ke sumber terdaftar"})
+                           'message': f"physical model {model['name']} is not mapped to a registered source"})
     return cases, source_ids, defaults, issues
 
 
@@ -117,7 +117,7 @@ def sync_obdf(db: Session, obdf_id: int, box: SecretBox, actor: str, *,
     db.flush()
     try:
         result = _sync(db, obdf_id, box, actor, run, clients)
-    except Exception as exc:                            # noqa: BLE001 — kegagalan dicatat
+    except Exception as exc:                            # noqa: BLE001 — the failure is recorded
         run.status = 'failed'
         run.error = {'type': type(exc).__name__, 'message': str(exc)[:1000]}
         run.finished_at = datetime.now(timezone.utc)
@@ -141,7 +141,7 @@ def _sync(db, obdf_id, box, actor, run, clients) -> SyncResult:
     vdb_row = (metadata.get('virtual_databases') or [{}])[0]
     vdb_name, vdb_version = vdb_row.get('Name'), str(vdb_row.get('Version') or '1')
     if not vdb_name:
-        raise SyncError('VDB tidak teridentifikasi dari SYS.VirtualDatabases')
+        raise SyncError('VDB not identified from SYS.VirtualDatabases')
     vdb_info = admin.get_vdb(vdb_name, vdb_version)
 
     cases, source_ids, default_schemas, source_issues = _identifier_cases(db, obdf_id, [
@@ -161,7 +161,7 @@ def _sync(db, obdf_id, box, actor, run, clients) -> SyncResult:
         if view.parse_status != 'ok':
             issues.append({'code': 'view_body_unparsed', 'severity': 'warning',
                            'subject_kind': 'teiid_view', 'subject_ref': key,
-                           'message': 'definisi view tidak dapat diurai; perubahan kolomnya diperlakukan konservatif'})
+                           'message': 'the view definition cannot be parsed; changes to its columns are treated conservatively'})
 
     deployment = next((p.get('property-value') for p in (vdb_info.get('properties') or [])
                        if p.get('property-name') == 'deployment-name'), None)
@@ -173,14 +173,14 @@ def _sync(db, obdf_id, box, actor, run, clients) -> SyncResult:
         if reported and reported != actual:
             issues.append({'code': 'artifact_hash_mismatch', 'severity': 'error',
                            'subject_kind': 'artifact', 'subject_ref': deployment,
-                           'message': f'SHA-1 unduhan {actual} != laporan server {reported}'})
+                           'message': f'SHA-1 of the download {actual} != reported by the server {reported}'})
         artifacts.append({'kind': 'vdb_xml', 'name': deployment, 'media_type': 'application/xml',
                           'content': content.decode('utf-8'),
                           'sha256': hashlib.sha256(content).hexdigest()})
     else:
         issues.append({'code': 'artifact_unavailable', 'severity': 'warning',
                        'subject_kind': 'artifact', 'subject_ref': vdb_name,
-                       'message': 'nama deployment tidak diketahui; isi berkas VDB tidak diambil'})
+                       'message': 'unknown deployment name; the VDB file content was not read'})
 
     for art in agent.artifacts():
         artifacts.append({'kind': ARTIFACT_KINDS.get(art.kind, art.kind), 'name': art.name,
@@ -312,7 +312,7 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
         if art['kind'] in ('r2rml', 'ontology'):
             try:
                 triples = _triples(art['content'], row.id, vid, art['kind'])
-            except Exception as exc:                    # noqa: BLE001 — artefak tak terurai
+            except Exception as exc:                    # noqa: BLE001 — artifact cannot be parsed
                 issues.append({'code': 'artifact_unparsed', 'severity': 'error',
                                'subject_kind': 'artifact', 'subject_ref': art['kind'],
                                'message': f'{type(exc).__name__}: {str(exc)[:300]}'})
@@ -324,7 +324,7 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
                     structure.update(store.store_mapping(db, vid, row.id, art['content'], index, issues))
                 else:
                     structure.update(store.store_ontology(db, vid, row.id, art['content'], issues))
-            except Exception as exc:                # noqa: BLE001 — struktur gagal dibangun
+            except Exception as exc:                # noqa: BLE001 — structure could not be built
                 issues.append({'code': 'artifact_structure_failed', 'severity': 'error',
                                'subject_kind': 'artifact', 'subject_ref': art['kind'],
                                'message': f'{type(exc).__name__}: {str(exc)[:300]}'})
@@ -332,7 +332,7 @@ def _persist(db, version, snapshot, artifacts, source_ids, issues) -> dict[str, 
 
     try:
         structure.update(lineage.build(db, vid, issues))
-    except Exception as exc:                        # noqa: BLE001 — lineage gagal dibangun
+    except Exception as exc:                        # noqa: BLE001 — lineage could not be built
         issues.append({'code': 'lineage_failed', 'severity': 'error', 'subject_kind': 'spec_version',
                        'subject_ref': str(vid), 'message': f'{type(exc).__name__}: {str(exc)[:300]}'})
 

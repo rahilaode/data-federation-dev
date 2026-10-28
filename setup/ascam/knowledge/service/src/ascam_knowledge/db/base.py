@@ -1,13 +1,14 @@
 """
-Basis deklaratif dan utilitas kolom.
+Declarative base and column helpers.
 
-Konvensi:
-- Nilai enumerasi disimpan sebagai TEXT + CHECK (bukan tipe ENUM PostgreSQL) agar mudah
-  dievolusikan lewat migrasi.
-- Nama constraint mengikuti naming convention tetap agar migrasi Alembic deterministik.
-- Setiap tabel di skema `spec` membawa `spec_version_id`; referensi antartabel `spec`
-  memakai foreign key komposit (spec_version_id, id) sehingga rujukan lintas versi
-  ditolak oleh basis data.
+Conventions:
+- Enumerated values are stored as TEXT + CHECK (not a PostgreSQL ENUM type) so that they
+  are easy to evolve through migrations.
+- Constraint names follow a fixed naming convention so that Alembic migrations are
+  deterministic.
+- Every table of schema `spec` carries `spec_version_id`; references between `spec` tables
+  use a composite foreign key (spec_version_id, id), so the database rejects references
+  across versions.
 """
 from datetime import datetime
 
@@ -49,7 +50,8 @@ def spec_version_fk() -> Mapped[int]:
 
 
 def same_version_fk(columns: list[str], parent: str) -> ForeignKeyConstraint:
-    """FK komposit (spec_version_id, <kolom>) -> <parent>(spec_version_id, id)."""
+    """Composite FK (spec_version_id, <column>) -> <parent>(spec_version_id, id)."""
+
     return ForeignKeyConstraint(['spec_version_id', *columns],
                                 [f'{parent}.spec_version_id', f'{parent}.id'],
                                 ondelete='CASCADE')

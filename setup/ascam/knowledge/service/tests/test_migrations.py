@@ -1,4 +1,4 @@
-"""Migrasi: dapat dinaikkan/diturunkan dan identik dengan model."""
+"""Migrations: can be upgraded/downgraded and match the models."""
 from alembic import command
 from sqlalchemy import create_engine, inspect, text
 
@@ -15,7 +15,7 @@ def test_roundtrip_and_no_drift(alembic_cfg, db_url, migrated):
                                  "WHERE schema_name IN ('registry','spec','ops')")).scalar()
     assert left == 0
     command.upgrade(alembic_cfg, 'head')
-    command.check(alembic_cfg)          # gagal bila model dan migrasi berbeda
+    command.check(alembic_cfg)          # fails when models and migrations differ
     eng.dispose()
 
 
@@ -42,5 +42,5 @@ def test_integrity_triggers_installed(engine):
             JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE NOT t.tgisinternal GROUP BY 1""")).all()
     counts = dict(rows)
-    assert counts['spec'] == EXPECTED['spec']     # 30 tabel anak + spec_version
+    assert counts['spec'] == EXPECTED['spec']     # 30 child tables + spec_version
     assert counts['ops'] == EXPECTED['ops']

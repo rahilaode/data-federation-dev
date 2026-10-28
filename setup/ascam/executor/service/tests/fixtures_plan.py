@@ -1,4 +1,4 @@
-"""Tiruan Knowledge, Teiid, agen, dan endpoint SPARQL untuk menguji mesin Executor."""
+"""Fakes of Knowledge, Teiid, the agent, and the SPARQL endpoint for testing the Executor engine."""
 import hashlib
 
 VDB_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -135,14 +135,14 @@ class FakeAgent:
         self.validate_ok, self.reload_ok = validate_ok, reload_ok
 
     def artifact(self, kind):
-        isi = self.files[kind]
-        return {'kind': kind, 'content': isi, 'sha256': hashlib.sha256(isi.encode()).hexdigest()}
+        content_text = self.files[kind]
+        return {'kind': kind, 'content': content_text, 'sha256': hashlib.sha256(content_text.encode()).hexdigest()}
 
     def write(self, kind, content, expected_sha256):
-        sekarang = hashlib.sha256(self.files[kind].encode()).hexdigest()
-        if expected_sha256 and expected_sha256 != sekarang:
-            raise RuntimeError('409 konflik sidik jari')
-        backup_id = f'{kind}-cadangan-{len(self.backups)}'
+        current = hashlib.sha256(self.files[kind].encode()).hexdigest()
+        if expected_sha256 and expected_sha256 != current:
+            raise RuntimeError('409 fingerprint conflict')
+        backup_id = f'{kind}-backup-{len(self.backups)}'
         self.backups[backup_id] = self.files[kind]
         self.files[kind] = content
         return {'kind': kind, 'sha256': hashlib.sha256(content.encode()).hexdigest(),
@@ -157,7 +157,7 @@ class FakeAgent:
     def validate(self, db_url=None):
         self.validate_calls.append(db_url)
         return {'ok': self.validate_ok, 'exit_code': 0 if self.validate_ok else 1,
-                'output': 'Validation completed' if self.validate_ok else 'ERROR: mapping ditolak',
+                'output': 'Validation completed' if self.validate_ok else 'ERROR: mapping rejected',
                 'duration_ms': 5000}
 
     def prune_backups(self, keep=20):
@@ -167,19 +167,19 @@ class FakeAgent:
     def reload(self):
         self.reloads += 1
         return {'ok': self.reload_ok, 'stop_ms': 800, 'ready_ms': 8000, 'total_ms': 8800,
-                'error': None if self.reload_ok else 'endpoint tidak siap'}
+                'error': None if self.reload_ok else 'endpoint not ready'}
 
 
 class FakeSparql:
-    def __init__(self, urutan):
-        self.urutan = list(urutan)
-        self.panggilan = 0
+    def __init__(self, sequence):
+        self.sequence = list(sequence)
+        self.calls = 0
 
     def fingerprint(self):
-        hasil = self.urutan[min(self.panggilan, len(self.urutan) - 1)]
-        self.panggilan += 1
-        return dict(hasil)
+        result = self.sequence[min(self.calls, len(self.sequence) - 1)]
+        self.calls += 1
+        return dict(result)
 
 
 BASELINE = {STATUS: 15, 'http://bansos.go.id/ontology/nik': 15}
-TANPA_STATUS = {'http://bansos.go.id/ontology/nik': 15}
+WITHOUT_STATUS = {'http://bansos.go.id/ontology/nik': 15}

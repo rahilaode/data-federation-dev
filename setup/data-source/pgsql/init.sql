@@ -1,4 +1,4 @@
--- Tabel 1: program_bansos
+-- Table 1: program_bansos
 CREATE TABLE program_bansos (
     program_id      SERIAL PRIMARY KEY,
     nama_program    VARCHAR(255) NOT NULL,
@@ -8,18 +8,18 @@ CREATE TABLE program_bansos (
     periode_selesai DATE
 );
 
--- Tabel 2: penerima_manfaat (versi Kemensos — kolom berbeda dari master_penduduk)
+-- Table 2: penerima_manfaat (Kemensos version; its columns differ from master_penduduk)
 CREATE TABLE penerima_manfaat (
     penerima_id     SERIAL PRIMARY KEY,
     nik             CHAR(16) NOT NULL,
-    nama_lengkap    VARCHAR(255),         -- beda nama kolom vs "nama" di source 2
-    tgl_lahir       DATE,                 -- beda nama kolom vs "tanggal_lahir"
-    status_ekonomi  VARCHAR(50),          -- berbeda konsep vs "penghasilan" di source 2
-    no_kartu_keluarga CHAR(16),           -- beda nama vs "no_kk"
+    nama_lengkap    VARCHAR(255),         -- column name differs from "nama" in source 2
+    tgl_lahir       DATE,                 -- column name differs from "tanggal_lahir"
+    status_ekonomi  VARCHAR(50),          -- different concept from "penghasilan" in source 2
+    no_kartu_keluarga CHAR(16),           -- name differs from "no_kk"
     aktif           BOOLEAN DEFAULT TRUE
 );
 
--- Tabel 3: transaksi_bansos
+-- Table 3: transaksi_bansos
 CREATE TABLE transaksi_bansos (
     transaksi_id    SERIAL PRIMARY KEY,
     program_id      INT REFERENCES program_bansos(program_id),
@@ -29,7 +29,7 @@ CREATE TABLE transaksi_bansos (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
--- Tabel 4: eligibility_check
+-- Table 4: eligibility_check
 CREATE TABLE eligibility_check (
     check_id        SERIAL PRIMARY KEY,
     program_id      INT REFERENCES program_bansos(program_id),
@@ -100,7 +100,7 @@ INSERT INTO transaksi_bansos (program_id, penerima_id, periode, status, created_
 
 -- ============================================================
 -- ============================================================
--- PostgreSQL: DDL Trigger - Hanya Monitor ALTER TABLE
+-- PostgreSQL: DDL trigger that monitors ALTER TABLE only
 --   - ADD COLUMN
 --   - DROP COLUMN
 --   - RENAME COLUMN
@@ -109,7 +109,7 @@ INSERT INTO transaksi_bansos (program_id, penerima_id, periode, status, created_
 CREATE SCHEMA IF NOT EXISTS schema_monitor;
 
 -- ============================================================
--- 1. TABEL REFERENSI
+-- 1. REFERENCE TABLE
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS schema_monitor.captured_tables_ref (
@@ -123,9 +123,9 @@ CREATE TABLE IF NOT EXISTS schema_monitor.captured_tables_ref (
 );
 
 COMMENT ON TABLE schema_monitor.captured_tables_ref
-    IS 'Daftar tabel yang diizinkan untuk di-monitor (regulasi).';
+    IS 'Tables that may be monitored (regulated).';
 
--- Seed contoh
+-- Sample seed
 INSERT INTO schema_monitor.captured_tables_ref (schema_name, table_name, description)
 VALUES
     ('public', 'program_bansos',     'Tabel program bantuan sosial'),
@@ -136,7 +136,7 @@ ON CONFLICT DO NOTHING;
 
 
 -- ============================================================
--- 2. TABEL EVENT LOG
+-- 2. EVENT LOG TABLE
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS schema_monitor.ddl_event_log (
@@ -145,22 +145,22 @@ CREATE TABLE IF NOT EXISTS schema_monitor.ddl_event_log (
     schema_name  VARCHAR(128),
     table_name   VARCHAR(256),
     object_tag   VARCHAR(512),       -- e.g. 'public.orders'
-    command_tag  VARCHAR(64),        -- selalu 'ALTER TABLE'
+    command_tag  VARCHAR(64),        -- always 'ALTER TABLE'
     alter_type   VARCHAR(32),        -- 'ADD COLUMN' | 'DROP COLUMN' | 'RENAME COLUMN'
-    column_name  VARCHAR(256),       -- nama kolom yang terlibat
-    ddl_command  TEXT,               -- teks DDL lengkap
+    column_name  VARCHAR(256),       -- name of the column involved
+    ddl_command  TEXT,               -- full DDL text
     is_regulated BOOLEAN DEFAULT TRUE,
     captured_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE schema_monitor.ddl_event_log
-    IS 'Log event ALTER TABLE: hanya ADD COLUMN, DROP COLUMN, RENAME COLUMN.';
+    IS 'Log of ALTER TABLE events: ADD COLUMN, DROP COLUMN, RENAME COLUMN only.';
 
--- Pastikan log ini memiliki REPLICA IDENTITY FULL agar bisa capture perubahan dengan wal2json
+-- The log needs REPLICA IDENTITY FULL so that its changes can be captured with wal2json
 ALTER TABLE schema_monitor.ddl_event_log REPLICA IDENTITY FULL;
 
 -- ============================================================
--- 3. FUNGSI EVENT TRIGGER
+-- 3. EVENT TRIGGER FUNCTION
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION schema_monitor.fn_capture_alter_column()
@@ -178,22 +178,22 @@ DECLARE
     v_table_name   VARCHAR(256);
     v_schema_name  VARCHAR(128);
 BEGIN
-    -- Ambil teks DDL dari sesi aktif
+    -- Take the DDL text from the current session
     SELECT query INTO v_ddl
     FROM pg_stat_activity
     WHERE pid = pg_backend_pid();
 
     v_upper_ddl := upper(coalesce(v_ddl, ''));
 
-    -- Hanya proses jika mengandung operasi kolom yang dimonitor
-    -- Abaikan ALTER TABLE lainnya (ADD CONSTRAINT, SET DEFAULT, dll.)
+    -- Only continue if it contains a monitored column operation
+    -- Ignore other ALTER TABLE forms (ADD CONSTRAINT, SET DEFAULT, etc.)
     IF v_upper_ddl NOT LIKE '%ADD COLUMN%'
    AND v_upper_ddl NOT LIKE '%DROP COLUMN%'
    AND v_upper_ddl NOT LIKE '%RENAME COLUMN%' THEN
         RETURN;
     END IF;
 
-    -- Tentukan jenis operasi
+    -- Work out the kind of operation
     IF    v_upper_ddl LIKE '%RENAME COLUMN%' THEN v_alter_type := 'RENAME COLUMN';
     ELSIF v_upper_ddl LIKE '%ADD COLUMN%'    THEN v_alter_type := 'ADD COLUMN';
     ELSIF v_upper_ddl LIKE '%DROP COLUMN%'   THEN v_alter_type := 'DROP COLUMN';
@@ -206,7 +206,7 @@ BEGIN
         v_schema_name := v_obj.schema_name;
         v_table_name  := split_part(v_obj.object_identity, '.', 2);
 
-        -- Ekstrak nama kolom: ambil token pertama setelah keyword operasi
+        -- Extract the column name: the first token after the operation keyword
         v_column_name := trim(
             split_part(
                 regexp_replace(v_ddl, '\s+', ' ', 'g'),
@@ -216,7 +216,7 @@ BEGIN
         );
         v_column_name := split_part(v_column_name, ' ', 1);
 
-        -- Cek apakah tabel ini terdaftar di referensi
+        -- Check whether this table is listed in the reference table
         SELECT EXISTS (
             SELECT 1 FROM schema_monitor.captured_tables_ref
             WHERE is_active   = TRUE
@@ -243,7 +243,7 @@ $$;
 
 
 -- ============================================================
--- 4. REGISTRASI EVENT TRIGGER
+-- 4. EVENT TRIGGER REGISTRATION
 -- ============================================================
 
 DROP EVENT TRIGGER IF EXISTS trg_monitor_alter_column;
@@ -255,19 +255,19 @@ CREATE EVENT TRIGGER trg_monitor_alter_column
 
 
 -- ============================================================
--- 5. CONTOH QUERY MONITORING
+-- 5. SAMPLE MONITORING QUERIES
 -- ============================================================
 
--- Semua event yang ter-capture
+-- Every captured event
 -- SELECT * FROM schema_monitor.ddl_event_log ORDER BY captured_at DESC;
 
--- Hanya tabel yang diregulasi
+-- Regulated tables only
 -- SELECT alter_type, table_name, column_name, ddl_command, captured_at
 -- FROM   schema_monitor.ddl_event_log
 -- WHERE  is_regulated = TRUE
 -- ORDER  BY captured_at DESC;
 
--- Rekapitulasi per jenis operasi
+-- Totals per kind of operation
 -- SELECT alter_type, COUNT(*) AS total
 -- FROM   schema_monitor.ddl_event_log
 -- GROUP  BY alter_type;

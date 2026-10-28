@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# start.sh — restart bersih seluruh OBDF dan ASCAM, berurutan sesuai dependensi.
-# PERHATIAN: semua kontainer dan volume dihapus, termasuk data sumber (dibangun ulang dari init.sql).
-# Bekerja dengan docker-compose v1 maupun Compose v2: tidak memakai opsi --wait.
+# start.sh — clean restart of the whole OBDF and ASCAM, in dependency order.
+# WARNING: every container and volume is removed, source data included (rebuilt from init.sql).
+# Works with docker-compose v1 and Compose v2: the --wait option is not used.
 set -Eeuo pipefail
 cd "$(dirname "$0")"
-trap 'echo; echo "GAGAL pada langkah: $LANGKAH"; exit 1' ERR
+trap 'echo; echo "FAILED at step: $STEP"; exit 1' ERR
 
 if command -v docker-compose >/dev/null 2>&1; then DC=(docker-compose); else DC=(docker compose); fi
 compose() { "${DC[@]}" -f "$1" "${@:2}"; }
 SECRETS=setup/ascam/knowledge/secrets
 KNOWLEDGE=http://127.0.0.1:18000
 CONNECT=http://localhost:8083
-LANGKAH=persiapan
-langkah() { LANGKAH="$1"; printf '\n==> %s\n' "$1"; }
+STEP=setup
+step() { STEP="$1"; printf '\n==> %s\n' "$1"; }
 
-tunggu() {  # $1 nama, $2 batas detik, sisanya perintah yang harus berhasil
-  local nama="$1" batas="$2" i=0; shift 2
+wait_for() {  # $1 name, $2 limit in seconds, the rest is a command that must succeed
+  local name="$1" limit="$2" i=0; shift 2
   until "$@" >/dev/null 2>&1; do
-    i=$((i + 3)); [ "$i" -ge "$batas" ] && { echo "  $nama belum siap setelah $batas s"; return 1; }
+    i=$((i + 3)); [ "$i" -ge "$limit" ] && { echo "  $name not ready after $limit s"; return 1; }
     sleep 3
   done
-  echo "  $nama siap"
+  echo "  $name ready"
 }
-sehat() {  # semua kontainer pada berkas compose $1: healthy, berjalan, atau selesai dengan kode 0
+healthy() {  # every container of compose file $1 is healthy, running, or exited with code 0
   local id s ids
   ids="$(compose "$1" ps -q)"; [ -n "$ids" ] || return 1
   for id in $ids; do
@@ -30,79 +30,79 @@ sehat() {  # semua kontainer pada berkas compose $1: healthy, berjalan, atau sel
     case "$s" in healthy|running:0|exited:0) ;; *) return 1 ;; esac
   done
 }
-naik() {  # $1 berkas compose, $2 nama tampilan; build bila perlu, lalu tunggu sehat
+up() {  # $1 compose file, $2 display name; build if needed, then wait until healthy
   compose "$1" up -d --build >/dev/null
-  tunggu "$2" 300 sehat "$1"
+  wait_for "$2" 300 healthy "$1"
 }
-teiid_aktif() {
+teiid_active() {
   curl -sf --digest -u "admin:$(head -n1 "$SECRETS/obdf_teiid_mgmt_password")" -H 'Content-Type: application/json' \
     -d '{"operation":"list-vdbs","address":[{"subsystem":"teiid"}]}' http://localhost:19990/management \
     | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; sys.exit(0 if any(v.get("vdb-name")=="government" and v.get("status")=="ACTIVE" for v in r) else 1)'
 }
-konektor_jalan() {
+connector_running() {
   curl -sf "$CONNECT/connectors/$1/status" \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["tasks"] and all(t["state"]=="RUNNING" for t in d["tasks"]) else 1)'
 }
 
-langkah "1/9 prasyarat (Compose: ${DC[*]})"
+step "1/9 prerequisites (Compose: ${DC[*]})"
 docker info >/dev/null
 docker network create ascam-networks >/dev/null 2>&1 || true
 setup/ascam/knowledge/scripts/init-secrets.sh | sed 's/^/  /'
 
-langkah "2/9 menurunkan semua komponen beserta volumenya"
-for d in ui executor orchestrator ontop-agent knowledge adaptive-engine schema-monitor; do
+step "2/9 taking every component down, volumes included"
+for d in ui executor orchestrator ontop-agent knowledge schema-monitor; do
   [ -f "setup/ascam/$d/docker-compose.yaml" ] && compose "setup/ascam/$d/docker-compose.yaml" down -v --remove-orphans >/dev/null 2>&1 || true
 done
 for d in vkg-system data-federation data-source; do
   compose "setup/$d/docker-compose.yaml" down -v --remove-orphans >/dev/null 2>&1 || true
 done
 
-langkah "3/9 mengembalikan mapping, ontologi, dan penanda deployment VDB"
+step "3/9 restoring the mapping, the ontology, and the VDB deployment marker"
 git checkout -- setup/vkg-system/config/mapping.ttl setup/vkg-system/config/ontology_file.ttl
 DEP=setup/data-federation/deployments
 rm -f "$DEP"/*.dodeploy "$DEP"/*.isdeploying "$DEP"/*.deployed "$DEP"/*.failed "$DEP"/*.undeployed "$DEP"/*.pending
 touch "$DEP"/government-vdb.xml.dodeploy && chmod 777 "$DEP"
-rm -rf setup/vkg-system/slots setup/vkg-system/proxy/runtime    # slot blue-green dibuat ulang (ADR-0022)
+rm -rf setup/vkg-system/slots setup/vkg-system/proxy/runtime    # blue-green slots are recreated (ADR-0022)
 
-langkah "4/9 sumber data (PostgreSQL, MySQL)"
+step "4/9 data sources (PostgreSQL, MySQL)"
 compose setup/data-source/docker-compose.yaml up -d >/dev/null
-tunggu "PostgreSQL (init.sql)" 300 docker exec datasources-pgsql psql -U postgres -d kemensos -tAc \
+wait_for "PostgreSQL (init.sql)" 300 docker exec datasources-pgsql psql -U postgres -d kemensos -tAc \
   "SELECT 1 FROM schema_monitor.ddl_event_log LIMIT 1"
-tunggu "MySQL (init.sql)" 300 docker exec datasources-mysql sh -c \
+wait_for "MySQL (init.sql)" 300 docker exec datasources-mysql sh -c \
   'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1 FROM dukcapil.ddl_event_log LIMIT 1"'
 
-langkah "5/9 Teiid dan Ontop (proxy + instance aktif blue-green)"
+step "5/9 Teiid and Ontop (proxy + active blue-green instance)"
 compose setup/data-federation/docker-compose.yaml up -d >/dev/null
-tunggu "VDB government (ACTIVE)" 300 teiid_aktif
+wait_for "VDB government (ACTIVE)" 300 teiid_active
 setup/vkg-system/up.sh --reset | sed 's/^/  /'
-tunggu "endpoint SPARQL (lewat proxy)" 240 curl -sf -G http://localhost:8080/sparql --data-urlencode 'query=ASK { ?s ?p ?o }'
+wait_for "SPARQL endpoint (through the proxy)" 240 curl -sf -G http://localhost:8080/sparql --data-urlencode 'query=ASK { ?s ?p ?o }'
 
-langkah "6/9 Kafka dan Debezium"
+step "6/9 Kafka and Debezium"
 compose setup/ascam/schema-monitor/docker-compose.yaml up -d >/dev/null
-tunggu "Kafka Connect" 240 curl -sf "$CONNECT/connectors"
+wait_for "Kafka Connect" 240 curl -sf "$CONNECT/connectors"
 for k in postgres mysql; do
   curl -sf -X POST -H 'Content-Type: application/json' \
     --data @"setup/ascam/schema-monitor/register-$k.json" "$CONNECT/connectors" >/dev/null
-  tunggu "$k-connector (RUNNING)" 120 konektor_jalan "$k-connector"
+  wait_for "$k-connector (RUNNING)" 120 connector_running "$k-connector"
 done
 
-langkah "7/9 Knowledge Service"
-naik setup/ascam/knowledge/docker-compose.yaml "basis data dan Knowledge Service"
-tunggu "API Knowledge" 120 curl -sf "$KNOWLEDGE/ready"
+step "7/9 Knowledge Service"
+up setup/ascam/knowledge/docker-compose.yaml "database and Knowledge Service"
+wait_for "Knowledge API" 120 curl -sf "$KNOWLEDGE/ready"
 
-langkah "8/9 agen Ontop, Event Normalizer, Executor, konsol"
-naik setup/ascam/ontop-agent/docker-compose.yaml "agen Ontop"
+step "8/9 Ontop agent, Event Normalizer, Executor, console"
+up setup/ascam/ontop-agent/docker-compose.yaml "Ontop agent"
 export ASCAM_ORCH_GROUP_ID="ascam-orchestrator-$(date +%Y%m%dT%H%M%S)" ASCAM_ORCH_OFFSET_RESET=latest
-naik setup/ascam/orchestrator/docker-compose.yaml "Event Normalizer"
-naik setup/ascam/executor/docker-compose.yaml "Executor"
-naik setup/ascam/ui/docker-compose.yaml "konsol administrator"
+up setup/ascam/orchestrator/docker-compose.yaml "Event Normalizer"
+up setup/ascam/executor/docker-compose.yaml "Executor"
+up setup/ascam/ui/docker-compose.yaml "administrator console"
 
-langkah "9/9 sinkronisasi awal dan uji rantai"
+step "9/9 initial sync and chain test"
 TOKEN="$(grep '^ui:' "$SECRETS/knowledge_api_tokens" | cut -d: -f2)"
 OBDF_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" "$KNOWLEDGE/api/v1/obdf" \
   | python3 -c 'import json,sys; print(next(o["id"] for o in json.load(sys.stdin) if o["name"]=="bansos"))')"
 curl -sf -X POST -H "Authorization: Bearer $TOKEN" -H 'X-ASCAM-User: start.sh' "$KNOWLEDGE/api/v1/obdf/$OBDF_ID/sync" \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts") or {}; print("  versi %s: %s tabel, %s kolom, %s TriplesMap" % (d.get("version_no"), c.get("tables"), c.get("columns"), c.get("triples_maps")))'
-python3 experiments/f6/preflight.py
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts") or {}; print("  version %s: %s tables, %s columns, %s TriplesMaps" % (d.get("version_no"), c.get("tables"), c.get("columns"), c.get("triples_maps")))'
+python3 experiments/evaluation/preflight.py
 
-echo; echo "Selesai. Konsol: http://127.0.0.1:18400 (admin; sandi di $SECRETS/ui_admin_password)"
+echo; echo "Done. Console: http://127.0.0.1:18400 (admin; password in $SECRETS/ui_admin_password)"

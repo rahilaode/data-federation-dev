@@ -1,9 +1,9 @@
 """
-Klien yang dipakai Executor.
+Clients used by the Executor.
 
-Endpoint (host, port, nama VDB) diambil dari Knowledge, sedangkan **rahasia** (kata sandi
-ManagementRealm Teiid dan token agen) berasal dari Docker secret milik Executor sendiri.
-Knowledge memang tidak pernah mengembalikan rahasia lewat API (ADR-0008).
+Endpoints (host, port, VDB name) come from Knowledge, while **secrets** (the password of the
+Teiid ManagementRealm and the agent token) come from the Executor's own Docker secrets.
+Knowledge never returns secrets through its API (ADR-0008).
 """
 import base64
 import time
@@ -28,7 +28,7 @@ class KnowledgeClient:
         for obdf in self._request('GET', '/api/v1/obdf'):
             if obdf['name'] == name:
                 return obdf['id']
-        raise RuntimeError(f'OBDF {name!r} tidak terdaftar')
+        raise RuntimeError(f'OBDF {name!r} is not registered')
 
     def approved_plans(self, obdf_id: int) -> list[dict]:
         return self._request('GET', f'/api/v1/obdf/{obdf_id}/plans',
@@ -39,7 +39,7 @@ class KnowledgeClient:
         for version in versions:
             if version['status'] == 'active':
                 return version
-        raise RuntimeError('tidak ada versi spesifikasi aktif')
+        raise RuntimeError('no active specification version')
 
     def artifact(self, version_id: int, kind: str) -> dict:
         return self._request('GET', f'/api/v1/versions/{version_id}/artifacts/{kind}')
@@ -70,7 +70,7 @@ class KnowledgeClient:
 
 
 class TeiidAdminClient:
-    """Management API WildFly untuk penerapan blue-green versi VDB (ADR-0004)."""
+    """WildFly management API for the blue-green deployment of VDB versions (ADR-0004)."""
 
     def __init__(self, endpoint: dict, username: str, password: str,
                  client: httpx.Client | None = None):
@@ -84,7 +84,7 @@ class TeiidAdminClient:
         response = self._client.post(self.url, json=payload, auth=self._auth)
         body = response.json()
         if body.get('outcome') != 'success':
-            raise RuntimeError(f"operasi {payload.get('operation')} gagal: "
+            raise RuntimeError(f"operation {payload.get('operation')} failed: "
                                f"{str(body.get('failure-description'))[:300]}")
         return body.get('result')
 
@@ -100,7 +100,7 @@ class TeiidAdminClient:
         for operation in ('undeploy', 'remove'):
             try:
                 self.op({'operation': operation, 'address': [{'deployment': deployment}]})
-            except Exception:                       # noqa: BLE001 — pembersihan tetap lanjut
+            except Exception:                       # noqa: BLE001 — cleanup continues
                 pass
 
     def vdb_status(self, name: str, version: str) -> tuple[str | None, list[str]]:
@@ -113,8 +113,8 @@ class TeiidAdminClient:
 
     def wait_until_settled(self, name: str, version: str, timeout: float = 60.0,
                            sleep=time.sleep) -> tuple[str | None, list[str]]:
-        batas = time.perf_counter() + timeout
-        while time.perf_counter() < batas:
+        deadline = time.perf_counter() + timeout
+        while time.perf_counter() < deadline:
             status, errors = self.vdb_status(name, version)
             if status in ('ACTIVE', 'FAILED'):
                 return status, errors
@@ -127,7 +127,7 @@ class TeiidAdminClient:
 
 
 class AgentClient:
-    """Agen pada host Ontop (ADR-0011, ADR-0018)."""
+    """Agent on the Ontop host (ADR-0011, ADR-0018)."""
 
     def __init__(self, endpoint: dict, token: str, client: httpx.Client | None = None):
         scheme = 'https' if endpoint.get('tls') else 'http'
@@ -159,7 +159,7 @@ class AgentClient:
     def prune_backups(self, keep: int = 20) -> dict:
         return self._request('POST', '/api/v1/backups/prune', params={'keep': keep})
 
-    # ── blue-green lapisan OBDA (ADR-0022) ─────────────────────────────────────
+    # ── blue-green OBDA layer (ADR-0022) ───────────────────────────────────────
     def bluegreen_state(self) -> dict:
         return self._request('GET', '/api/v1/bluegreen')
 
@@ -185,7 +185,7 @@ class AgentClient:
 
 
 class SparqlClient:
-    """Verifikasi jawaban OBDF setelah adaptasi."""
+    """Verification of the OBDF answers after an adaptation."""
 
     FINGERPRINT = 'SELECT ?p (COUNT(*) AS ?n) WHERE { ?s ?p ?o } GROUP BY ?p ORDER BY ?p'
 
@@ -197,43 +197,43 @@ class SparqlClient:
 
     @classmethod
     def from_url(cls, url: str, client: httpx.Client | None = None) -> 'SparqlClient':
-        """Klien untuk endpoint instance tertentu, mis. instance siaga blue-green."""
+        """Client for the endpoint of one instance, e.g. the blue-green standby instance."""
         instance = cls.__new__(cls)
         instance.url = url
         instance._client = client or httpx.Client(timeout=TIMEOUT)
         return instance
 
     def fingerprint(self) -> dict[str, int]:
-        """{IRI predikat: jumlah triple} — sidik jari graf virtual."""
+        """{predicate IRI: number of triples} — fingerprint of the virtual graph."""
         response = self._client.get(self.url, params={'query': self.FINGERPRINT},
                                     headers={'Accept': 'application/sparql-results+json'})
         response.raise_for_status()
-        hasil = {}
-        for baris in response.json()['results']['bindings']:
-            hasil[baris['p']['value']] = int(baris['n']['value'])
-        return hasil
+        result = {}
+        for row in response.json()['results']['bindings']:
+            result[row['p']['value']] = int(row['n']['value'])
+        return result
 
     def fingerprint_per_predicate(self, predicates: list[str],
                                   workers: int = 8) -> tuple[dict[str, int], list[str]]:
-        """Sidik jari yang sama, dihitung satu kueri per predikat agar kegagalan satu jalur
-        mapping tidak menggagalkan seluruh sidik jari. -> (sidik jari, predikat yang gagal).
-        Predikat tanpa tripel tidak dicantumkan, sama seperti `fingerprint()`."""
+        """The same fingerprint, computed with one query per predicate so that the failure of one
+        mapping path does not fail the whole fingerprint. -> (fingerprint, failed predicates).
+        Predicates without triples are left out, as in `fingerprint()`."""
         from concurrent.futures import ThreadPoolExecutor
 
-        def hitung(predikat: str) -> tuple[str, int | None]:
+        def count(predicate: str) -> tuple[str, int | None]:
             try:
                 response = self._client.get(
-                    self.url, params={'query': f'SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{predikat}> ?o }}'},
+                    self.url, params={'query': f'SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{predicate}> ?o }}'},
                     headers={'Accept': 'application/sparql-results+json'})
                 response.raise_for_status()
-                baris = response.json()['results']['bindings']
-                return predikat, int(baris[0]['n']['value']) if baris else 0
-            except Exception:                        # noqa: BLE001 — dicatat sebagai gagal
-                return predikat, None
+                row = response.json()['results']['bindings']
+                return predicate, int(row[0]['n']['value']) if row else 0
+            except Exception:                        # noqa: BLE001 — recorded as failed
+                return predicate, None
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            hasil = list(pool.map(hitung, predicates))
-        return ({p: n for p, n in hasil if n}, sorted(p for p, n in hasil if n is None))
+            result = list(pool.map(count, predicates))
+        return ({p: n for p, n in result if n}, sorted(p for p, n in result if n is None))
 
 
 def decode_hash(value: str) -> str:
@@ -241,7 +241,7 @@ def decode_hash(value: str) -> str:
 
 
 class KnowledgeCredentials:
-    """Nama pengguna diambil dari Knowledge; kata sandinya dari Docker secret Executor."""
+    """The user name comes from Knowledge; the password from the Executor's Docker secret."""
 
     def __init__(self, knowledge: KnowledgeClient, obdf_id: int):
         self._by_id = {c['id']: c for c in knowledge._request(

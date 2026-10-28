@@ -1,24 +1,24 @@
 """
-Blue-green pada lapisan OBDA (ADR-0022).
+Blue-green on the OBDA layer (ADR-0022).
 
-Dua instance Ontop, `<prefix>-blue` dan `<prefix>-green`, berjalan di belakang proxy nginx
-yang menempati nama dan port endpoint lama (`vkg-system-ontop-teiid:8080`). Setiap instance
-membaca slotnya sendiri (`slots/<warna>/`: mapping, ontologi, berkas properti) dan terkunci
-pada SATU versi VDB lewat `;version=N` pada URL JDBC. Satu instance aktif melayani kueri;
-yang lain siaga dan dalam keadaan berhenti.
+Two Ontop instances, `<prefix>-blue` and `<prefix>-green`, run behind an nginx proxy that takes
+the name and port of the former endpoint (`vkg-system-ontop-teiid:8080`). Every instance reads its
+own slot (`slots/<colour>/`: mapping, ontology, properties file) and is bound to ONE VDB version
+through `;version=N` in the JDBC URL. One instance is active and answers queries; the other is
+the standby and is stopped.
 
-Satu adaptasi:
-  prepare   ℳ′ dan 𝒯′ ditulis ke slot siaga, URL JDBC dikunci ke versi VDB baru
-  validate  `ontop validate` dengan volume instance siaga (agen: ontop_cli)
-  start     instance siaga dinyalakan dan ditunggu sampai endpoint SPARQL-nya menjawab
-  (verifikasi dilakukan Executor langsung ke instance siaga, sebelum lalu lintas dialihkan)
-  switch    upstream proxy diganti dan nginx dimuat ulang secara graceful, artefak siaga
-            dipromosikan ke direktori artefak kanonik, lalu instance lama dihentikan
-  discard   bila validasi atau verifikasi gagal: instance siaga dihentikan; pengguna tidak
-            pernah melihatnya
+One adaptation:
+  prepare   ℳ′ and 𝒯′ are written to the standby slot, with the JDBC URL bound to the new VDB version
+  validate  `ontop validate` with the volume of the standby instance (agent: ontop_cli)
+  start     the standby instance is started and awaited until its SPARQL endpoint answers
+  (the Executor verifies directly against the standby instance, before traffic is switched)
+  switch    the proxy upstream is replaced and nginx reloaded gracefully, the standby artifacts
+            are promoted to the canonical artifact directory, and the old instance is stopped
+  discard   if validation or verification fails: the standby instance is stopped; users never
+            see it
 
-Direktori artefak kanonik (`config/`) selalu mencerminkan instance AKTIF, sehingga Knowledge
-tetap membaca ℳ dan 𝒯 dari tempat yang sama seperti sebelum blue-green.
+The canonical artifact directory (`config/`) always reflects the ACTIVE instance, so Knowledge
+keeps reading ℳ and 𝒯 from the same place as before blue-green.
 """
 import json
 import re
@@ -56,18 +56,18 @@ def other(color: str) -> str:
 
 
 def pin_version(properties: str, version: str | int) -> str:
-    """URL JDBC dikunci ke satu versi VDB; versi lain yang tercantum diganti."""
-    def ganti(match: re.Match) -> str:
+    """Binds the JDBC URL to one VDB version; any other version given is replaced."""
+    def replace(match: re.Match) -> str:
         url = re.sub(r';version=[^;\s]*', '', match.group('url').strip())
         return f"{match.group('key')}{url};version={version}"
-    hasil, jumlah = JDBC_URL.subn(ganti, properties, count=1)
-    if not jumlah:
-        raise BlueGreenError('berkas properti Ontop tidak memuat jdbc.url')
-    return hasil
+    result, count = JDBC_URL.subn(replace, properties, count=1)
+    if not count:
+        raise BlueGreenError('the Ontop properties file has no jdbc.url')
+    return result
 
 
 def upstream_conf(container: str) -> str:
-    return (f'# dikelola agen ASCAM (ADR-0022); jangan diubah manual\n'
+    return (f'# managed by the ASCAM agent (ADR-0022); do not edit by hand\n'
             f'set $ontop_upstream http://{container}:8080;\n')
 
 
@@ -75,14 +75,14 @@ class BlueGreen:
     def __init__(self, cfg: AgentConfig, runner=None, docker_client=None,
                  http: httpx.Client | None = None, sleep=time.sleep):
         if cfg.slots_dir is None or cfg.proxy_runtime_dir is None:
-            raise BlueGreenError('blue-green tidak dikonfigurasi (slots_dir/proxy_runtime_dir)')
+            raise BlueGreenError('blue-green is not configured (slots_dir/proxy_runtime_dir)')
         self.cfg = cfg
         self.runner = runner
         self._docker = docker_client
         self.http = http or httpx.Client(timeout=5)
         self.sleep = sleep
 
-    # ── keadaan ─────────────────────────────────────────────────────────────────
+    # ── state ───────────────────────────────────────────────────────────────────
     @property
     def docker(self):
         if self._docker is None:
@@ -93,10 +93,10 @@ class BlueGreen:
     def state(self) -> dict:
         path = self.cfg.slots_dir / STATE_FILE
         if not path.is_file():
-            raise BlueGreenError(f'{path} tidak ada; jalankan setup/vkg-system/init-bluegreen.sh')
+            raise BlueGreenError(f'{path} does not exist; run setup/vkg-system/init-bluegreen.sh')
         data = json.loads(path.read_text())
         if data.get('active') not in COLORS:
-            raise BlueGreenError(f'warna aktif tidak dikenal: {data.get("active")!r}')
+            raise BlueGreenError(f'unknown active colour: {data.get("active")!r}')
         return data
 
     def _save_state(self, data: dict) -> None:
@@ -123,19 +123,19 @@ class BlueGreen:
                 'active_sparql_url': self.sparql_url(data['active']),
                 'standby_sparql_url': self.sparql_url(standby)}
 
-    # ── langkah ─────────────────────────────────────────────────────────────────
+    # ── steps ───────────────────────────────────────────────────────────────────
     def prepare(self, mapping: str, ontology: str, vdb_version: str,
                 expected: dict[str, str | None] | None = None) -> StepResult:
-        """Menulis ℳ′, 𝒯′, dan properti terkunci ke slot siaga."""
+        """Writes ℳ′, 𝒯′, and the bound properties to the standby slot."""
         t0 = time.perf_counter()
         expected = expected or {}
-        for kind in ('r2rml', 'ontology'):               # dikunci pada isi instance aktif
+        for kind in ('r2rml', 'ontology'):               # bound to the content of the active instance
             want = expected.get(kind)
             if want:
                 current = writer._digest(self.cfg.path_of(kind).read_bytes())
                 if current != want:
-                    raise writer.Conflict(f'isi {kind} sudah berubah (sha256 {current[:12]}, '
-                                          f'diharapkan {want[:12]})')
+                    raise writer.Conflict(f'content of {kind} has changed (sha256 {current[:12]}, '
+                                          f'expected {want[:12]})')
         standby = other(self.state()['active'])
         slot = self.slot(standby)
         slot.mkdir(parents=True, exist_ok=True)
@@ -153,12 +153,12 @@ class BlueGreen:
 
     def validate(self, db_url: str | None = None) -> tuple[str, object]:
         if self.runner is None:
-            raise BlueGreenError('runner validasi tidak tersedia')
+            raise BlueGreenError('the validation runner is not available')
         standby = other(self.state()['active'])
         return standby, self.runner.validate(db_url, container_name=self.container(standby))
 
     def start(self, ready_timeout: float = 180.0) -> StepResult:
-        """Menyalakan instance siaga (atau menyalakan ulang bila masih berjalan)."""
+        """Starts the standby instance (or restarts it if it is still running)."""
         t0 = time.perf_counter()
         standby = other(self.state()['active'])
         try:
@@ -172,11 +172,11 @@ class BlueGreen:
             return StepResult(False, standby, _ms(t0), f'{type(exc).__name__}: {exc}'[:300])
         started = time.perf_counter()
         ok, error = self._wait_ready(self.sparql_url(standby), ready_timeout)
-        return StepResult(ok, standby, _ms(t0), None if ok else f'endpoint tidak siap: {error}',
+        return StepResult(ok, standby, _ms(t0), None if ok else f'endpoint not ready: {error}',
                           detail={'start_ms': _ms(t0) - _ms(started), 'ready_ms': _ms(started)})
 
     def switch(self) -> StepResult:
-        """Mengalihkan proxy ke instance siaga, mempromosikan artefaknya, menghentikan yang lama."""
+        """Switches the proxy to the standby instance, promotes its artifacts, and stops the old one."""
         t0 = time.perf_counter()
         state = self.state()
         old, new = state['active'], other(state['active'])
@@ -185,14 +185,14 @@ class BlueGreen:
         self._write_upstream(new)
         reload_error = self._reload_proxy()
         if reload_error:
-            if previous is not None:                    # proxy tetap pada instance lama
+            if previous is not None:                    # the proxy stays on the old instance
                 (runtime / UPSTREAM_FILE).write_text(previous)
                 self._reload_proxy()
-            return StepResult(False, new, _ms(t0), f'nginx gagal dimuat ulang: {reload_error}')
+            return StepResult(False, new, _ms(t0), f'nginx failed to reload: {reload_error}')
         proxy_url = f'http://{self.cfg.proxy_container}:8080{self.cfg.sparql_path}'
         ok, error = self._wait_ready(proxy_url, 30.0)
         if not ok:
-            return StepResult(False, new, _ms(t0), f'proxy tidak menjawab: {error}')
+            return StepResult(False, new, _ms(t0), f'the proxy does not answer: {error}')
         switched_ms = _ms(t0)
 
         backups = {}
@@ -217,9 +217,9 @@ class BlueGreen:
         return StepResult(error is None, standby, _ms(t0), error)
 
     def reset(self, vdb_version: str) -> StepResult:
-        """Instance aktif dibangun ulang dari artefak kanonik, terkunci pada `vdb_version`.
+        """The active instance is rebuilt from the canonical artifacts, bound to `vdb_version`.
 
-        Dipakai harness evaluasi untuk kembali ke keadaan dasar; endpoint boleh terputus."""
+        Used by the evaluation harness to return to the base state; the endpoint may be interrupted."""
         t0 = time.perf_counter()
         state = self.state()
         active = state['active']
@@ -241,9 +241,9 @@ class BlueGreen:
         self._write_upstream(active)
         self._reload_proxy()
         ok, error = self._wait_ready(self.sparql_url(active), 180.0)
-        return StepResult(ok, active, _ms(t0), None if ok else f'endpoint tidak siap: {error}')
+        return StepResult(ok, active, _ms(t0), None if ok else f'endpoint not ready: {error}')
 
-    # ── pembantu ────────────────────────────────────────────────────────────────
+    # ── helpers ─────────────────────────────────────────────────────────────────
     def _write_upstream(self, color: str) -> None:
         runtime = self.cfg.proxy_runtime_dir
         runtime.mkdir(parents=True, exist_ok=True)
@@ -252,7 +252,7 @@ class BlueGreen:
         temporary.replace(runtime / UPSTREAM_FILE)
 
     def _reload_proxy(self) -> str | None:
-        """`nginx -s reload`: worker lama menyelesaikan permintaan yang sedang berjalan."""
+        """`nginx -s reload`: old workers finish the requests they are serving."""
         try:
             proxy = self.docker.containers.get(self.cfg.proxy_container)
             code, output = proxy.exec_run(['nginx', '-s', 'reload'])
@@ -281,7 +281,7 @@ class BlueGreen:
                 if response.status_code == 200:
                     return True, None
                 error = f'HTTP {response.status_code}'
-            except Exception as exc:                    # noqa: BLE001 — belum siap
+            except Exception as exc:                    # noqa: BLE001 — not ready yet
                 error = type(exc).__name__
             self.sleep(0.5)
         return False, error

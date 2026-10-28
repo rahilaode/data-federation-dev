@@ -1,8 +1,8 @@
 """
-Pekerja Executor: mengambil rencana berstatus `approved` dari Knowledge dan menjalankannya.
+Executor worker: takes plans with status `approved` from Knowledge and runs them.
 
-Satu rencana dieksekusi pada satu waktu, karena setiap rencana disusun di atas versi
-spesifikasi tertentu; rencana berikutnya dibentuk ulang setelah sync (ADR-0016).
+One plan runs at a time, because every plan is built on a specific specification version;
+the next plan is built again after the sync (ADR-0016).
 """
 import logging
 import threading
@@ -52,9 +52,9 @@ class ExecutorWorker:
             return knowledge, obdf_id, self._executor_factory(knowledge, obdf_id)
 
         targets = {t['kind']: t for t in knowledge.targets(obdf_id) if t['enabled']}
-        kurang = {'teiid_mgmt', 'ontop_agent', 'ontop_sparql'} - set(targets)
-        if kurang:
-            raise RuntimeError(f'target belum terdaftar atau nonaktif: {sorted(kurang)}')
+        missing = {'teiid_mgmt', 'ontop_agent', 'ontop_sparql'} - set(targets)
+        if missing:
+            raise RuntimeError(f'targets not registered or disabled: {sorted(missing)}')
         credentials = KnowledgeCredentials(knowledge, obdf_id)
         admin = TeiidAdminClient(targets['teiid_mgmt']['endpoint'],
                                  credentials.username(targets['teiid_mgmt']['credential_id'], 'admin'),
@@ -75,30 +75,30 @@ class ExecutorWorker:
             self.stats.plans_seen += 1
             self.stats.last_plan_id = plan['id']
             try:
-                hasil = executor.execute(plan)
+                result = executor.execute(plan)
             except ExecutionError as exc:
                 self.stats.failed += 1
                 self.stats.last_status, self.stats.last_error = 'failed', str(exc)[:300]
-                log.warning('rencana %s gagal: %s', plan['id'], exc)
+                log.warning('plan %s failed: %s', plan['id'], exc)
                 continue
             except Exception as exc:                # noqa: BLE001
                 self.stats.failed += 1
                 self.stats.last_status = 'error'
                 self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
-                log.exception('rencana %s berhenti tak terduga', plan['id'])
+                log.exception('plan %s stopped unexpectedly', plan['id'])
                 continue
-            self.stats.last_status = hasil.get('status')
-            self.stats.last_timings = hasil.get('timings') or {}
-            if hasil.get('status') == 'succeeded':
+            self.stats.last_status = result.get('status')
+            self.stats.last_timings = result.get('timings') or {}
+            if result.get('status') == 'succeeded':
                 self.stats.executed += 1
             else:
                 self.stats.rolled_back += 1
-            log.info('rencana %s -> %s (%s ms)', plan['id'], hasil.get('status'),
+            log.info('plan %s -> %s (%s ms)', plan['id'], result.get('status'),
                      self.stats.last_timings.get('total_ms'))
         return len(plans)
 
     def run(self) -> None:
-        """Penyiapan diulang sampai berhasil (Knowledge dapat sedang restart saat start)."""
+        """Set-up is retried until it succeeds (Knowledge may be restarting at start-up)."""
         while not self._stop.is_set():
             try:
                 knowledge, obdf_id, executor = self.build()
@@ -106,7 +106,7 @@ class ExecutorWorker:
             except Exception as exc:                # noqa: BLE001
                 self.stats.state = 'retrying'
                 self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
-                log.warning('penyiapan gagal (%s); mencoba lagi', self.stats.last_error)
+                log.warning('set-up failed (%s); retrying', self.stats.last_error)
                 if self._stop.wait(self.settings.poll_seconds):
                     self.stats.state = 'stopped'
                     return
@@ -122,9 +122,9 @@ class ExecutorWorker:
                 continue
             try:
                 self.process_once(knowledge, obdf_id, executor)
-            except Exception as exc:                # noqa: BLE001 — pekerja tetap hidup
+            except Exception as exc:                # noqa: BLE001 — the worker stays alive
                 self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
-                log.warning('siklus gagal: %s', self.stats.last_error)
+                log.warning('cycle failed: %s', self.stats.last_error)
             self._stop.wait(self.settings.poll_seconds)
         self.stats.state = 'stopped'
 

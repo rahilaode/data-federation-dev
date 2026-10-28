@@ -1,1 +1,1 @@
-"""Executor ASCAM (lihat setup/ascam/executor/README.md)."""
+"""ASCAM Executor (see setup/ascam/executor/README.md)."""

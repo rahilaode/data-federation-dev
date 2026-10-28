@@ -1,9 +1,9 @@
 """
-Menjalankan CLI Ontop sebagai kontainer sekali jalan.
+Runs the Ontop CLI as a one-off container.
 
-Volume diambil dari kontainer Ontop (`volumes_from`), sehingga agen tidak perlu mengetahui
-path apa pun di host, dan berkas yang dipakai dijamin sama dengan yang dipakai endpoint.
-Jaringan mengikuti jaringan kontainer Ontop agar Teiid dapat dihubungi.
+The volumes are taken from the Ontop container (`volumes_from`), so the agent needs to know no
+host path, and the files used are guaranteed to be those of the endpoint. The network follows
+that of the Ontop container so that Teiid can be reached.
 """
 import time
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ class CommandResult:
 
 
 class OntopRunner:
-    """Pembungkus Docker; disuntik saat pengujian."""
+    """Docker wrapper; injected in tests."""
 
     def __init__(self, cfg: AgentConfig, docker_client=None):
         self.cfg = cfg
@@ -43,8 +43,8 @@ class OntopRunner:
         return next(iter(networks), None)
 
     def run(self, args: list[str], container_name: str | None = None) -> CommandResult:
-        # Volume diambil dari instance Ontop yang artefaknya divalidasi. Pada blue-green
-        # (ADR-0022) itu instance siaga, yang boleh dalam keadaan berhenti.
+        # The volumes come from the Ontop instance whose artifacts are validated. With blue-green
+        # (ADR-0022) that is the standby instance, which may be stopped.
         container_name = container_name or self.cfg.ontop_container
         t0 = time.perf_counter()
         command = ['-cp', CLASSPATH, '-Dlogback.configurationFile=/opt/ontop/log/logback.xml',

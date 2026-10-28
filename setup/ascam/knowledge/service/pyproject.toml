@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ascam-knowledge"
 version = "0.1.0"
-description = "Komponen Knowledge ASCAM: model runtime OBDF (registry, spec berversi, ops)"
+description = "ASCAM Knowledge component: runtime model of the OBDF (registry, versioned spec, ops)"
 requires-python = ">=3.11"
 dependencies = [
     "sqlalchemy>=2.0.30,<2.1",

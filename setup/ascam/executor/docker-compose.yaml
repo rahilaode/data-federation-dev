@@ -1,5 +1,5 @@
-# Executor ASCAM: menjalankan rencana adaptasi berstatus approved (ADR-0020).
-# Alamat target diambil dari Knowledge; rahasia berasal dari Docker secret di sini.
+# ASCAM Executor: runs adaptation plans with status approved (ADR-0020).
+# Target addresses come from Knowledge; secrets come from the Docker secrets declared here.
 services:
   executor:
     build: {context: ./service}
@@ -13,12 +13,12 @@ services:
       ASCAM_EXEC_OBDF: bansos
       ASCAM_EXEC_TEIID_PASSWORD_FILE: /run/secrets/obdf_teiid_mgmt_password
       ASCAM_EXEC_AGENT_TOKEN_FILE: /run/secrets/obdf_ontop_agent_token
-      # Blue-green lapisan OBDA (ADR-0022); 'restart' = rancangan lama dengan Ontop tunggal
+      # Blue-green OBDA layer (ADR-0022); 'restart' = the older design with a single Ontop
       ASCAM_EXEC_OBDA_STRATEGY: bluegreen
-      # alter | recreate (ADR-0023); ditentukan dari hasil uji kelayakan F0.8
+      # alter | recreate (ADR-0023); chosen from the results of feasibility experiment F0.8
       ASCAM_EXEC_VIEW_STATEMENT: ${ASCAM_EXEC_VIEW_STATEMENT:-alter}
       ASCAM_EXEC_TEIID_JDBC_HOST: teiid
-      # Mode pengamatan: jalankan dengan ASCAM_EXEC_ENABLED=false docker compose up -d
+      # Observation mode: run with ASCAM_EXEC_ENABLED=false docker-compose up -d
       ASCAM_EXEC_ENABLED: '${ASCAM_EXEC_ENABLED:-true}'
     secrets:
       - knowledge_api_tokens

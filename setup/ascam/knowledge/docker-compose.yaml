@@ -1,5 +1,5 @@
-# Komponen Knowledge ASCAM (docs/knowledge/README.md, ADR-0007).
-# Jalankan scripts/init-secrets.sh sekali sebelum `docker compose up`.
+# ASCAM Knowledge components (docs/knowledge-base.md, ADR-0007).
+# Run scripts/init-secrets.sh once before `docker-compose up`.
 services:
   knowledge-db:
     image: postgres:16-alpine
@@ -16,7 +16,7 @@ services:
       - knowledge-db-data:/var/lib/postgresql/data
       - ./db-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - '0.0.0.0:55432:5432'        # hanya untuk inspeksi lokal
+      - '0.0.0.0:55432:5432'        # for local inspection only
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ascam_owner -d ascam_knowledge"]
       interval: 3s
@@ -49,7 +49,7 @@ services:
     environment:
       ASCAM_KNOWLEDGE_DB_HOST: knowledge-db
       ASCAM_KNOWLEDGE_DB_NAME: ascam_knowledge
-      ASCAM_KNOWLEDGE_DB_USER: ascam_app                 # role DML saja (D4)
+      ASCAM_KNOWLEDGE_DB_USER: ascam_app                 # DML-only role (D4)
       ASCAM_KNOWLEDGE_DB_PASSWORD_FILE: /run/secrets/knowledge_db_app_password
       ASCAM_KNOWLEDGE_ENCRYPTION_KEYS_FILE: /run/secrets/knowledge_encryption_keys
       ASCAM_KNOWLEDGE_API_TOKENS_FILE: /run/secrets/knowledge_api_tokens

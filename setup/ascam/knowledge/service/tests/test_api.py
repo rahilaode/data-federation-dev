@@ -1,4 +1,4 @@
-"""Knowledge Service: autentikasi, registry, kredensial terenkripsi, konfigurasi deklaratif, audit."""
+"""Knowledge Service: authentication, registry, encrypted credentials, declarative configuration, audit."""
 import uuid
 
 import pytest
@@ -9,12 +9,12 @@ from ascam_knowledge.db import ops, registry
 from ascam_knowledge.security.crypto import SecretBox, generate_key
 
 
-def uniq(prefix='uji'):
+def uniq(prefix='test'):
     return f'{prefix}-{uuid.uuid4().hex[:8]}'
 
 
 def new_obdf(api):
-    r = api.post('/api/v1/obdf', json={'name': uniq(), 'description': 'uji'})
+    r = api.post('/api/v1/obdf', json={'name': uniq(), 'description': 'test'})
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -27,13 +27,13 @@ def test_health_and_ready(api, alembic_cfg):
     assert body['status'] == 'ok' and body['schema_revision'] == body['expected_revision'] == head
 
 
-@pytest.mark.parametrize('header', [None, 'Bearer salah', 'Basic abc'])
+@pytest.mark.parametrize('header', [None, 'Bearer wrong', 'Basic abc'])
 def test_authentication_required(api, header):
     from fastapi.testclient import TestClient
-    anonymous = TestClient(api.app_ref)                     # tanpa header bawaan fixture
+    anonymous = TestClient(api.app_ref)                     # without the fixture's default headers
     headers = {'Authorization': header} if header else {}
     assert anonymous.get('/api/v1/obdf', headers=headers).status_code == 401
-    assert anonymous.get('/health').status_code == 200       # liveness tetap terbuka
+    assert anonymous.get('/health').status_code == 200       # liveness stays open
 
 
 def test_obdf_create_list_and_conflict(api):
@@ -42,7 +42,7 @@ def test_obdf_create_list_and_conflict(api):
     assert any(x['id'] == o['id'] for x in api.get('/api/v1/obdf').json())
     dup = api.post('/api/v1/obdf', json={'name': o['name']})
     assert dup.status_code == 409 and dup.json()['constraint'] == 'uq_obdf_instance_name'
-    assert api.post('/api/v1/obdf', json={'name': 'Nama Tidak Valid'}).status_code == 422
+    assert api.post('/api/v1/obdf', json={'name': 'Invalid Name'}).status_code == 422
     assert api.get('/api/v1/obdf/999999').status_code == 404
 
 
@@ -59,7 +59,7 @@ def test_source_default_identifier_case(api):
 
 def test_credential_is_encrypted_and_never_returned(api, keys):
     o = new_obdf(api)
-    secret = 'Rahasia-Uji-12345'
+    secret = 'Secret-Test-12345'
     r = api.post(f"/api/v1/obdf/{o['id']}/credentials",
                  json={'name': 'teiid-admin', 'username': 'admin', 'secret': secret})
     assert r.status_code == 201
@@ -75,19 +75,19 @@ def test_credential_is_encrypted_and_never_returned(api, keys):
             select(ops.AuditLog).filter_by(obdf_id=o['id'])).scalars())
     assert secret not in audit_text
 
-    rotated = api.put(f"/api/v1/credentials/{r.json()['id']}/secret", json={'secret': 'Baru-678'})
+    rotated = api.put(f"/api/v1/credentials/{r.json()['id']}/secret", json={'secret': 'New-678'})
     assert rotated.status_code == 200 and rotated.json()['rotated_at'] is not None
 
 
 def test_key_rotation_keeps_old_ciphertexts_readable(keys):
     old = SecretBox(keys)
-    ciphertext, version = old.encrypt('lama')
-    rotated = SecretBox([generate_key(), *keys])           # kunci baru di baris pertama
-    assert rotated.decrypt(ciphertext) == 'lama'
-    new_ct, new_version = rotated.encrypt('baru')
+    ciphertext, version = old.encrypt('old')
+    rotated = SecretBox([generate_key(), *keys])           # new key on the first line
+    assert rotated.decrypt(ciphertext) == 'old'
+    new_ct, new_version = rotated.encrypt('new')
     assert (version, new_version) == (1, 2)
     with pytest.raises(ValueError):
-        SecretBox([generate_key()]).decrypt(new_ct)        # kunci yang salah ditolak
+        SecretBox([generate_key()]).decrypt(new_ct)        # a wrong key is rejected
 
 
 def test_target_rules(api):
@@ -136,18 +136,18 @@ def test_settings_and_naming_policy(api):
     o = new_obdf(api)
     assert api.get(f"/api/v1/obdf/{o['id']}/naming-policy").status_code == 404
     policy = {'property_iri_template': '{namespace}{column_camel}', 'on_collision': 'qualify_with_class',
-              'namespace': 'http://contoh.id/ontology/'}
+              'namespace': 'http://example.org/ontology/'}
     assert api.put(f"/api/v1/obdf/{o['id']}/naming-policy", json=policy).status_code == 200
     api.put(f"/api/v1/obdf/{o['id']}/settings/adaptation.add_column",
             json={'value': {'mode': 'auto'}})
     settings = {s['key']: s['value'] for s in api.get(f"/api/v1/obdf/{o['id']}/settings").json()}
     assert settings == {'adaptation.add_column': {'mode': 'auto'},
-                        'ontology.namespace': 'http://contoh.id/ontology/'}
+                        'ontology.namespace': 'http://example.org/ontology/'}
 
 
 CONFIG = """
 version: 1
-obdf: {{name: {name}, description: OBDF uji}}
+obdf: {{name: {name}, description: test OBDF}}
 sources:
   - {{logical_name: kemensos, dbms: postgresql, database_name: kemensos,
      kafka_topic: kemensos.schema_monitor.ddl_event_log}}
@@ -166,7 +166,7 @@ settings:
 naming_policy:
   property_iri_template: "{{namespace}}{{column_camel}}"
   on_collision: qualify_with_class
-  namespace: http://contoh.id/ontology/
+  namespace: http://example.org/ontology/
 type_mappings:
   - {{dbms: postgresql, native_type: varchar, teiid_type: string, xsd_datatype: "xsd:string"}}
 """
@@ -174,26 +174,26 @@ type_mappings:
 
 def test_config_apply_is_idempotent_and_detects_secret_change(api, tmp_path):
     secret_file = tmp_path / 'teiid_admin'
-    secret_file.write_text('rahasia-1\n')
+    secret_file.write_text('secret-1\n')
     name = uniq('cfg')
     doc = yaml.safe_load(CONFIG.format(name=name, secret_file=secret_file))
 
     first = api.post('/api/v1/config/apply', json=doc).json()
-    # obdf, source, credential, 2 target, 2 setting (termasuk ontology.namespace), naming_policy, type_mapping
+    # obdf, source, credential, 2 targets, 2 settings (including ontology.namespace), naming_policy, type_mapping
     assert len(first['created']) == 9 and not first['updated']
     second = api.post('/api/v1/config/apply', json=doc).json()
     assert not second['created'] and not second['updated'] and len(second['unchanged']) == 9
 
-    secret_file.write_text('rahasia-2\n')
+    secret_file.write_text('secret-2\n')
     doc['targets'][1]['enabled'] = False
     third = api.post('/api/v1/config/apply', json=doc).json()
     assert sorted(third['updated']) == ['credential:teiid-admin', 'target:kafka']
 
     bad = yaml.safe_load(CONFIG.format(name=uniq('cfg'), secret_file=secret_file))
-    bad['targets'][0]['credential'] = 'tidak-ada'
+    bad['targets'][0]['credential'] = 'does-not-exist'
     r = api.post('/api/v1/config/apply', json=bad)
     assert r.status_code == 422
-    assert not any(o['name'] == bad['obdf']['name'] for o in api.get('/api/v1/obdf').json())  # di-rollback
+    assert not any(o['name'] == bad['obdf']['name'] for o in api.get('/api/v1/obdf').json())  # rolled back
 
     both = yaml.safe_load(CONFIG.format(name=uniq('cfg'), secret_file=secret_file))
     both['credentials'][0]['secret'] = 'x'
@@ -227,11 +227,11 @@ def test_bootstrap_on_startup(migrated, alembic_cfg, db_url, keys, tmp_path):
 def test_audit_records_actor(api):
     o = new_obdf(api)
     entries = api.get(f"/api/v1/obdf/{o['id']}/audit").json()
-    assert entries[0]['actor'] == 'ui:penguji' and entries[0]['action'] == 'create'
+    assert entries[0]['actor'] == 'ui:tester' and entries[0]['action'] == 'create'
 
 
 def test_ready_as_application_role(migrated, db_url, alembic_cfg, keys):
-    """Layanan berjalan sebagai role DML (D4); /ready harus tetap dapat membaca revisi skema."""
+    """The service runs as a DML role (D4); /ready must still be able to read the schema revision."""
     from alembic import command
     from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
@@ -246,23 +246,23 @@ def test_ready_as_application_role(migrated, db_url, alembic_cfg, keys):
                                        'WHERE rolname = current_user')).scalar()
         if not can_create:
             admin.dispose()
-            pytest.skip('role pengujian tidak dapat membuat role')
+            pytest.skip('the test role cannot create roles')
         exists = conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = 'ascam_app'")).scalar()
         if not exists:
-            conn.execute(text("CREATE ROLE ascam_app LOGIN PASSWORD 'uji-app'"))
-        conn.execute(text("ALTER ROLE ascam_app PASSWORD 'uji-app'"))
+            conn.execute(text("CREATE ROLE ascam_app LOGIN PASSWORD 'test-app'"))
+        conn.execute(text("ALTER ROLE ascam_app PASSWORD 'test-app'"))
         conn.execute(text(f'GRANT CONNECT ON DATABASE "{make_url(db_url).database}" TO ascam_app'))
         conn.commit()
     admin.dispose()
-    command.downgrade(alembic_cfg, 'base')           # hak diberikan saat migrasi, bila role ada
+    command.downgrade(alembic_cfg, 'base')           # privileges are granted in the migration if the role exists
     command.upgrade(alembic_cfg, 'head')
 
-    app_url = make_url(db_url).set(username='ascam_app', password='uji-app')
+    app_url = make_url(db_url).set(username='ascam_app', password='test-app')
     factory = make_session_factory(app_url)
     app = create_app(session_factory=factory, secret_box=SecretBox(keys), tokens=TokenRegistry(['ui:t']))
     with TestClient(app) as client:
         assert client.get('/ready').status_code == 200
         auth = {'Authorization': 'Bearer t'}
         created = client.post('/api/v1/obdf', json={'name': uniq('app')}, headers=auth)
-        assert created.status_code == 201                       # DML berjalan sebagai ascam_app
+        assert created.status_code == 201                       # DML runs as ascam_app
     factory.kw['bind'].dispose()

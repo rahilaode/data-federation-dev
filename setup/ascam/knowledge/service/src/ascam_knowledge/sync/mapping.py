@@ -1,11 +1,11 @@
 """
-Penguraian ℳ (R2RML, Turtle) menjadi struktur yang dapat dianalisis.
+Parsing of ℳ (R2RML, Turtle) into a structure that can be analysed.
 
-Mengacu pada W3C R2RML: logical table (`rr:tableName` / `rr:sqlQuery`), subject map,
-predicate-object map, referencing object map beserta join condition, bentuk pintasan
-(`rr:subject`, `rr:predicate`, `rr:object`, `rr:class`, `rr:graph`), template, dan datatype.
-Label blank node tidak stabil antar-parse, sehingga setiap predicate-object map diberi
-tanda tangan struktural (P6 pada rancangan Knowledge).
+Follows the W3C R2RML: logical table (`rr:tableName` / `rr:sqlQuery`), subject map,
+predicate-object map, referencing object map with join condition, the shortcut forms
+(`rr:subject`, `rr:predicate`, `rr:object`, `rr:class`, `rr:graph`), templates, and datatypes.
+Blank node labels are not stable between parses, so every predicate-object map gets a
+structural signature (P6 in the Knowledge design).
 """
 import hashlib
 import json
@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 
 RR = Namespace('http://www.w3.org/ns/r2rml#')
-# IRI relatif (mis. <#MapPenduduk>) diselesaikan terhadap base tetap agar identitas TriplesMap
-# stabil antarversi dan tidak bergantung pada lokasi berkas.
+# Relative IRIs (e.g. <#MapPenduduk>) are resolved against a fixed base so that a TriplesMap
+# keeps its identity across versions and does not depend on the file location.
 BASE = 'urn:ascam:mapping'
 
 
@@ -28,7 +28,7 @@ class TermMapSpec:
     datatype: str | None = None
     language: str | None = None
     columns: list[str] = field(default_factory=list)
-    joins: list[dict] = field(default_factory=list)          # untuk parent_triples_map
+    joins: list[dict] = field(default_factory=list)          # for parent_triples_map
 
 
 @dataclass
@@ -52,7 +52,7 @@ class TriplesMapSpec:
 
 
 def template_columns(template: str) -> list[str]:
-    """Nama kolom di dalam template R2RML; `\\{` dan `\\}` adalah karakter biasa."""
+    """Column names inside an R2RML template; `\\{` and `\\}` are ordinary characters."""
     columns, current, inside, escaped = [], '', False, False
     for ch in template:
         if escaped:

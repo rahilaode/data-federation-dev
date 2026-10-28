@@ -1,12 +1,12 @@
 """
-Klien pengambilan spesifikasi OBDF (ADR-0003, ADR-0006, ADR-0009, ADR-0011).
+Clients that read the OBDF specification (ADR-0003, ADR-0006, ADR-0009, ADR-0011).
 
-Tiga sumber:
-  TeiidAdminClient    — WildFly HTTP management API (status VDB, model/sumber, isi berkas VDB)
-  TeiidMetadataClient — transport ODBC Teiid (SYS.*, SYSADMIN.*): Σ_S efektif
-  OntopAgentClient    — agen di host Ontop (artefak ℳ dan 𝒯 beserta SHA-256)
+Three sources:
+  TeiidAdminClient    — WildFly HTTP management API (VDB status, models/sources, VDB file content)
+  TeiidMetadataClient — Teiid ODBC transport (SYS.*, SYSADMIN.*): the effective Σ_S
+  OntopAgentClient    — the agent on the Ontop host (artifacts ℳ and 𝒯 with SHA-256)
 
-Nama kolom tabel sistem ditanyakan lebih dahulu dan identifier selalu dikutip (pelajaran F0.3).
+Column names of system tables are queried first and identifiers are always quoted (lesson of F0.3).
 """
 import base64
 import hashlib
@@ -40,7 +40,7 @@ class TeiidAdminClient:
         r = self.client.post(self.url, json=payload, auth=self._auth, **kwargs)
         body = r.json()
         if body.get('outcome') != 'success':
-            raise RuntimeError(f"operasi {payload.get('operation')} gagal: "
+            raise RuntimeError(f"operation {payload.get('operation')} failed: "
                                f"{str(body.get('failure-description'))[:300]}")
         return body.get('result')
 
@@ -53,14 +53,14 @@ class TeiidAdminClient:
                         'vdb-name': name, 'vdb-version': str(version), 'model-name': model})
 
     def deployment_hash(self, deployment: str) -> str | None:
-        """SHA-1 konten deployment yang dilaporkan WildFly (hex), untuk verifikasi keutuhan."""
+        """SHA-1 of the deployment content reported by WildFly (hex), to verify integrity."""
         result = self.op({'operation': 'read-resource', 'address': [{'deployment': deployment}]})
         content = (result or {}).get('content') or []
         value = content[0].get('hash', {}).get('BYTES_VALUE') if content else None
         return base64.b64decode(value).hex() if value else None
 
     def read_deployment_content(self, deployment: str) -> bytes:
-        """Isi berkas deployment lewat attached stream (ADR-0009)."""
+        """Content of a deployment file through an attached stream (ADR-0009)."""
         r = self.client.post(self.url, json={'operation': 'read-content',
                                              'address': [{'deployment': deployment}]},
                              auth=self._auth, params={'useStreamAsResponse': ''})
@@ -80,7 +80,7 @@ class TeiidMetadataClient:
         self._connect = connect or psycopg.connect
 
     def fetch_all(self) -> dict[str, list[dict]]:
-        """Satu koneksi, satu snapshot konsisten dari tabel sistem."""
+        """One connection, one consistent snapshot of the system tables."""
         out: dict[str, list[dict]] = {}
         with self._connect(**self.params) as conn, conn.cursor() as cur:
             def columns_of(schema: str, table: str) -> list[str]:
@@ -145,7 +145,7 @@ class OntopAgentClient:
             body = r.json()
             digest = hashlib.sha256(body['content'].encode()).hexdigest()
             if digest != body['sha256']:
-                raise RuntimeError(f"sidik jari artefak {item['kind']} tidak cocok dengan isinya")
+                raise RuntimeError(f"fingerprint of artifact {item['kind']} does not match its content")
             out.append(AgentArtifact(kind=body['kind'], name=body['name'],
                                      media_type=body['media_type'], content=body['content'],
                                      sha256=body['sha256']))

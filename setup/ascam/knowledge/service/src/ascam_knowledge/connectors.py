@@ -1,16 +1,17 @@
 """
-Uji koneksi ke target OBDF (tombol "Test connection" pada UI).
+Connection checks against OBDF targets (the "Test connection" button of the UI).
 
-Setiap pemeriksa mengembalikan CheckResult dan TIDAK pernah memuat rahasia pada hasilnya:
-pesan galat disaring dari kata sandi sebelum disimpan. Fungsi koneksi dapat disuntikkan
-(parameter `http`, `connect`, `admin_factory`) agar dapat diuji tanpa layanan sungguhan.
+Every checker returns a CheckResult and NEVER puts a secret into the result: error messages
+are stripped of passwords before they are stored. The connect functions can be injected
+(parameters `http`, `connect`, `admin_factory`) so that the checks can be tested without
+real services.
 
-Dasar protokol:
+Protocols:
 - teiid_mgmt  : WildFly HTTP management API, autentikasi Digest (ADR-0004)
-- teiid_odbc  : transport ODBC Teiid (emulasi PostgreSQL), SYS.VirtualDatabases (ADR-0003)
-- ontop_sparql: SPARQL 1.1 Protocol, kueri ASK
-- kafka       : metadata broker dan keberadaan topik sumber
-- ontop_agent : GET /health (agen dibangun pada F4)
+- teiid_odbc  : Teiid ODBC transport (PostgreSQL emulation), SYS.VirtualDatabases (ADR-0003)
+- ontop_sparql: SPARQL 1.1 Protocol, ASK query
+- kafka       : broker metadata and existence of the source topics
+- ontop_agent : GET /health (agent built in F4)
 """
 import time
 from dataclasses import dataclass, field
@@ -50,8 +51,8 @@ def _timed(fn: Callable[[], CheckResult], secret: str | None = None) -> CheckRes
     t0 = time.perf_counter()
     try:
         result = fn()
-    except Exception as exc:                       # noqa: BLE001 — semua kegagalan dilaporkan
-        result = CheckResult(False, 0, 'gagal terhubung',
+    except Exception as exc:                       # noqa: BLE001 — every failure is reported
+        result = CheckResult(False, 0, 'connection failed',
                              error=_redact(f'{type(exc).__name__}: {exc}', secret))
     result.latency_ms = int((time.perf_counter() - t0) * 1000)
     return result
@@ -66,7 +67,7 @@ def check_teiid_mgmt(endpoint: dict, username: str, password: str,
             url = _url(endpoint, '/management')
             state = client.post(url, json={'operation': 'read-attribute', 'name': 'server-state'}, auth=auth)
             if state.status_code == 401:
-                return CheckResult(False, 0, 'autentikasi ditolak', error='HTTP 401')
+                return CheckResult(False, 0, 'authentication rejected', error='HTTP 401')
             state.raise_for_status()
             body = state.json()
             version = client.post(url, json={'operation': 'read-attribute', 'name': 'product-version'},
@@ -113,7 +114,7 @@ def check_ontop_sparql(endpoint: dict, http: httpx.Client | None = None,
             if r.status_code != 200:
                 return CheckResult(False, 0, f'HTTP {r.status_code}', error=r.text[:200])
             answer = r.json().get('boolean')
-            return CheckResult(True, 0, 'endpoint SPARQL menjawab', {'ask_non_empty': answer})
+            return CheckResult(True, 0, 'SPARQL endpoint answers', {'ask_non_empty': answer})
         finally:
             if http is None:
                 client.close()
@@ -140,8 +141,8 @@ def check_kafka(endpoint: dict, expected_topics: list[str],
         facts = {'topic_count': len(topics), 'expected_topics': sorted(expected_topics),
                  'missing_topics': missing}
         if missing:
-            return CheckResult(False, 0, f'{len(missing)} topik sumber belum ada', facts)
-        return CheckResult(True, 0, 'broker menjawab; semua topik sumber ada', facts)
+            return CheckResult(False, 0, f'{len(missing)} source topics do not exist yet', facts)
+        return CheckResult(True, 0, 'broker answers; all source topics exist', facts)
     return _timed(run)
 
 
@@ -156,14 +157,15 @@ def check_ontop_agent(endpoint: dict, token: str | None = None,
             if health.status_code != 200:
                 return CheckResult(False, 0, f'HTTP {health.status_code}', error=health.text[:200])
             facts = health.json()
-            if token:                       # sekaligus memastikan token diterima agen
+            if token:                       # also confirms that the agent accepts the token
                 listing = client.get(f'{base}/api/v1/artifacts',
                                      headers={'Authorization': f'Bearer {token}'})
                 if listing.status_code != 200:
-                    return CheckResult(False, 0, 'token agen ditolak',
+                    return CheckResult(False, 0, 'agent token rejected',
                                        facts, error=f'HTTP {listing.status_code}')
                 facts['artifact_digests'] = {a['kind']: a['sha256'][:12] for a in listing.json()}
-            return CheckResult(True, 0, 'agen menjawab', facts)
+            return CheckResult(True, 0, 'agent answers'
+, facts)
         finally:
             if http is None:
                 client.close()

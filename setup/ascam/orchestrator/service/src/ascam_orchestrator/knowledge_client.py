@@ -1,4 +1,4 @@
-"""Klien Knowledge Service (satu-satunya jalur Orchestrator ke pengetahuan sistem)."""
+"""Knowledge Service client (the Orchestrator's only path to the knowledge of the system)."""
 import httpx
 
 
@@ -18,7 +18,7 @@ class KnowledgeClient:
         for obdf in self._get('/api/v1/obdf'):
             if obdf['name'] == name:
                 return obdf['id']
-        raise RuntimeError(f'OBDF {name!r} belum terdaftar di Knowledge')
+        raise RuntimeError(f'OBDF {name!r} is not registered in Knowledge')
 
     def sources(self, obdf_id: int) -> list[dict]:
         return self._get(f'/api/v1/obdf/{obdf_id}/sources')
@@ -28,7 +28,7 @@ class KnowledgeClient:
             if target['kind'] == 'kafka' and target['enabled']:
                 endpoint = target['endpoint']
                 return f"{endpoint['host']}:{endpoint['port']}"
-        raise RuntimeError('target Kafka belum terdaftar atau nonaktif')
+        raise RuntimeError('Kafka target not registered or disabled')
 
     def post_event(self, obdf_id: int, payload: dict) -> dict:
         r = self._client.post(f'{self.base}/api/v1/obdf/{obdf_id}/events',

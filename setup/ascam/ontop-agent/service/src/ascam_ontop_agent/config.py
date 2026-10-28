@@ -1,9 +1,9 @@
 """
-Konfigurasi agen.
+Agent configuration.
 
-Artefak yang DIEKSPOS hanya ℳ (R2RML) dan 𝒯 (ontologi). Berkas properti Ontop memuat
-kredensial JDBC, sehingga tidak pernah dibaca lewat API; berkas itu hanya dipakai di dalam
-agen saat menjalankan `ontop validate`.
+Only ℳ (R2RML) and 𝒯 (ontology) are EXPOSED. The Ontop properties file holds the JDBC
+credentials, so it is never read through the API; it is used only inside the agent when it
+runs `ontop validate`.
 """
 import os
 from dataclasses import dataclass, field
@@ -20,13 +20,13 @@ class AgentConfig:
     properties_name: str = 'government.docker.properties'
     ontop_container: str = 'vkg-system-ontop-teiid'
     ontop_image: str = 'ontop/ontop-endpoint:4.1.1'
-    ontop_input_dir: str = '/opt/ontop/input'          # path di dalam kontainer Ontop
+    ontop_input_dir: str = '/opt/ontop/input'          # path inside the Ontop container
     sparql_path: str = '/sparql'
     tokens_file: str | None = None
-    # Blue-green lapisan OBDA (ADR-0022): dua instance Ontop di belakang proxy nginx. Setiap
-    # instance membaca slotnya sendiri dan terkunci pada satu versi VDB.
-    slots_dir: Path | None = None                       # berisi blue/, green/, state.json
-    proxy_runtime_dir: Path | None = None               # berisi upstream.conf milik nginx
+    # Blue-green OBDA layer (ADR-0022): two Ontop instances behind an nginx proxy. Every
+    # instance reads its own slot and is bound to one VDB version.
+    slots_dir: Path | None = None                       # holds blue/, green/, state.json
+    proxy_runtime_dir: Path | None = None               # holds the nginx upstream.conf
     proxy_container: str = 'vkg-system-ontop-teiid'
     instance_prefix: str = 'vkg-system-ontop'           # -> vkg-system-ontop-blue / -green
     network: str | None = 'ascam-networks'
@@ -36,7 +36,7 @@ class AgentConfig:
         self.names = {'r2rml': self.mapping_name, 'ontology': self.ontology_name}
 
     def path_of(self, kind: str) -> Path:
-        if kind not in self.names:                      # mencegah penelusuran path sembarang
+        if kind not in self.names:                      # prevents arbitrary path traversal
             raise KeyError(kind)
         return self.artifacts_dir / self.names[kind]
 

@@ -1,5 +1,5 @@
-# Konsol administrator ASCAM (ADR-0021). Hanya terikat ke 127.0.0.1; peramban tidak pernah
-# menerima token layanan, karena permintaan ke Knowledge diteruskan oleh konsol ini.
+# ASCAM administrator console (ADR-0021). Bound to 127.0.0.1 only; the browser never receives
+# the service tokens, because this console forwards the requests to Knowledge.
 services:
   ui:
     build: {context: ./service}

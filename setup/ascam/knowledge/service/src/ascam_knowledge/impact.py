@@ -1,24 +1,24 @@
 """
-Analisis dampak dan keputusan adaptasi (matriks D11).
+Impact analysis and adaptation decision (decision matrix D11).
 
-Masukan: event skema terformalisasi (sumber, skema, tabel, kolom, operasi). Keluaran:
-kolom Teiid yang terdampak, seluruh pemakaiannya (lineage), dan keputusan beserta alasannya.
-Fungsi ini TIDAK mengubah apa pun; ia hanya membaca versi spesifikasi aktif.
+Input: a formalised schema event (source, schema, table, column, operation). Output: the
+affected Teiid columns, all their usages (lineage), and the decision with its reasons.
+Nothing is modified here; the function only reads the active specification version.
 
-Keputusan (ADR-0024):
-  auto    rencana aman dan ditentukan penuh oleh DDL; dieksekusi tanpa campur tangan manusia.
-  hitl    hanya untuk ADD: nama dan domain property baru adalah keputusan pemodelan, sehingga
-          administrator menyetujui (dan boleh merevisi) usulan ASCAM.
-  notify  DROP/RENAME yang tidak dapat dibuktikan aman: ASCAM tidak menyusun tindakan, hanya
-          memberi tahu administrator elemen OBDF yang terdampak, 𝒟(c, ℱ).
+Decisions (ADR-0024):
+  auto    the plan is safe and fully determined by the DDL; it runs without human involvement.
+  hitl    ADD only: the name and domain of the new property are a modelling decision, so the
+          administrator approves (and may revise) the proposal made by ASCAM.
+  notify  a DROP or RENAME that cannot be shown to be safe: ASCAM builds no actions and only
+          tells the administrator which OBDF elements are affected, 𝒟(c, ℱ).
 
-Aturan mengikuti bukti uji kelayakan:
-  RENAME  diserap di lapisan Teiid lewat NAMEINSOURCE, sehingga view dan mapping tidak berubah
-          (ADR-0002, bukti F0.7 v7 vs v8).
-  DROP    otomatis hanya bila seluruh jalur pemakaiannya berupa nilai literal atau proyeksi;
-          template IRI, kunci join, klausa SQL, kolom kunci primer, dan jalur yang melewati
-          ekspresi view berujung notifikasi (bukti F0.7 v2–v4).
-  ADD     selalu menunggu persetujuan; bentrok nama dan domain dijelaskan pada alasan.
+The rules follow the feasibility experiments:
+  RENAME  absorbed in the Teiid layer through NAMEINSOURCE, so views and mappings stay as they
+          are (ADR-0002, experiment F0.7 v7 vs v8).
+  DROP    automatic only when every usage path is a literal value or a projection; IRI
+          templates, join keys, SQL clauses, primary-key columns, and paths through a view
+          expression lead to a notification (experiment F0.7 v2-v4).
+  ADD     always waits for approval; name and domain collisions are stated in the reasons.
 """
 import re
 from dataclasses import dataclass, field
@@ -57,8 +57,8 @@ class ImpactReport:
     reasons: list[str] = field(default_factory=list)
     targets: list[TargetColumn] = field(default_factory=list)
     actions: list[dict] = field(default_factory=list)
-    affected: dict[str, list] = field(default_factory=dict)     # 𝒟(c, ℱ) per lapisan
-    add_options: dict[str, Any] | None = None                   # pilihan untuk formulir ADD
+    affected: dict[str, list] = field(default_factory=dict)     # 𝒟(c, ℱ) per layer
+    add_options: dict[str, Any] | None = None                   # choices for the ADD form
 
     def as_dict(self) -> dict[str, Any]:
         out = {
@@ -86,8 +86,8 @@ def active_version(db: Session, obdf_id: int) -> spec.SpecVersion | None:
 
 def resolve_columns(db: Session, version_id: int, source_id: int | None, schema: str | None,
                     table: str, column: str | None) -> list[TargetColumn]:
-    """Mencari kolom Teiid yang mewakili kolom sumber; satu tabel sumber dapat diekspos
-    lebih dari satu model."""
+    """Find the Teiid columns that represent a source column; one source table can be
+    exposed by more than one model."""
     query = (select(spec.TeiidColumn, spec.TeiidTable, spec.TeiidModel)
              .join(spec.TeiidTable, spec.TeiidTable.id == spec.TeiidColumn.table_id)
              .join(spec.TeiidModel, spec.TeiidModel.id == spec.TeiidTable.model_id)
@@ -123,7 +123,7 @@ def load_usages(db: Session, version_id: int, column_id: int) -> list[dict]:
 
 def _predicate_shared(db: Session, version_id: int, predicate_iri: str,
                       column_ids: set[int]) -> bool:
-    """Apakah predikat masih dipakai kolom lain (P-002 tidak boleh men-deprecate bila ya)."""
+    """Whether another column still uses the predicate (P-002 must not deprecate it then)."""
     others = db.execute(
         select(func.count()).select_from(spec.ColumnUsage)
         .where(spec.ColumnUsage.spec_version_id == version_id,
@@ -143,26 +143,26 @@ def _table_flags(db: Session, version_id: int, targets: list[TargetColumn]) -> l
         .group_by(spec.TeiidModel.name)).all()
     for model, count in multi_source:
         if count > 1:
-            reasons.append(f'model {model} memakai lebih dari satu sumber (multi-source)')
+            reasons.append(f'model {model} uses more than one source (multi-source)')
     routines = db.execute(
         select(spec.TeiidRoutine.kind, spec.TeiidRoutine.name)
         .where(spec.TeiidRoutine.spec_version_id == version_id,
                spec.TeiidRoutine.table_name.in_(table_names))).all()
     for kind, name in routines:
-        reasons.append(f'tabel dirujuk {kind} {name}')
+        reasons.append(f'table is referenced by {kind} {name}')
     unparsed = db.execute(
         select(func.count()).select_from(spec.TriplesMap)
         .where(spec.TriplesMap.spec_version_id == version_id,
                spec.TriplesMap.sql_parse_status == 'failed')).scalar()
     if unparsed:
-        reasons.append(f'{unparsed} logical table memiliki SQL yang tidak dapat diurai')
+        reasons.append(f'{unparsed} logical tables have SQL that cannot be parsed')
     return reasons
 
 
 def _explicit_projections(db: Session, version_id: int, column_id: int) -> list[tuple[str, str, str]]:
-    """Logical table `rr:sqlQuery` yang memproyeksikan kolom ini secara eksplisit.
+    """Logical tables given as `rr:sqlQuery` that project this column explicitly.
 
-    `SELECT *` tidak termasuk, karena ikut menyesuaikan sendiri saat kolom hilang.
+    `SELECT *` is not included, because it adjusts by itself when the column disappears.
     """
     rows = db.execute(
         select(spec.TriplesMap.iri, spec.LogicalColumn.name, spec.TriplesMap.sql_parse_status)
@@ -173,15 +173,15 @@ def _explicit_projections(db: Session, version_id: int, column_id: int) -> list[
                spec.LogicalColumnSource.teiid_column_id == column_id,
                spec.TriplesMap.logical_table_kind == 'sql_query',
                spec.LogicalColumn.expression_kind == 'passthrough')).all()
-    return [(iri, nama, status) for iri, nama, status in rows]
+    return [(iri, column_name, status) for iri, column_name, status in rows]
 
 
 def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dict]:
-    """TriplesMap yang akan otomatis memuat kolom baru pada tabel tersebut.
+    """TriplesMaps that will expose a new column of the table without being edited.
 
-    Hanya logical table berupa `rr:tableName` atau kueri `SELECT *` yang ikut bertambah kolom;
-    logical table dengan daftar kolom eksplisit tidak, sehingga tidak boleh dipilih (bukti:
-    pemetaan yang ditempelkan ke TriplesMap salah membuat `ontop validate` menolak artefak).
+    Only logical tables given as `rr:tableName` or as a `SELECT *` query gain the column;
+    logical tables with an explicit column list do not, so they must not be chosen (a mapping
+    attached to the wrong TriplesMap makes `ontop validate` reject the artifacts).
     """
     rows = db.execute(
         select(spec.TriplesMap.id, spec.TriplesMap.iri, spec.TriplesMap.logical_table_kind)
@@ -189,7 +189,7 @@ def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dic
         .join(spec.TeiidTable, spec.TeiidTable.id == spec.LogicalSource.teiid_table_id)
         .where(spec.TriplesMap.spec_version_id == version_id,
                spec.TeiidTable.name == table)).all()
-    keluaran = []
+    found = []
     for triples_map_id, iri, kind in rows:
         star = db.execute(
             select(func.count()).select_from(spec.LogicalColumn)
@@ -199,8 +199,8 @@ def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dic
             continue
         classes = db.execute(select(spec.SubjectClass.class_iri)
                              .filter_by(triples_map_id=triples_map_id)).scalars().all()
-        keluaran.append({'id': triples_map_id, 'iri': iri, 'classes': list(classes)})
-    return keluaran
+        found.append({'id': triples_map_id, 'iri': iri, 'classes': list(classes)})
+    return found
 
 
 def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
@@ -209,17 +209,17 @@ def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
     report = ImpactReport(obdf_id=obdf_id, spec_version_id=version.id if version else None,
                           operation=operation, pattern=PATTERN.get(operation), decision='notify')
     if version is None:
-        report.decision, report.reasons = 'ignored', ['belum ada versi spesifikasi aktif']
+        report.decision, report.reasons = 'ignored', ['no active specification version yet']
         return report
     if operation not in PATTERN:
-        report.reasons = [f'operasi {operation!r} tidak didukung']
+        report.reasons = [f'operation {operation!r} is not supported']
         return report
 
     source = db.execute(select(registry.SourceSystem).filter_by(
         obdf_id=obdf_id, logical_name=event.get('source'))).scalar_one_or_none()
     if source is None:
         report.decision = 'ignored'
-        report.reasons = [f"sumber {event.get('source')!r} tidak terdaftar"]
+        report.reasons = [f"source {event.get('source')!r} is not registered"]
         return report
 
     schema = event.get('schema') or source.default_schema
@@ -227,11 +227,11 @@ def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
     targets = resolve_columns(db, version.id, source.id, schema, event.get('table') or '',
                               lookup_column)
     if operation == 'add':
-        # ADD: tabelnya harus difederasikan, kolomnya memang belum ada
+        # ADD: the table must be federated and the column must not exist yet
         table_columns = resolve_columns(db, version.id, source.id, schema, event.get('table') or '', None)
         if not table_columns:
             report.decision = 'ignored'
-            report.reasons = [f"tabel {schema}.{event.get('table')} tidak difederasikan"]
+            report.reasons = [f"table {schema}.{event.get('table')} is not federated"]
             return report
         existing = {c.column.lower() for c in table_columns} | {
             (c.source_column or '').lower() for c in table_columns}
@@ -240,8 +240,8 @@ def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
 
     if not targets:
         report.decision = 'ignored'
-        report.reasons = [f"kolom {schema}.{event.get('table')}.{event.get('column')} "
-                          f'tidak ditemukan pada spesifikasi aktif']
+        report.reasons = [f"column {schema}.{event.get('table')}.{event.get('column')} "
+                          f'not found in the active specification']
         return report
 
     for target in targets:
@@ -255,42 +255,42 @@ def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
     else:
         report = _decide_drop(db, version, event, targets, report)
     if report.decision == 'notify':
-        # Rencana yang tidak terbukti aman tidak disusun sebagian: administrator hanya diberi tahu
-        # elemen yang terdampak dan memperbaikinya sendiri, lalu menjalankan sync (ADR-0024).
+        # A plan that is not shown to be safe is not built in part: the administrator is only
+        # told which elements are affected, repairs them, and then runs a sync (ADR-0024).
         report.actions = []
     return report
 
 
 def affected_elements(db: Session, version_id: int, targets: list[TargetColumn]) -> dict[str, list]:
-    """𝒟(c, ℱ) per lapisan: view Teiid (penutupan transitif atas dependensi), TriplesMap, dan
-    property ontologi yang bergantung pada kolom foreign yang berubah."""
-    nama_tabel = {tid: (model, nama) for tid, model, nama in db.execute(
+    """𝒟(c, ℱ) per layer: Teiid views (transitive closure over the dependencies), TriplesMaps,
+    and ontology properties that depend on the changed foreign column."""
+    table_labels = {tid: (model, name) for tid, model, name in db.execute(
         select(spec.TeiidTable.id, spec.TeiidModel.name, spec.TeiidTable.name)
         .join(spec.TeiidModel, spec.TeiidModel.id == spec.TeiidTable.model_id)
         .where(spec.TeiidTable.spec_version_id == version_id)).all()}
-    dependensi: dict[int, list[tuple[int, int | None]]] = {}
+    dependents: dict[int, list[tuple[int, int | None]]] = {}
     for used, dep_table, dep_col in db.execute(
             select(spec.TeiidDependency.used_column_id, spec.TeiidDependency.dependent_table_id,
                    spec.TeiidDependency.dependent_column_id)
             .where(spec.TeiidDependency.spec_version_id == version_id,
                    spec.TeiidDependency.used_column_id.is_not(None))).all():
-        dependensi.setdefault(used, []).append((dep_table, dep_col))
+        dependents.setdefault(used, []).append((dep_table, dep_col))
     views: set[int] = set()
-    antrean, dilihat = [t.column_id for t in targets], set()
-    while antrean:
-        kolom = antrean.pop()
-        if kolom in dilihat:
+    queue, seen = [t.column_id for t in targets], set()
+    while queue:
+        current = queue.pop()
+        if current in seen:
             continue
-        dilihat.add(kolom)
-        for dep_table, dep_col in dependensi.get(kolom, []):
+        seen.add(current)
+        for dep_table, dep_col in dependents.get(current, []):
             views.add(dep_table)
             if dep_col is not None:
-                antrean.append(dep_col)
+                queue.append(dep_col)
     triples_maps = sorted({u['triples_map'] for t in targets for u in t.usages})
     predicates = sorted({u['predicate_iri'] for t in targets for u in t.usages if u['predicate_iri']})
     return {
         'columns': [f'{t.model}.{t.table}.{t.column}' for t in targets],
-        'views': sorted('.'.join(nama_tabel[v]) for v in views if v in nama_tabel),
+        'views': sorted('.'.join(table_labels[v]) for v in views if v in table_labels),
         'triples_maps': triples_maps,
         'predicates': predicates,
     }
@@ -299,7 +299,7 @@ def affected_elements(db: Session, version_id: int, targets: list[TargetColumn])
 def _decide_rename(db, version, event, targets, report) -> ImpactReport:
     new_name = event.get('new_column')
     if not new_name:
-        report.reasons.append('nama kolom baru tidak disertakan pada event')
+        report.reasons.append('the event does not include the new column name')
         return report
     for target in targets:
         siblings = db.execute(
@@ -311,13 +311,13 @@ def _decide_rename(db, version, event, targets, report) -> ImpactReport:
         for name, source_column in siblings:
             if (source_column or name).lower() == new_name.lower():
                 report.reasons.append(
-                    f'nama sumber {new_name} sudah dipakai kolom Teiid {name} pada tabel {target.table}')
+                    f'source name {new_name} is already used by Teiid column {name} of table {target.table}')
         report.actions.append({'artifact': 'vdb', 'operation': 'set_name_in_source',
                                'model': target.model, 'table': target.table,
                                'column': target.column, 'name_in_source': new_name})
     report.decision = 'notify' if report.reasons else 'auto'
     if report.decision == 'auto':
-        report.reasons.append('RENAME diserap NAMEINSOURCE; ℳ dan 𝒯 tidak berubah')
+        report.reasons.append('RENAME is absorbed by NAMEINSOURCE; ℳ and 𝒯 do not change')
     return report
 
 
@@ -325,38 +325,39 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
     column_ids = {t.column_id for t in targets}
     for target in targets:
         if target.in_primary_key:
-            report.reasons.append(f'kolom {target.table}.{target.column} bagian dari kunci primer')
+            report.reasons.append(f'column {target.table}.{target.column} is part of the primary key')
         for usage in target.usages:
             if usage['role'] in HITL_ROLES:
                 report.reasons.append(
-                    f"dipakai {usage['triples_map'].rsplit('#', 1)[-1]} sebagai {usage['role']}")
+                    f"used by {usage['triples_map'].rsplit('#', 1)[-1]} as {usage['role']}")
             elif usage['weakest_link'] in HITL_LINKS:
                 report.reasons.append(
-                    f"jalur ke {usage['triples_map'].rsplit('#', 1)[-1]} melewati "
+                    f"the path to {usage['triples_map'].rsplit('#', 1)[-1]} passes through "
                     f"{usage['weakest_link']}")
         report.actions.append({'artifact': 'vdb', 'operation': 'drop_column',
                                'model': target.model, 'table': target.table, 'column': target.column})
 
-    # View Teiid yang meneruskan kolom ikut disesuaikan (ADR-0023): proyeksinya dikecilkan
-    # dengan ALTER VIEW, dirambatkan ke view bertingkat; selain itu diserahkan ke administrator.
+    # Teiid views that pass the column on are adjusted too (ADR-0023): their projection is
+    # narrowed with ALTER VIEW and propagated to nested views; anything else goes to the
+    # administrator.
     vdb_xml = db.execute(select(spec.Artifact.content).where(
         spec.Artifact.spec_version_id == version.id, spec.Artifact.kind == 'vdb_xml')).scalar()
     view_plan = plan_view_drops(db, version.id, column_ids, vdb_xml)
     report.reasons.extend(view_plan.reasons)
     report.actions.extend(view_plan.actions)
 
-    # Logical table yang menyebut kolom secara eksplisit harus ikut ditulis ulang; tanpa itu
-    # kueri masih merujuk kolom yang sudah hilang dan `ontop validate` menolak (temuan A002).
-    # Termasuk kolom view yang ikut hilang karena penyesuaian view.
+    # Logical tables that name the column explicitly must be rewritten as well; otherwise the
+    # query still refers to the missing column and `ontop validate` rejects it (finding A002).
+    # This includes view columns that disappear because of the view adjustment.
     for column_id in sorted(column_ids | view_plan.view_column_ids):
-        for triples_map_iri, nama_logis, status in _explicit_projections(db, version.id,
-                                                                        column_id):
+        for triples_map_iri, logical_name, status in _explicit_projections(db, version.id,
+                                                                          column_id):
             if status == 'failed':
                 report.reasons.append(
-                    f'logical table {triples_map_iri} memakai SQL yang tidak dapat diurai')
+                    f'logical table {triples_map_iri} uses SQL that cannot be parsed')
                 continue
             report.actions.append({'artifact': 'r2rml', 'operation': 'rewrite_logical_table',
-                                   'triples_map_iri': triples_map_iri, 'column': nama_logis})
+                                   'triples_map_iri': triples_map_iri, 'column': logical_name})
 
     predicates: dict[str, set[str]] = {}
     for target in targets:
@@ -365,13 +366,13 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
                 predicates.setdefault(usage['predicate_iri'], set()).add(usage['triples_map'])
     for predicate in sorted(predicates):
         for triples_map in sorted(predicates[predicate]):
-            # TriplesMap ditentukan dari lineage, bukan ditebak Executor dari nama tabel
+            # the TriplesMap comes from the lineage; the Executor does not guess it from the table name
             report.actions.append({'artifact': 'r2rml', 'operation': 'remove_predicate_object_map',
                                    'predicate_iri': predicate, 'triples_map_iri': triples_map})
         if _predicate_shared(db, version.id, predicate, column_ids):
             report.actions.append({'artifact': 'ontology', 'operation': 'keep_property',
                                    'predicate_iri': predicate,
-                                   'alasan': 'masih dipakai mapping lain'})
+                                   'reason': 'still used by another mapping'})
         else:
             report.actions.append({'artifact': 'ontology', 'operation': 'deprecate_property',
                                    'predicate_iri': predicate})
@@ -379,7 +380,7 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
     return report
 
 
-NAMA_LOKAL = re.compile(r'[A-Za-z_][A-Za-z0-9_-]{0,99}')
+LOCAL_NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_-]{0,99}')
 
 
 def _iri_property(template: str, namespace: str, local: str, column: str | None = None) -> str:
@@ -389,28 +390,28 @@ def _iri_property(template: str, namespace: str, local: str, column: str | None 
 
 
 def property_problems(db: Session, version_id: int, iri: str, domain: str | None) -> list[str]:
-    """Bentrok IRI property baru dengan entitas pada versi aktif.
+    """Collisions between the IRI of a new property and entities of the active version.
 
-    OWL 2 QL dan Ontop menolak nama yang dipakai sebagai object property sekaligus data property
-    ("name sets are not disjoint"); property data yang sudah ada hanya boleh dipakai ulang bila
-    domainnya sama."""
+    OWL 2 QL and Ontop reject a name used both as an object property and as a data property
+    ("name sets are not disjoint"); an existing data property may be reused only when its
+    domain is the same."""
     entity = db.execute(select(spec.OntEntity).where(spec.OntEntity.spec_version_id == version_id,
                                                     spec.OntEntity.iri == iri)).scalars().first()
     if entity is None:
         return []
     if entity.kind != 'datatype_property':
-        return [f'IRI {iri} sudah dipakai sebagai {entity.kind}']
+        return [f'IRI {iri} is already used as {entity.kind}']
     domains = set(db.execute(select(spec.OntDomain.class_expression)
                              .filter_by(entity_id=entity.id)).scalars().all())
     if domains - ({domain} if domain else set()):
-        return [f'IRI {iri} sudah ada dengan domain berbeda: {sorted(domains)}']
+        return [f'IRI {iri} already exists with a different domain: {sorted(domains)}']
     return []
 
 
 def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
-    """Tindakan 𝒯 dan ℳ untuk property baru. Pemetaan tidak ditempelkan ke TriplesMap yang
-    subjeknya berkelas lain selain `domain`, karena reasoner akan menyimpulkan subjek tersebut
-    juga anggota `domain`; TriplesMap tanpa rr:class tetap disertakan."""
+    """𝒯 and ℳ actions for a new property. The mapping is not attached to a TriplesMap whose
+    subjects have a class other than `domain`, because a reasoner would then infer that those
+    subjects belong to `domain` too; TriplesMaps without rr:class are included."""
     column = options['column']
     tms = [tm for tm in options['triples_maps']
            if domain is None or not tm['classes'] or domain in tm['classes']]
@@ -424,18 +425,19 @@ def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
 
 
 def _decide_add(db, obdf_id, version, event, table_columns, existing, report) -> ImpactReport:
-    """ADD selalu menunggu persetujuan: ASCAM mengusulkan nama dan domain property dari kebijakan
-    penamaan, administrator menyetujui atau merevisinya di konsol (ADR-0021, ADR-0024)."""
+    """ADD always waits for approval: ASCAM proposes the property name and domain from the
+    naming policy, and the administrator approves or revises them in the console (ADR-0021,
+    ADR-0024)."""
     column = (event.get('column') or '').lower()
     target_table = table_columns[0]
     report.decision = 'hitl'
     report.actions.append({'artifact': 'vdb', 'operation': 'add_column',
                            'model': target_table.model, 'table': target_table.table,
                            'column': event.get('column'), 'column_type': event.get('column_type')})
-    report.reasons.append('Penambahan kolom menambah property baru ke ontologi; nama dan domainnya '
-                          'adalah keputusan pemodelan yang ditetapkan administrator')
+    report.reasons.append('Adding a column adds a new property to the ontology; its name and domain '
+                          'are a modelling decision made by the administrator')
     if column in existing:
-        report.reasons.append(f'nama kolom {column} sudah ada pada tabel Teiid {target_table.table}')
+        report.reasons.append(f'column name {column} already exists in Teiid table {target_table.table}')
 
     exposing = _exposing_triples_maps(db, version.id, target_table.table)
     naming = db.get(registry.NamingPolicy, obdf_id)
@@ -449,55 +451,55 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
     report.add_options = options
     if not exposing:
         report.reasons.append(
-            f'tidak ada TriplesMap yang otomatis mengekspos kolom baru pada {target_table.table} '
-            '(logical table memakai daftar kolom eksplisit); hanya kolom VDB yang dapat ditambahkan')
+            f'no TriplesMap exposes a new column of {target_table.table} by itself '
+            '(the logical tables use explicit column lists); only the VDB column can be added')
         return report
     if naming is None or not namespace:
-        report.reasons.append('kebijakan penamaan atau namespace ontologi belum diatur')
+        report.reasons.append('the naming policy or the ontology namespace is not set')
         return report
 
     local = ''.join(part.capitalize() if i else part
                     for i, part in enumerate((event.get('column') or '').split('_')))
     iri = _iri_property(naming.property_iri_template, namespace, local, event.get('column') or '')
     domain = classes[0] if classes else None
-    masalah = property_problems(db, version.id, iri, domain)
-    if masalah:
-        report.reasons.extend(masalah)
+    problems = property_problems(db, version.id, iri, domain)
+    if problems:
+        report.reasons.extend(problems)
         if naming.on_collision == 'qualify_with_class' and domain:
             iri = f"{iri}_{domain.rsplit('/', 1)[-1]}"
-            report.reasons.append(f'kebijakan bentrok nama memakai IRI {iri}')
-            masalah = property_problems(db, version.id, iri, domain)
-        if masalah:
-            report.reasons.append('tentukan nama property lain pada formulir persetujuan')
+            report.reasons.append(f'the name collision policy uses IRI {iri}')
+            problems = property_problems(db, version.id, iri, domain)
+        if problems:
+            report.reasons.append('choose another property name in the approval form')
             return report
     if len(classes) > 1:
         report.reasons.append(
-            f'TriplesMap yang mengekspos {target_table.table} memberi lebih dari satu kelas '
-            f'{classes}; usulan memakai {domain} sebagai domain dan perlu ditinjau')
+            f'the TriplesMaps that expose {target_table.table} give more than one class '
+            f'{classes}; the proposal uses {domain} as domain and should be reviewed')
     options['proposed_iri'], options['proposed_domain'] = iri, domain
     report.actions.extend(property_actions(options, iri, domain))
     return report
 
 
 def revise_add(db: Session, plan, local_name: str, domain: str | None) -> tuple[str, list[dict]]:
-    """Memeriksa pilihan administrator untuk rencana ADD dan menyusun tindakan 𝒯 dan ℳ-nya.
+    """Check the administrator's choice for an ADD plan and build its 𝒯 and ℳ actions.
 
-    -> (IRI property, tindakan). ValueError berisi alasan penolakan pilihan."""
+    Returns (property IRI, actions). Raises ValueError with the reason a choice is rejected."""
     options = (plan.impact or {}).get('add_options')
     if not options or not options.get('triples_maps'):
-        raise ValueError('rencana ini tidak dapat diberi property: tidak ada TriplesMap yang '
-                         'mengekspos kolom baru, sehingga hanya kolom VDB yang ditambahkan')
+        raise ValueError('this plan cannot be given a property: no TriplesMap exposes the new '
+                         'column, so only the VDB column is added')
     if not options.get('namespace') or not options.get('iri_template'):
-        raise ValueError('kebijakan penamaan atau namespace ontologi belum diatur')
-    if not NAMA_LOKAL.fullmatch(local_name or ''):
-        raise ValueError('nama property harus diawali huruf atau garis bawah dan hanya memuat '
-                         'huruf, angka, garis bawah, atau tanda hubung (maksimal 100 karakter)')
+        raise ValueError('the naming policy or the ontology namespace is not set')
+    if not LOCAL_NAME.fullmatch(local_name or ''):
+        raise ValueError('a property name must start with a letter or underscore and contain only '
+                         'letters, digits, underscores, or hyphens (at most 100 characters)')
     if options['classes'] and domain not in options['classes']:
-        raise ValueError(f"domain harus salah satu kelas TriplesMap pengekspos: {options['classes']}")
+        raise ValueError(f"the domain must be one of the classes of the exposing TriplesMaps: {options['classes']}")
     if not options['classes'] and domain:
-        raise ValueError('TriplesMap pengekspos tidak memberi kelas, sehingga domain tidak dapat dipilih')
+        raise ValueError('the exposing TriplesMaps give no class, so no domain can be chosen')
     iri = _iri_property(options['iri_template'], options['namespace'], local_name)
-    masalah = property_problems(db, plan.base_spec_version_id, iri, domain)
-    if masalah:
-        raise ValueError('; '.join(masalah))
+    problems = property_problems(db, plan.base_spec_version_id, iri, domain)
+    if problems:
+        raise ValueError('; '.join(problems))
     return iri, property_actions(options, iri, domain)

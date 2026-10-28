@@ -1,6 +1,6 @@
-# Orchestrator ASCAM: konsumsi event DDL dari Kafka, normalisasi, kirim ke Knowledge
-# (docs/adr/0017-orchestrator.md). Identitas OBDF, daftar topik, dan alamat Kafka diambil
-# dari Knowledge, sehingga tidak ada konfigurasi yang terduplikasi di sini.
+# ASCAM Orchestrator (Event Normalizer): consumes DDL events from Kafka, normalises them, and
+# sends them to Knowledge (docs/design-decisions.md, ADR-0017). The OBDF identity, the topic list,
+# and the Kafka address come from Knowledge, so no configuration is duplicated here.
 services:
   orchestrator:
     build: {context: ./service}
@@ -12,7 +12,7 @@ services:
       ASCAM_ORCH_TOKEN_FILE: /run/secrets/knowledge_api_tokens
       ASCAM_ORCH_TOKEN_CLIENT: orchestrator
       ASCAM_ORCH_OBDF: bansos
-      # jalankan.sh memberi grup baru setiap reset dan memulai dari pesan terbaru
+      # restart-ascam.sh gives a new group on every reset and starts from the latest message
       ASCAM_ORCH_GROUP_ID: '${ASCAM_ORCH_GROUP_ID:-ascam-orchestrator}'
       ASCAM_ORCH_OFFSET_RESET: '${ASCAM_ORCH_OFFSET_RESET:-earliest}'
     secrets: [knowledge_api_tokens]

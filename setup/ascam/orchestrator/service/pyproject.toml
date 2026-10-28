@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ascam-orchestrator"
 version = "0.1.0"
-description = "Orchestrator ASCAM: konsumsi event DDL dari Kafka, normalisasi, kirim ke Knowledge"
+description = "ASCAM Orchestrator (Event Normalizer): consumes DDL events from Kafka, normalises them, sends them to Knowledge"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110,<1",

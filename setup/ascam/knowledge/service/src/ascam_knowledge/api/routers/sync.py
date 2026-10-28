@@ -1,4 +1,4 @@
-"""Endpoint sync dan penjelajahan versi spesifikasi."""
+"""Sync endpoints and browsing of specification versions."""
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -26,15 +26,15 @@ CONTENT_TABLES = {
 @router.post('/obdf/{obdf_id}/sync', response_model=SyncResultOut)
 def run_sync(obdf_id: int, request: Request, db: Session = Depends(get_db),
              actor: str = Depends(current_actor)):
-    """Mengambil spesifikasi OBDF yang berjalan dan menyimpannya sebagai versi baru bila berubah."""
+    """Read the specification of the running OBDF and store it as a new version if it changed."""
     svc.get_obdf(db, obdf_id)
     clients = getattr(request.app.state, 'sync_clients', None)
     try:
         result = sync_obdf(db, obdf_id, request.app.state.secret_box, actor,
                            trigger='manual', clients=clients(db, obdf_id) if clients else None)
     except Exception as exc:                            # noqa: BLE001
-        # transaksi permintaan di-rollback; catatan kegagalan ditulis dan di-commit terpisah
-        # agar jejak sync yang gagal tidak ikut hilang.
+        # the request transaction is rolled back; the failure record is written and committed
+        # separately so that the trail of a failed sync is not lost with it.
         db.rollback()
         db.add(ops.SyncRun(obdf_id=obdf_id, trigger='manual', status='failed',
                            started_at=datetime.now(timezone.utc),
@@ -44,7 +44,7 @@ def run_sync(obdf_id: int, request: Request, db: Session = Depends(get_db),
                             object_kind='obdf', object_ref=str(obdf_id),
                             detail={'error': type(exc).__name__}))
         db.commit()
-        raise HTTPException(502, f'sync gagal: {type(exc).__name__}: {str(exc)[:300]}')
+        raise HTTPException(502, f'sync failed: {type(exc).__name__}: {str(exc)[:300]}')
     return SyncResultOut(**result.__dict__)
 
 
@@ -60,7 +60,7 @@ def list_versions(obdf_id: int, limit: int = 20, db: Session = Depends(get_db)):
 def version_detail(version_id: int, db: Session = Depends(get_db)):
     version = db.get(spec.SpecVersion, version_id)
     if version is None:
-        raise svc.NotFound(f'versi spesifikasi {version_id} tidak ditemukan')
+        raise svc.NotFound(f'specification version {version_id} not found')
     counts = {name: db.execute(select(func.count()).select_from(model)
                                .filter_by(spec_version_id=version_id)).scalar()
               for name, model in CONTENT_TABLES.items()}
@@ -79,7 +79,7 @@ def version_artifact(version_id: int, kind: str, db: Session = Depends(get_db)):
     row = db.execute(select(spec.Artifact).filter_by(spec_version_id=version_id, kind=kind)
                      ).scalar_one_or_none()
     if row is None:
-        raise svc.NotFound(f'artefak {kind} tidak ada pada versi {version_id}')
+        raise svc.NotFound(f'artifact {kind} does not exist in version {version_id}')
     return {'kind': row.kind, 'name': row.name, 'media_type': row.media_type,
             'sha256': row.sha256, 'content': row.content}
 

@@ -1,16 +1,16 @@
 """
-Normalisasi pesan monitor skema menjadi event terformalisasi (D7).
+Normalisation of schema monitor messages into formalised events (D7).
 
-Bentuk pesan (terbukti pada F3-probe): envelope Debezium dengan `after` berisi baris
-`ddl_event_log`: `schema_name` (PostgreSQL) atau `db_name` (MySQL), `table_name`,
+Message shape (shown in the F3 probe): a Debezium envelope whose `after` holds a row of
+`ddl_event_log`: `schema_name` (PostgreSQL) or `db_name` (MySQL), `table_name`,
 `alter_type`, `column_name`, `ddl_command`, `is_regulated`, `captured_at`.
 
-Dua hal yang tidak dapat diambil langsung dari baris log:
-  * nama kolom BARU pada RENAME — monitor hanya menyimpan nama lama;
-  * DDL yang memuat beberapa pernyataan sekaligus — baris log hanya mencatat satu jenis.
-Keduanya diselesaikan dengan menguraikan `ddl_command` memakai sqlglot. Bila penguraian gagal,
-event tetap dibentuk dari baris log (RENAME tanpa nama baru akan dieskalasi Knowledge), dan
-pernyataan yang tidak didukung dikirim sebagai operasi `other` agar tetap terlihat administrator.
+Two things cannot be taken directly from the log row:
+  * the NEW column name of a RENAME — the monitor stores only the old name;
+  * DDL holding several statements at once — the log row records only one kind.
+Both are resolved by parsing `ddl_command` with sqlglot. If parsing fails, the event is still
+built from the log row (a RENAME without a new name is then notified by Knowledge), and
+unsupported statements are sent as operation `other` so that they stay visible to the administrator.
 """
 import uuid
 from dataclasses import dataclass, field
@@ -22,7 +22,7 @@ from sqlglot import exp
 NAMESPACE = uuid.NAMESPACE_URL
 DIALECT = {'postgresql': 'postgres', 'mysql': 'mysql'}
 ALTER_TYPE = {'ADD COLUMN': 'add', 'DROP COLUMN': 'drop', 'RENAME COLUMN': 'rename'}
-INSERT_OPS = {'c', 'r'}                      # create dan snapshot read
+INSERT_OPS = {'c', 'r'}                      # create and snapshot read
 
 
 @dataclass
@@ -58,7 +58,7 @@ def _table_name(node) -> tuple[str | None, str]:
 
 
 def _actions(ddl: str, dialect: str) -> list[dict]:
-    """Daftar operasi kolom pada satu teks DDL (dapat memuat beberapa pernyataan)."""
+    """The column operations in one DDL text (which may hold several statements)."""
     out: list[dict] = []
     for statement in sqlglot.parse(ddl, dialect=dialect):
         if not isinstance(statement, exp.Alter):
@@ -87,22 +87,22 @@ def _actions(ddl: str, dialect: str) -> list[dict]:
 
 
 def skip_reason(value: Any) -> str:
-    """Mengapa pesan tidak menghasilkan event; dipakai agar pesan tidak dibuang tanpa jejak."""
+    """Why a message gives no event; used so that messages are never dropped without a trace."""
     if value is None:
-        return 'pesan kosong (tombstone)'
+        return 'empty message (tombstone)'
     if isinstance(value, (str, bytes)):
-        return f'isi pesan berupa {type(value).__name__}, bukan objek JSON (kemungkinan converter berubah)'
+        return f'message value is {type(value).__name__}, not a JSON object (the converter may have changed)'
     if not isinstance(value, dict):
-        return f'isi pesan bertipe {type(value).__name__}'
+        return f'message value has type {type(value).__name__}'
     payload = _unwrap(value)
     if payload is None:
-        return 'envelope tanpa payload'
+        return 'envelope without payload'
     op = payload.get('op')
     if op not in INSERT_OPS:
-        return f"operasi Debezium {op!r} bukan INSERT/snapshot (kunci: {sorted(payload)[:8]})"
+        return f"Debezium operation {op!r} is not INSERT/snapshot (keys: {sorted(payload)[:8]})"
     if not isinstance(payload.get('after'), dict):
-        return 'tidak ada baris after'
-    return 'tidak ada pernyataan kolom'
+        return 'no after row'
+    return 'no column statement'
 
 
 def normalize(topic: str, partition: int, offset: int, value: Any, source: str,
@@ -123,20 +123,20 @@ def normalize(topic: str, partition: int, offset: int, value: Any, source: str,
 
     try:
         actions = _actions(ddl, DIALECT.get(dbms, 'postgres'))
-    except Exception as exc:                    # noqa: BLE001 — DDL tidak dapat diurai
+    except Exception as exc:                    # noqa: BLE001 — the DDL cannot be parsed
         actions = []
         base_raw['parse_error'] = f'{type(exc).__name__}: {exc}'[:300]
 
-    if not actions:                             # cadangan: pakai baris log apa adanya
+    if not actions:                             # fallback: use the log row as it is
         operation = ALTER_TYPE.get((row.get('alter_type') or '').upper(), 'other')
         actions = [{'operation': operation, 'schema': schema, 'table': table,
                     'column': row.get('column_name')}]
-        base_raw['fallback'] = 'dari baris log; ddl_command tidak diurai'
+        base_raw['fallback'] = 'from the log row; ddl_command was not parsed'
 
-    # Kunci idempotensi diturunkan dari DDL itu sendiri (sumber, id baris log, dan waktu
-    # tangkap), BUKAN dari offset Kafka. Offset kembali ke 0 bila topik dibuat ulang, sehingga
-    # DDL baru mendapat uid yang sama dengan event lama dan dianggap duplikat (temuan F6).
-    identitas = (f"{source}:{row.get('id')}:{captured_at}"
+    # The idempotency key is derived from the DDL itself (source, log row id, and capture time),
+    # NOT from the Kafka offset. The offset returns to 0 when the topic is recreated, so a new
+    # DDL would get the uid of an old event and be treated as a duplicate (finding of F6).
+    identity = (f"{source}:{row.get('id')}:{captured_at}"
                  if row.get('id') is not None and captured_at else f'{topic}:{partition}:{offset}')
     events = []
     for index, action in enumerate(actions):
@@ -144,7 +144,7 @@ def normalize(topic: str, partition: int, offset: int, value: Any, source: str,
         if 'unsupported' in action:
             raw['unsupported_statement'] = action['unsupported']
         events.append(Normalized(
-            event_uid=str(uuid.uuid5(NAMESPACE, f'ascam:{identitas}:{index}')),
+            event_uid=str(uuid.uuid5(NAMESPACE, f'ascam:{identity}:{index}')),
             operation=action['operation'], source=source,
             schema=action.get('schema') or schema, table=action.get('table') or table,
             column=action.get('column'), new_column=action.get('new_column'),

@@ -1,10 +1,10 @@
 """
-Penerimaan event skema dan pembentukan rencana adaptasi.
+Intake of schema events and creation of adaptation plans.
 
-Orchestrator mengirim event terformalisasi ke sini; aturan keputusan tetap berada di satu
-tempat (ADR-0015). Event bersifat idempoten berdasarkan `event_uid`, dan setiap rencana
-menyimpan versi spesifikasi yang menjadi dasarnya (optimistic concurrency): rencana yang dibuat
-di atas versi lama tidak boleh dieksekusi setelah spesifikasi berubah.
+The Orchestrator sends formalised events here; the decision rules stay in one place
+(ADR-0015). Events are idempotent by `event_uid`, and every plan stores the specification
+version it was computed on (optimistic concurrency): a plan built on an old version must not
+be executed after the specification has changed.
 """
 import uuid
 from datetime import datetime, timezone
@@ -32,25 +32,25 @@ def _plan_out(db: Session, plan: ops.AdaptationPlan) -> PlanOut:
         update={'actions': [PlanActionOut.model_validate(a) for a in actions]})
 
 
-def _objek(struktur: dict) -> str:
-    return '.'.join(x for x in (struktur.get('schema'), struktur.get('table'),
-                                struktur.get('column')) if x)
+def _object_label(event_fields: dict) -> str:
+    return '.'.join(x for x in (event_fields.get('schema'), event_fields.get('table'),
+                                event_fields.get('column')) if x)
 
 
-def _pesan_notifikasi(source: str, struktur: dict, report) -> str:
-    operasi = struktur.get('operation', '').upper()
-    alasan = '; '.join(report.reasons)[:300]
+def _notification_message(source: str, event_fields: dict, report) -> str:
+    op = event_fields.get('operation', '').upper()
+    reasons_text = '; '.join(report.reasons)[:300]
     if report.decision == 'hitl':
-        return (f'Perubahan {operasi} pada {source}:{_objek(struktur)} menunggu persetujuan '
-                f'({len(report.actions)} tindakan direncanakan). Alasan: {alasan}')
-    # notify: tidak ada tindakan; pesan menyebut 𝒟(c, ℱ) agar administrator tahu yang harus diperbaiki
-    dampak = report.affected or {}
-    bagian = [f"{judul} {', '.join(x.rsplit('#', 1)[-1].rsplit('/', 1)[-1] for x in dampak[k])}"
-              for k, judul in (('views', 'view'), ('triples_maps', 'TriplesMap'),
-                               ('predicates', 'property')) if dampak.get(k)]
-    return (f'Perubahan {operasi} pada {source}:{_objek(struktur)} tidak dapat diadaptasi otomatis '
-            f'dan tidak dieksekusi. Terdampak: {"; ".join(bagian) or "-"}. Alasan: {alasan}. '
-            'Perbaiki spesifikasi OBDF secara manual, lalu jalankan sinkronisasi.')
+        return (f'{op} change on {source}:{_object_label(event_fields)} is waiting for approval '
+                f'({len(report.actions)} actions planned). Reasons: {reasons_text}')
+    # notify: no actions; the message names 𝒟(c, ℱ) so the administrator knows what to repair
+    affected = report.affected or {}
+    parts = [f"{title} {', '.join(x.rsplit('#', 1)[-1].rsplit('/', 1)[-1] for x in affected[k])}"
+              for k, title in (('views', 'view'), ('triples_maps', 'TriplesMap'),
+                               ('predicates', 'property')) if affected.get(k)]
+    return (f'{op} change on {source}:{_object_label(event_fields)} cannot be adapted automatically '
+            f'and was not executed. Affected: {"; ".join(parts) or "-"}. Reasons: {reasons_text}. '
+            'Repair the OBDF specification by hand, then run a sync.')
 
 
 @router.post('/obdf/{obdf_id}/events', response_model=EventResultOut)
@@ -62,12 +62,12 @@ def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
     if existing is not None:
         plan = db.execute(select(ops.AdaptationPlan).filter_by(event_id=existing.id)
                           .order_by(ops.AdaptationPlan.id.desc())).scalars().first()
-        # uid yang sama dengan isi berbeda menandakan kunci idempotensi bertabrakan; ditandai
-        # agar tidak lolos diam-diam sebagai duplikat (temuan F6)
+        # the same uid with different content means the idempotency key collided; it is flagged
+        # so that it does not pass silently as a duplicate (finding of F6)
         conflict = existing.structured != body.structured()
         if conflict:
             svc.audit(db, actor, 'event_uid_conflict', obdf_id, 'schema_event', str(existing.id),
-                      event_uid=str(event_uid), baru=body.structured())
+                      event_uid=str(event_uid), new=body.structured())
         return EventResultOut(event=EventOut.model_validate(existing), duplicate=True,
                               conflict=conflict, plan=_plan_out(db, plan) if plan else None)
 
@@ -104,7 +104,7 @@ def ingest_event(obdf_id: int, body: EventIn, db: Session = Depends(get_db),
     event.status = 'planned'
     if report.decision in ('hitl', 'notify'):
         db.add(ops.Notification(obdf_id=obdf_id, plan_id=plan.id, severity='warning',
-                                message=_pesan_notifikasi(body.source, body.structured(), report)))
+                                message=_notification_message(body.source, body.structured(), report)))
     svc.audit(db, actor, 'plan_created', obdf_id, 'adaptation_plan', str(plan.id),
               decision=report.decision, pattern=report.pattern)
     db.flush()
@@ -136,7 +136,7 @@ def list_plans(obdf_id: int, status: str | None = None, limit: int = 50,
 def get_plan(plan_id: int, db: Session = Depends(get_db)):
     plan = db.get(ops.AdaptationPlan, plan_id)
     if plan is None:
-        raise svc.NotFound(f'rencana {plan_id} tidak ditemukan')
+        raise svc.NotFound(f'plan {plan_id} not found')
     return _plan_out(db, plan)
 
 
@@ -145,9 +145,9 @@ def _decide(db: Session, plan_id: int, actor: str, approve: bool,
     note = body.note if body else None
     plan = db.get(ops.AdaptationPlan, plan_id)
     if plan is None:
-        raise svc.NotFound(f'rencana {plan_id} tidak ditemukan')
+        raise svc.NotFound(f'plan {plan_id} not found')
     if plan.status != 'pending_approval':
-        raise HTTPException(409, f'rencana berstatus {plan.status}, tidak dapat diputuskan lagi')
+        raise HTTPException(409, f'plan has status {plan.status} and can no longer be decided')
     event = db.get(ops.SchemaEvent, plan.event_id)
     if approve:
         active = impact_service.active_version(db, event.obdf_id)
@@ -157,25 +157,25 @@ def _decide(db: Session, plan_id: int, actor: str, approve: bool,
             svc.audit(db, actor, 'plan_superseded', event.obdf_id, 'adaptation_plan', str(plan.id),
                       base_spec_version_id=plan.base_spec_version_id,
                       active_spec_version_id=active.id if active else None)
-            # penandaan di-commit terpisah: HTTPException membuat transaksi permintaan di-rollback
+            # the flag is committed separately: HTTPException makes the request transaction roll back
             db.commit()
-            raise HTTPException(409, 'spesifikasi sudah berubah sejak rencana dibuat; '
-                                     'rencana ditandai superseded dan perlu disusun ulang')
-    pilihan = body is not None and body.property_name is not None
-    if pilihan and not approve:
-        raise HTTPException(422, 'nama dan domain property hanya diberikan saat menyetujui')
-    if pilihan and plan.pattern != 'P-001':
-        raise HTTPException(422, 'nama dan domain property hanya berlaku untuk penambahan kolom')
+            raise HTTPException(409, 'the specification has changed since the plan was created; '
+                                     'the plan is marked superseded and must be built again')
+    choice = body is not None and body.property_name is not None
+    if choice and not approve:
+        raise HTTPException(422, 'a property name and domain are given only when approving')
+    if choice and plan.pattern != 'P-001':
+        raise HTTPException(422, 'a property name and domain apply only to column additions')
     now = datetime.now(timezone.utc)
     decided = plan
-    if pilihan:
+    if choice:
         try:
-            iri, tindakan = impact_service.revise_add(db, plan, body.property_name.strip(), body.domain)
+            iri, new_actions = impact_service.revise_add(db, plan, body.property_name.strip(), body.domain)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
-        usulan = (plan.impact or {}).get('add_options') or {}
-        if (iri, body.domain) != (usulan.get('proposed_iri'), usulan.get('proposed_domain')):
-            decided = _revisi(db, plan, actor, now, iri, body.domain, tindakan)
+        proposal = (plan.impact or {}).get('add_options') or {}
+        if (iri, body.domain) != (proposal.get('proposed_iri'), proposal.get('proposed_domain')):
+            decided = _revise(db, plan, actor, now, iri, body.domain, new_actions)
     if decided is plan:
         plan.status = 'approved' if approve else 'rejected'
         plan.decided_by, plan.decided_at = actor, now
@@ -191,44 +191,44 @@ def _decide(db: Session, plan_id: int, actor: str, approve: bool,
     return _plan_out(db, decided)
 
 
-def _revisi(db: Session, plan: ops.AdaptationPlan, actor: str, now: datetime, iri: str,
-            domain: str | None, tindakan: list[dict]) -> ops.AdaptationPlan:
-    """Rencana ADD yang direvisi administrator. Baris ops bersifat append-only, sehingga revisi
-    menjadi rencana baru (`revision_of`) dan rencana asal berstatus `revised`."""
+def _revise(db: Session, plan: ops.AdaptationPlan, actor: str, now: datetime, iri: str,
+            domain: str | None, new_actions: list[dict]) -> ops.AdaptationPlan:
+    """ADD plan revised by the administrator. ops rows are append-only, so the revision becomes
+    a new plan (`revision_of`) and the original plan gets status `revised`."""
     impact = dict(plan.impact or {})
     impact['admin_choice'] = {'iri': iri, 'domain': domain}
-    revisi = ops.AdaptationPlan(
+    revision = ops.AdaptationPlan(
         event_id=plan.event_id, base_spec_version_id=plan.base_spec_version_id,
         pattern=plan.pattern, decision=plan.decision, status='approved', impact=impact,
-        reasons=[*plan.reasons, f"direvisi administrator: property {iri}, domain {domain or '-'}"],
+        reasons=[*plan.reasons, f"revised by the administrator: property {iri}, domain {domain or '-'}"],
         created_at=now, decided_by=actor, decided_at=now, revision_of=plan.id)
-    db.add(revisi)
+    db.add(revision)
     db.flush()
-    lama = db.execute(select(ops.PlanAction).filter_by(plan_id=plan.id, artifact='vdb')
+    old_actions = db.execute(select(ops.PlanAction).filter_by(plan_id=plan.id, artifact='vdb')
                       .order_by(ops.PlanAction.seq)).scalars().all()
-    baru = [{'artifact': a.artifact, 'operation': a.operation, **a.params} for a in lama] + tindakan
-    for seq, action in enumerate(baru, start=1):
+    combined = [{'artifact': a.artifact, 'operation': a.operation, **a.params} for a in old_actions] + new_actions
+    for seq, action in enumerate(combined, start=1):
         params = {k: v for k, v in action.items() if k not in ('artifact', 'operation')}
-        db.add(ops.PlanAction(plan_id=revisi.id, seq=seq, artifact=action['artifact'],
+        db.add(ops.PlanAction(plan_id=revision.id, seq=seq, artifact=action['artifact'],
                               operation=action['operation'], params=params))
     plan.status = 'revised'
     plan.decided_by, plan.decided_at = actor, now
-    return revisi
+    return revision
 
 
 @router.post('/plans/{plan_id}/supersede', response_model=PlanOut)
 def supersede_plan(plan_id: int, body: DecisionIn | None = None, db: Session = Depends(get_db),
                    actor: str = Depends(current_actor)):
-    """Menandai rencana usang agar tidak dieksekusi atau dicoba ulang.
+    """Mark a plan as superseded so that it is neither executed nor retried.
 
-    Dipakai Executor ketika versi dasar rencana tidak lagi aktif, dan oleh prosedur eksperimen
-    untuk menetralkan rencana yang timbul dari langkah pemulihan antar-run.
+    Used by the Executor when the base version of a plan is no longer active, and by the
+    experiment procedure to neutralise plans that come from the restoration steps between runs.
     """
     plan = db.get(ops.AdaptationPlan, plan_id)
     if plan is None:
-        raise svc.NotFound(f'rencana {plan_id} tidak ditemukan')
+        raise svc.NotFound(f'plan {plan_id} not found')
     if plan.status not in ('approved', 'pending_approval'):
-        raise HTTPException(409, f'rencana berstatus {plan.status}, tidak dapat ditandai usang')
+        raise HTTPException(409, f'plan has status {plan.status} and cannot be marked superseded')
     plan.status = 'superseded'
     plan.decided_by, plan.decided_at = actor, datetime.now(timezone.utc)
     event = db.get(ops.SchemaEvent, plan.event_id)
@@ -266,7 +266,7 @@ def acknowledge_notification(notification_id: int, db: Session = Depends(get_db)
                              actor: str = Depends(current_actor)):
     notification = db.get(ops.Notification, notification_id)
     if notification is None:
-        raise svc.NotFound(f'notifikasi {notification_id} tidak ditemukan')
+        raise svc.NotFound(f'notification {notification_id} not found')
     if not notification.acknowledged:
         notification.acknowledged = True
         notification.acknowledged_by = actor

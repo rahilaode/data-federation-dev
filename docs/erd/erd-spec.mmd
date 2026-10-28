@@ -1,0 +1,363 @@
+erDiagram
+    registry_source_system["registry.source_system"]
+    registry_obdf_instance["registry.obdf_instance"]
+    ops_adaptation_plan["ops.adaptation_plan"]
+    spec_artifact["spec.artifact"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        text kind UK "not null"
+        text name UK "not null"
+        text media_type "not null"
+        text content "not null"
+        character sha256 "not null"
+        timestamptz created_at "not null"
+    }
+    spec_column_usage["spec.column_usage"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint foreign_column_id FK "not null"
+        bigint triples_map_id FK "not null"
+        bigint term_map_id FK
+        text role "not null"
+        text predicate_iri
+        bigint predicate_entity_id FK
+        jsonb path "not null"
+        text weakest_link "not null"
+    }
+    spec_consistency_issue["spec.consistency_issue"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        text code "not null"
+        text severity "not null"
+        text subject_kind
+        text subject_ref
+        text message "not null"
+        text detected_by "not null"
+        timestamptz created_at "not null"
+    }
+    spec_join_condition["spec.join_condition"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint term_map_id FK "not null"
+        text child_column "not null"
+        text parent_column "not null"
+        text parent_triples_map_iri "not null"
+    }
+    spec_logical_column["spec.logical_column"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint triples_map_id FK,UK "not null"
+        text name UK "not null"
+        text expression_kind "not null"
+        text expression_sql
+    }
+    spec_logical_column_source["spec.logical_column_source"] {
+        bigint spec_version_id PK,FK "not null"
+        bigint logical_column_id PK,FK "not null"
+        bigint teiid_column_id PK,FK "not null"
+    }
+    spec_logical_source["spec.logical_source"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint triples_map_id FK "not null"
+        bigint teiid_table_id FK
+        text reference_name "not null"
+        text alias
+    }
+    spec_ont_annotation["spec.ont_annotation"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint entity_id FK "not null"
+        text property_iri "not null"
+        text value "not null"
+        text lang
+        text managed_by "not null"
+    }
+    spec_ont_domain["spec.ont_domain"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint entity_id FK "not null"
+        text class_expression "not null"
+        boolean is_simple "not null"
+    }
+    spec_ont_entity["spec.ont_entity"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint ontology_id FK,UK "not null"
+        text iri UK "not null"
+        text kind UK "not null"
+        text declared_in "not null"
+        boolean deprecated "not null"
+        boolean functional "not null"
+        text managed_by "not null"
+        bigint introduced_in_version FK
+    }
+    spec_ont_import["spec.ont_import"] {
+        bigint spec_version_id PK,FK "not null"
+        bigint ontology_id PK,FK "not null"
+        text imported_iri PK "not null"
+    }
+    spec_ont_property_relation["spec.ont_property_relation"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint entity_id FK "not null"
+        text relation "not null"
+        text other_iri "not null"
+    }
+    spec_ont_range["spec.ont_range"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint entity_id FK "not null"
+        text range_iri "not null"
+        boolean owl2ql_compatible
+    }
+    spec_ontology["spec.ontology"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint artifact_id FK
+        text iri UK "not null"
+        text version_iri
+        text version_info
+    }
+    spec_predicate_object_map["spec.predicate_object_map"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint triples_map_id FK,UK "not null"
+        text signature UK "not null"
+        text managed_by "not null"
+        bigint introduced_in_version FK
+    }
+    spec_rdf_triple["spec.rdf_triple"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint artifact_id FK "not null"
+        text subject "not null"
+        text predicate "not null"
+        text object "not null"
+        text object_kind "not null"
+        text datatype
+        text lang
+    }
+    spec_spec_version["spec.spec_version"] {
+        bigint id PK "not null"
+        bigint obdf_id FK,UK "not null"
+        integer version_no UK "not null"
+        bigint parent_id FK
+        text origin "not null"
+        text status "not null"
+        text teiid_vdb_name
+        text teiid_vdb_version
+        text teiid_connection_type
+        bigint plan_id FK
+        text note
+        timestamptz created_at "not null"
+        timestamptz sealed_at
+        text content_digest
+    }
+    spec_sql_reference["spec.sql_reference"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint triples_map_id FK "not null"
+        bigint teiid_column_id FK "not null"
+        text clause "not null"
+    }
+    spec_subject_class["spec.subject_class"] {
+        bigint spec_version_id PK,FK "not null"
+        bigint triples_map_id PK,FK "not null"
+        text class_iri PK "not null"
+    }
+    spec_teiid_alter["spec.teiid_alter"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint model_id FK,UK "not null"
+        integer seq UK "not null"
+        text statement "not null"
+        bigint plan_id FK
+    }
+    spec_teiid_column["spec.teiid_column"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint table_id FK,UK "not null"
+        text uid
+        text name UK "not null"
+        text name_in_source
+        text source_column
+        integer position "not null"
+        text data_type "not null"
+        text native_type
+        boolean nullable
+        integer length
+        integer precision
+        integer scale
+        boolean in_primary_key "not null"
+        text managed_by "not null"
+        bigint introduced_in_version FK
+    }
+    spec_teiid_dependency["spec.teiid_dependency"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint dependent_table_id FK "not null"
+        bigint dependent_column_id FK
+        bigint used_table_id FK "not null"
+        bigint used_column_id FK
+        text derived_role "not null"
+    }
+    spec_teiid_model["spec.teiid_model"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        text name UK "not null"
+        text model_type "not null"
+        boolean visible "not null"
+    }
+    spec_teiid_model_source["spec.teiid_model_source"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint model_id FK,UK "not null"
+        text source_name UK "not null"
+        text translator "not null"
+        text jndi_name
+        bigint source_system_id FK
+    }
+    spec_teiid_routine["spec.teiid_routine"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK "not null"
+        bigint model_id FK "not null"
+        text kind "not null"
+        text name "not null"
+        text table_name
+        text body
+    }
+    spec_teiid_table["spec.teiid_table"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint model_id FK,UK "not null"
+        text uid
+        text name UK "not null"
+        text kind "not null"
+        text name_in_source
+        text source_schema
+        text source_table
+        text managed_by "not null"
+        bigint introduced_in_version FK
+    }
+    spec_teiid_view["spec.teiid_view"] {
+        bigint spec_version_id PK,FK "not null"
+        bigint table_id PK,FK "not null"
+        text body "not null"
+        text parse_status "not null"
+        boolean uses_star "not null"
+    }
+    spec_teiid_view_column["spec.teiid_view_column"] {
+        bigint spec_version_id PK,FK "not null"
+        bigint column_id PK,FK "not null"
+        text expression_kind "not null"
+        text expression_sql
+    }
+    spec_term_map["spec.term_map"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint triples_map_id FK "not null"
+        bigint pom_id FK
+        text position "not null"
+        text value_kind "not null"
+        text value "not null"
+        text term_type
+        text datatype
+        text language
+    }
+    spec_term_map_column["spec.term_map_column"] {
+        bigint spec_version_id PK,FK "not null"
+        bigint term_map_id PK,FK "not null"
+        bigint logical_column_id PK,FK "not null"
+        integer template_position
+    }
+    spec_triples_map["spec.triples_map"] {
+        bigint id PK "not null"
+        bigint spec_version_id FK,UK "not null"
+        bigint artifact_id FK
+        text iri UK "not null"
+        text logical_table_kind "not null"
+        text table_name
+        text sql_query
+        text sql_parse_status "not null"
+        text managed_by "not null"
+        bigint introduced_in_version FK
+    }
+    spec_spec_version ||--o{ spec_artifact : "spec_version_id"
+    spec_teiid_column ||--o{ spec_column_usage : "spec_version_id,foreign_column_id"
+    spec_ont_entity |o--o{ spec_column_usage : "spec_version_id,predicate_entity_id"
+    spec_spec_version ||--o{ spec_column_usage : "spec_version_id"
+    spec_term_map |o--o{ spec_column_usage : "spec_version_id,term_map_id"
+    spec_triples_map ||--o{ spec_column_usage : "spec_version_id,triples_map_id"
+    spec_spec_version ||--o{ spec_consistency_issue : "spec_version_id"
+    spec_spec_version ||--o{ spec_join_condition : "spec_version_id"
+    spec_term_map ||--o{ spec_join_condition : "spec_version_id,term_map_id"
+    spec_spec_version ||--o{ spec_logical_column : "spec_version_id"
+    spec_triples_map ||--o{ spec_logical_column : "spec_version_id,triples_map_id"
+    spec_logical_column ||--o{ spec_logical_column_source : "spec_version_id,logical_column_id"
+    spec_spec_version ||--o{ spec_logical_column_source : "spec_version_id"
+    spec_teiid_column ||--o{ spec_logical_column_source : "spec_version_id,teiid_column_id"
+    spec_spec_version ||--o{ spec_logical_source : "spec_version_id"
+    spec_teiid_table |o--o{ spec_logical_source : "spec_version_id,teiid_table_id"
+    spec_triples_map ||--o{ spec_logical_source : "spec_version_id,triples_map_id"
+    spec_ont_entity ||--o{ spec_ont_annotation : "spec_version_id,entity_id"
+    spec_spec_version ||--o{ spec_ont_annotation : "spec_version_id"
+    spec_ont_entity ||--o{ spec_ont_domain : "spec_version_id,entity_id"
+    spec_spec_version ||--o{ spec_ont_domain : "spec_version_id"
+    spec_spec_version |o--o{ spec_ont_entity : "introduced_in_version"
+    spec_ontology ||--o{ spec_ont_entity : "spec_version_id,ontology_id"
+    spec_spec_version ||--o{ spec_ont_entity : "spec_version_id"
+    spec_ontology ||--o{ spec_ont_import : "spec_version_id,ontology_id"
+    spec_spec_version ||--o{ spec_ont_import : "spec_version_id"
+    spec_ont_entity ||--o{ spec_ont_property_relation : "spec_version_id,entity_id"
+    spec_spec_version ||--o{ spec_ont_property_relation : "spec_version_id"
+    spec_ont_entity ||--o{ spec_ont_range : "spec_version_id,entity_id"
+    spec_spec_version ||--o{ spec_ont_range : "spec_version_id"
+    spec_artifact |o--o{ spec_ontology : "spec_version_id,artifact_id"
+    spec_spec_version ||--o{ spec_ontology : "spec_version_id"
+    spec_spec_version |o--o{ spec_predicate_object_map : "introduced_in_version"
+    spec_spec_version ||--o{ spec_predicate_object_map : "spec_version_id"
+    spec_triples_map ||--o{ spec_predicate_object_map : "spec_version_id,triples_map_id"
+    spec_artifact ||--o{ spec_rdf_triple : "spec_version_id,artifact_id"
+    spec_spec_version ||--o{ spec_rdf_triple : "spec_version_id"
+    registry_obdf_instance ||--o{ spec_spec_version : "obdf_id"
+    spec_spec_version |o--o{ spec_spec_version : "parent_id"
+    ops_adaptation_plan |o--o{ spec_spec_version : "plan_id"
+    spec_spec_version ||--o{ spec_sql_reference : "spec_version_id"
+    spec_teiid_column ||--o{ spec_sql_reference : "spec_version_id,teiid_column_id"
+    spec_triples_map ||--o{ spec_sql_reference : "spec_version_id,triples_map_id"
+    spec_spec_version ||--o{ spec_subject_class : "spec_version_id"
+    spec_triples_map ||--o{ spec_subject_class : "spec_version_id,triples_map_id"
+    ops_adaptation_plan |o--o{ spec_teiid_alter : "plan_id"
+    spec_teiid_model ||--o{ spec_teiid_alter : "spec_version_id,model_id"
+    spec_spec_version ||--o{ spec_teiid_alter : "spec_version_id"
+    spec_spec_version |o--o{ spec_teiid_column : "introduced_in_version"
+    spec_spec_version ||--o{ spec_teiid_column : "spec_version_id"
+    spec_teiid_table ||--o{ spec_teiid_column : "spec_version_id,table_id"
+    spec_teiid_column |o--o{ spec_teiid_dependency : "spec_version_id,dependent_column_id"
+    spec_teiid_table ||--o{ spec_teiid_dependency : "spec_version_id,dependent_table_id"
+    spec_spec_version ||--o{ spec_teiid_dependency : "spec_version_id"
+    spec_teiid_column |o--o{ spec_teiid_dependency : "spec_version_id,used_column_id"
+    spec_teiid_table ||--o{ spec_teiid_dependency : "spec_version_id,used_table_id"
+    spec_spec_version ||--o{ spec_teiid_model : "spec_version_id"
+    registry_source_system |o--o{ spec_teiid_model_source : "source_system_id"
+    spec_teiid_model ||--o{ spec_teiid_model_source : "spec_version_id,model_id"
+    spec_spec_version ||--o{ spec_teiid_model_source : "spec_version_id"
+    spec_teiid_model ||--o{ spec_teiid_routine : "spec_version_id,model_id"
+    spec_spec_version ||--o{ spec_teiid_routine : "spec_version_id"
+    spec_spec_version |o--o{ spec_teiid_table : "introduced_in_version"
+    spec_teiid_model ||--o{ spec_teiid_table : "spec_version_id,model_id"
+    spec_spec_version ||--o{ spec_teiid_table : "spec_version_id"
+    spec_spec_version ||--o{ spec_teiid_view : "spec_version_id"
+    spec_teiid_table ||--o| spec_teiid_view : "spec_version_id,table_id"
+    spec_teiid_column ||--o| spec_teiid_view_column : "spec_version_id,column_id"
+    spec_spec_version ||--o{ spec_teiid_view_column : "spec_version_id"
+    spec_predicate_object_map |o--o{ spec_term_map : "spec_version_id,pom_id"
+    spec_spec_version ||--o{ spec_term_map : "spec_version_id"
+    spec_triples_map ||--o{ spec_term_map : "spec_version_id,triples_map_id"
+    spec_logical_column ||--o{ spec_term_map_column : "spec_version_id,logical_column_id"
+    spec_spec_version ||--o{ spec_term_map_column : "spec_version_id"
+    spec_term_map ||--o{ spec_term_map_column : "spec_version_id,term_map_id"
+    spec_spec_version |o--o{ spec_triples_map : "introduced_in_version"
+    spec_artifact |o--o{ spec_triples_map : "spec_version_id,artifact_id"
+    spec_spec_version ||--o{ spec_triples_map : "spec_version_id"

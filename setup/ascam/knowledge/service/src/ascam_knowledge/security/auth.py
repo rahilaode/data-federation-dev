@@ -1,10 +1,10 @@
 """
-Autentikasi antarlayanan dengan bearer token.
+Service-to-service authentication with bearer tokens.
 
-Berkas token (Docker secret) berisi satu klien per baris: `<nama_klien>:<token>`.
-Token dibandingkan dengan waktu konstan (hmac.compare_digest) atas digest SHA-256.
-Aktor yang tercatat di audit = nama klien, ditambah pengguna UI bila klien mengirim
-header `X-ASCAM-User`.
+The token file (Docker secret) holds one client per line: `<client_name>:<token>`.
+Tokens are compared in constant time (hmac.compare_digest) over their SHA-256 digests.
+The actor recorded in the audit log is the client name, plus the UI user when the client
+sends the header `X-ASCAM-User`.
 """
 import hashlib
 import re
@@ -25,10 +25,10 @@ class TokenRegistry:
                 continue
             client, _, token = line.partition(':')
             if not client or not token:
-                raise ValueError('Format token harus <klien>:<token>')
+                raise ValueError('Token format must be <client>:<token>')
             self._digests.append((hashlib.sha256(token.encode()).digest(), client))
         if not self._digests:
-            raise ValueError('Tidak ada token API')
+            raise ValueError('No API token')
 
     @classmethod
     def from_file(cls, path: str) -> 'TokenRegistry':
@@ -38,7 +38,7 @@ class TokenRegistry:
     def client_for(self, token: str) -> str | None:
         digest = hashlib.sha256(token.encode()).digest()
         found = None
-        for known, client in self._digests:     # tanpa keluar lebih awal (waktu konstan)
+        for known, client in self._digests:     # no early exit (constant time)
             if hmac.compare_digest(known, digest):
                 found = client
         return found
@@ -52,10 +52,11 @@ def current_actor(request: Request,
     registry: TokenRegistry = request.app.state.tokens
     client = registry.client_for(creds.credentials) if creds else None
     if client is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, 'Token tidak valid',
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, 'Invalid token',
                             headers={'WWW-Authenticate': 'Bearer'})
-    # Hanya klien UI yang boleh menyatakan nama administrator yang bertindak (untuk jejak audit
-    # persetujuan HITL); formatnya dibatasi agar tidak dapat menyusupkan isi ke log.
+    # Only the UI client may state the name of the acting administrator (for the audit trail
+    # of HITL approvals); its format is restricted so that nothing can be injected into the log.
+
     user = request.headers.get('X-ASCAM-User')
     if user and client == 'ui' and USER_PATTERN.fullmatch(user):
         return f'{client}:{user}'

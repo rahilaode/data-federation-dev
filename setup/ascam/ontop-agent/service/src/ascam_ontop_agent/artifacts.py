@@ -1,4 +1,4 @@
-"""Pembacaan artefak OBDA (ℳ dan 𝒯) beserta sidik jarinya."""
+"""Reading of the OBDA artifacts (ℳ and 𝒯) with their fingerprints."""
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone

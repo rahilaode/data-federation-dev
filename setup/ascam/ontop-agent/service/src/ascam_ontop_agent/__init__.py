@@ -1,1 +1,1 @@
-"""Agen ASCAM pada host Ontop (lihat setup/ascam/ontop-agent/README.md)."""
+"""ASCAM agent on the Ontop host (see setup/ascam/ontop-agent/README.md)."""

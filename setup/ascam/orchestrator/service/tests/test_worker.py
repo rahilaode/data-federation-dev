@@ -1,11 +1,11 @@
-"""Pekerja Orchestrator: pengiriman event, penanganan galat, dan offset."""
+"""Orchestrator worker: sending events, error handling, and offsets."""
 from dataclasses import dataclass
 
 import pytest
 
 from ascam_orchestrator.config import Settings
 from ascam_orchestrator.worker import Orchestrator
-from test_normalizer import PG_ROW, pesan
+from test_normalizer import PG_ROW, message
 
 
 @dataclass
@@ -28,7 +28,7 @@ class FakeKnowledge:
     def sources(self, obdf_id):
         return [{'logical_name': 'kemensos', 'dbms': 'postgresql',
                  'kafka_topic': 'kemensos.schema_monitor.ddl_event_log'},
-                {'logical_name': 'tanpa-topik', 'dbms': 'mysql', 'kafka_topic': None}]
+                {'logical_name': 'no-topic', 'dbms': 'mysql', 'kafka_topic': None}]
 
     def kafka_bootstrap(self, obdf_id):
         return 'kafka:9092'
@@ -36,7 +36,7 @@ class FakeKnowledge:
     def post_event(self, obdf_id, payload):
         if self.fail_times:
             self.fail_times -= 1
-            raise RuntimeError('Knowledge tidak dapat dihubungi')
+            raise RuntimeError('Knowledge cannot be reached')
         self.posted.append(payload)
         return self.results.get(payload['operation'],
                                 {'event': {'status': 'planned'}, 'duplicate': False,
@@ -69,7 +69,7 @@ def build(batches, knowledge, stop_after=None):
     worker = Orchestrator(settings, knowledge=knowledge, consumer_factory=lambda t, b: consumer)
     original = consumer.poll
 
-    def poll(timeout_ms=0):                       # hentikan setelah batch habis
+    def poll(timeout_ms=0):                       # stop after the batch is used up
         result = original(timeout_ms)
         if not consumer.batches:
             worker.stop()
@@ -83,7 +83,7 @@ TOPIC = 'kemensos.schema_monitor.ddl_event_log'
 
 def test_messages_become_events_and_offsets_are_committed():
     knowledge = FakeKnowledge()
-    batch = {('p', 0): [Message(TOPIC, 0, 1, pesan(PG_ROW))]}
+    batch = {('p', 0): [Message(TOPIC, 0, 1, message(PG_ROW))]}
     worker, consumer = build([batch], knowledge)
     worker.run()
     assert len(knowledge.posted) == 1 and knowledge.posted[0]['operation'] == 'add'
@@ -96,7 +96,7 @@ def test_duplicate_and_ignored_events_are_counted():
     knowledge = FakeKnowledge(results={'add': {'event': {'status': 'planned'}, 'duplicate': True},
                                        'drop': {'event': {'status': 'ignored'}, 'duplicate': False}})
     row_drop = {**PG_ROW, 'ddl_command': 'ALTER TABLE public.x DROP COLUMN y;'}
-    batch = {('p', 0): [Message(TOPIC, 0, 1, pesan(PG_ROW)), Message(TOPIC, 0, 2, pesan(row_drop))]}
+    batch = {('p', 0): [Message(TOPIC, 0, 1, message(PG_ROW)), Message(TOPIC, 0, 2, message(row_drop))]}
     worker, _ = build([batch], knowledge)
     worker.run()
     assert worker.stats.duplicates == 1 and worker.stats.events_ignored == 1
@@ -104,17 +104,17 @@ def test_duplicate_and_ignored_events_are_counted():
 
 def test_failure_does_not_commit_and_rewinds_offset():
     knowledge = FakeKnowledge(fail_times=1)
-    batch = {('p', 0): [Message(TOPIC, 0, 7, pesan(PG_ROW))]}
+    batch = {('p', 0): [Message(TOPIC, 0, 7, message(PG_ROW))]}
     worker, consumer = build([batch], knowledge)
     worker.run()
-    assert consumer.commits == 0                       # offset tidak maju saat gagal
-    assert consumer.seeks == [(TOPIC, 7)]              # pesan akan dibaca ulang
-    assert worker.stats.failures == 1 and 'tidak dapat dihubungi' in worker.stats.last_error
+    assert consumer.commits == 0                       # the offset does not advance on failure
+    assert consumer.seeks == [(TOPIC, 7)]              # the message will be read again
+    assert worker.stats.failures == 1 and 'cannot be reached' in worker.stats.last_error
 
 
 def test_unknown_topic_is_skipped():
     knowledge = FakeKnowledge()
-    batch = {('p', 0): [Message('topik.asing', 0, 1, pesan(PG_ROW))]}
+    batch = {('p', 0): [Message('unknown.topic', 0, 1, message(PG_ROW))]}
     worker, _ = build([batch], knowledge)
     worker.run()
     assert knowledge.posted == [] and worker.stats.messages == 0
@@ -138,38 +138,38 @@ def test_health_endpoint_reports_stats():
     assert body['status'] == 'ok' and body['state'] == 'starting' and body['messages'] == 0
 
 
-# ── pemilihan token ─────────────────────────────────────────────────────────────
+# ── token selection ─────────────────────────────────────────────────────────────
 def test_token_is_selected_by_client_name(tmp_path):
-    berkas = tmp_path / 'tokens'
-    berkas.write_text('# komentar\nui:token-ui\norchestrator:token-orch\nexecutor:token-exec\n')
-    assert Settings(token_file=str(berkas)).bearer() == 'token-orch'
-    assert Settings(token_file=str(berkas), token_client='executor').bearer() == 'token-exec'
-    polos = tmp_path / 'polos'
-    polos.write_text('token-polos\n')
-    assert Settings(token_file=str(polos)).bearer() == 'token-polos'
-    with pytest.raises(RuntimeError, match='tidak ada'):
-        Settings(token_file=str(berkas), token_client='tidak-ada').bearer()
+    token_file = tmp_path / 'tokens'
+    token_file.write_text('# comment\nui:token-ui\norchestrator:token-orch\nexecutor:token-exec\n')
+    assert Settings(token_file=str(token_file)).bearer() == 'token-orch'
+    assert Settings(token_file=str(token_file), token_client='executor').bearer() == 'token-exec'
+    plain_file = tmp_path / 'plain'
+    plain_file.write_text('token-plain\n')
+    assert Settings(token_file=str(plain_file)).bearer() == 'token-plain'
+    with pytest.raises(RuntimeError, match='not found'):
+        Settings(token_file=str(token_file), token_client='does-not-exist').bearer()
 
 
 def test_worker_retries_preparation_until_knowledge_is_available():
-    """Regresi: Knowledge yang sedang restart membuat pekerja mati permanen."""
-    class KnowledgeTerlambat(FakeKnowledge):
-        def __init__(self, gagal):
+    """Regression: a Knowledge that was restarting killed the worker for good."""
+    class KnowledgeLate(FakeKnowledge):
+        def __init__(self, failures_left):
             super().__init__()
-            self.gagal = gagal
+            self.failures_left = failures_left
 
         def sources(self, obdf_id):
-            if self.gagal:
-                self.gagal -= 1
-                raise ConnectionRefusedError('Knowledge belum siap')
+            if self.failures_left:
+                self.failures_left -= 1
+                raise ConnectionRefusedError('Knowledge not ready')
             return super().sources(obdf_id)
 
-    knowledge = KnowledgeTerlambat(gagal=2)
-    batch = {('p', 0): [Message(TOPIC, 0, 1, pesan(PG_ROW))]}
+    knowledge = KnowledgeLate(failures_left=2)
+    batch = {('p', 0): [Message(TOPIC, 0, 1, message(PG_ROW))]}
     worker, consumer = build([batch], knowledge)
     worker.run()
     assert worker.stats.state == 'stopped'
-    assert len(knowledge.posted) == 1                  # pesan tetap diproses setelah pulih
+    assert len(knowledge.posted) == 1                  # the message is still processed after recovery
     assert worker.stats.last_error is None
 
 
@@ -180,35 +180,35 @@ def test_skipped_messages_are_counted_with_reason():
     worker.run()
     assert knowledge.posted == [] and worker.stats.skipped == 1
     assert worker.stats.last_skipped['offset'] == 5
-    assert "'u'" in worker.stats.last_skipped['alasan']
-    assert consumer.commits == 1                        # dilewati bukan gagal: offset tetap maju
+    assert "'u'" in worker.stats.last_skipped['reason']
+    assert consumer.commits == 1                        # skipped is not failed: the offset still advances
 
 
 def test_uid_conflict_is_counted():
     knowledge = FakeKnowledge(results={'add': {'event': {'status': 'planned'}, 'duplicate': True,
                                                'conflict': True}})
-    batch = {('p', 0): [Message(TOPIC, 0, 1, pesan(PG_ROW))]}
+    batch = {('p', 0): [Message(TOPIC, 0, 1, message(PG_ROW))]}
     worker, _ = build([batch], knowledge)
     worker.run()
     assert worker.stats.conflicts == 1 and worker.stats.duplicates == 1
 
 
 def test_offset_reset_is_passed_to_consumer(monkeypatch):
-    """Setelah Knowledge direset, grup baru mulai dari pesan terbaru agar DDL lama tidak diputar ulang."""
+    """After Knowledge is reset, a new group starts from the latest message so that old DDL is not replayed."""
     import ascam_orchestrator.worker as w
-    diterima = {}
+    received = {}
 
-    class KonsumenTiruan:
-        def __init__(self, *topik, **kwargs):
-            diterima.update(kwargs)
+    class RecordingConsumer:
+        def __init__(self, *topics, **kwargs):
+            received.update(kwargs)
 
-    monkeypatch.setattr(w, 'KafkaConsumer', KonsumenTiruan)
+    monkeypatch.setattr(w, 'KafkaConsumer', RecordingConsumer)
     worker = Orchestrator(Settings(token='t', group_id='ascam-orchestrator-20260922', offset_reset='latest'))
-    worker._consumer(['topik'], 'kafka:9092')
-    assert diterima['auto_offset_reset'] == 'latest'
-    assert diterima['group_id'] == 'ascam-orchestrator-20260922'
+    worker._consumer(['topic'], 'kafka:9092')
+    assert received['auto_offset_reset'] == 'latest'
+    assert received['group_id'] == 'ascam-orchestrator-20260922'
 
 
 def test_invalid_offset_reset_is_rejected():
-    with pytest.raises(ValueError, match='earliest atau latest'):
-        Settings(token='t', offset_reset='awal')
+    with pytest.raises(ValueError, match='earliest or latest'):
+        Settings(token='t', offset_reset='beginning')

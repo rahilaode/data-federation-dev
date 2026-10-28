@@ -1,23 +1,23 @@
-"""Penerimaan event skema, pembentukan rencana, dan alur persetujuan HITL."""
+"""Intake of schema events, creation of plans, and the HITL approval flow."""
 import uuid
 
 import pytest
 
 import fixtures_obdf as fx
-from test_impact import obdf                      # noqa: F401 — fixture OBDF tersinkron
+from test_impact import obdf                      # noqa: F401 — synced OBDF fixture
 from test_sync import set_clients
 
 
-def kirim(api, oid, **body):
+def send_event(api, oid, **body):
     r = api.post(f'/api/v1/obdf/{oid}/events', json=body)
     assert r.status_code == 200, r.text
     return r.json()
 
 
 def test_auto_event_creates_approved_plan_with_actions(api, obdf):
-    out = kirim(api, obdf, operation='drop', source='kemensos', schema='public',
+    out = send_event(api, obdf, operation='drop', source='kemensos', schema='public',
                 table='penerima_manfaat', column='status_ekonomi',
-                raw={'asal': 'debezium'})
+                raw={'origin': 'debezium'})
     assert out['event']['status'] == 'planned' and out['duplicate'] is False
     plan = out['plan']
     assert plan['decision'] == 'auto' and plan['status'] == 'approved' and plan['pattern'] == 'P-002'
@@ -29,9 +29,9 @@ def test_auto_event_creates_approved_plan_with_actions(api, obdf):
 
 def test_event_is_idempotent(api, obdf):
     uid = str(uuid.uuid4())
-    first = kirim(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
+    first = send_event(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
                   table='penerima_manfaat', column='status_ekonomi')
-    second = kirim(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
+    second = send_event(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
                    table='penerima_manfaat', column='status_ekonomi')
     assert second['duplicate'] is True
     assert second['event']['id'] == first['event']['id']
@@ -40,71 +40,71 @@ def test_event_is_idempotent(api, obdf):
 
 
 def test_unsafe_drop_is_notified_without_actions(api, obdf):
-    """ADR-0024: DROP yang tidak terbukti aman tidak menghasilkan rencana yang dapat disetujui,
-    hanya notifikasi yang menyebut elemen terdampak."""
-    out = kirim(api, obdf, operation='drop', source='dukcapil', table='master_penduduk', column='nik')
+    """ADR-0024: a DROP that is not shown to be safe gives no plan that can be approved, only a
+    notification that names the affected elements."""
+    out = send_event(api, obdf, operation='drop', source='dukcapil', table='master_penduduk', column='nik')
     plan = out['plan']
     assert plan['decision'] == 'notify' and plan['status'] == 'notified' and plan['actions'] == []
-    assert any('kunci primer' in r for r in plan['reasons'])
+    assert any('primary key' in r for r in plan['reasons'])
     assert plan['impact']['affected']['triples_maps']
     assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'pending_approval'}).json() == []
     assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json() == []
-    for aksi in ('approve', 'reject'):
-        assert api.post(f"/api/v1/plans/{plan['id']}/{aksi}").status_code == 409
-    pesan = [n['message'] for n in api.get(f'/api/v1/obdf/{obdf}/notifications').json()
+    for action in ('approve', 'reject'):
+        assert api.post(f"/api/v1/plans/{plan['id']}/{action}").status_code == 409
+    messages = [n['message'] for n in api.get(f'/api/v1/obdf/{obdf}/notifications').json()
              if n['plan_id'] == plan['id']]
-    assert pesan and 'tidak dieksekusi' in pesan[0] and 'TriplesMap' in pesan[0]
-    assert 'sinkronisasi' in pesan[0]
+    assert messages and 'was not executed' in messages[0] and 'TriplesMap' in messages[0]
+    assert 'run a sync' in messages[0]
 
 
 def test_hitl_event_waits_for_approval(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     assert plan['decision'] == 'hitl' and plan['status'] == 'pending_approval'
-    assert any('keputusan pemodelan' in r for r in plan['reasons'])
+    assert any('modelling decision' in r for r in plan['reasons'])
     pending = api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'pending_approval'}).json()
     assert [p['id'] for p in pending] == [plan['id']]
 
-    approved = api.post(f"/api/v1/plans/{plan['id']}/approve", json={'note': 'disetujui admin'}).json()
-    assert approved['status'] == 'approved' and approved['decided_by'] == 'ui:penguji'
-    lagi = api.post(f"/api/v1/plans/{plan['id']}/approve")
-    assert lagi.status_code == 409
+    approved = api.post(f"/api/v1/plans/{plan['id']}/approve", json={'note': 'approved by admin'}).json()
+    assert approved['status'] == 'approved' and approved['decided_by'] == 'ui:tester'
+    again = api.post(f"/api/v1/plans/{plan['id']}/approve")
+    assert again.status_code == 409
 
 
 def test_plan_can_be_rejected(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    rejected = api.post(f"/api/v1/plans/{plan['id']}/reject", json={'note': 'tidak disetujui'}).json()
+    rejected = api.post(f"/api/v1/plans/{plan['id']}/reject", json={'note': 'not approved'}).json()
     assert rejected['status'] == 'rejected'
     assert api.post(f"/api/v1/plans/{plan['id']}/approve").status_code == 409
 
 
 def test_stale_plan_cannot_be_approved(api, obdf):
-    """Spesifikasi berubah sejak rencana dibuat: rencana ditandai superseded."""
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    """The specification changed after the plan was created: the plan is marked superseded."""
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     set_clients(api, meta=fx.FakeMetadata(fx.metadata(extra_column=True)))
     assert api.post(f'/api/v1/obdf/{obdf}/sync').json()['changed']
     r = api.post(f"/api/v1/plans/{plan['id']}/approve")
-    assert r.status_code == 409 and 'sudah berubah' in r.json()['detail']
+    assert r.status_code == 409 and 'has changed' in r.json()['detail']
     assert api.get(f"/api/v1/plans/{plan['id']}").json()['status'] == 'superseded'
 
 
 def test_ignored_event_creates_no_plan(api, obdf):
-    out = kirim(api, obdf, operation='drop', source='kemensos', schema='public',
-                table='tabel_entah_apa', column='x')
+    out = send_event(api, obdf, operation='drop', source='kemensos', schema='public',
+                table='no_such_table', column='x')
     assert out['event']['status'] == 'ignored' and out['plan'] is None
-    assert 'tidak ditemukan' in out['event']['ignore_reason']
+    assert 'not found' in out['event']['ignore_reason']
     assert api.get(f'/api/v1/obdf/{obdf}/plans').json() == []
 
 
 def test_unknown_source_is_ignored(api, obdf):
-    out = kirim(api, obdf, operation='drop', source='sumber-asing', table='t', column='c')
+    out = send_event(api, obdf, operation='drop', source='unknown-source', table='t', column='c')
     assert out['event']['status'] == 'ignored' and out['event']['source_system_id'] is None
 
 
 def test_add_event_plans_property_and_mapping(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat_lengkap',
                  column_type='varchar(200)')['plan']
     assert plan['decision'] == 'hitl' and plan['pattern'] == 'P-001'
@@ -113,8 +113,8 @@ def test_add_event_plans_property_and_mapping(api, obdf):
 
 
 def test_event_history_and_audit(api, obdf):
-    # event membawa nama kolom DI SUMBER (tgl_lahir_ktp), bukan nama kolom Teiid (tanggal_lahir)
-    kirim(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
+    # the event carries the column name IN THE SOURCE (tgl_lahir_ktp), not the Teiid column name (tanggal_lahir)
+    send_event(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
           column='tgl_lahir_ktp', new_column='tgl_lahir_baru')
     events = api.get(f'/api/v1/obdf/{obdf}/events').json()
     assert events[0]['structured']['operation'] == 'rename' and events[0]['status'] == 'planned'
@@ -123,147 +123,147 @@ def test_event_history_and_audit(api, obdf):
 
 
 def test_event_uses_source_column_name_not_teiid_name(api, obdf):
-    """Event memuat nama kolom di sumber; nama kolom Teiid dapat berbeda (NAMEINSOURCE)."""
-    di_sumber = kirim(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
+    """Events hold the column name in the source; the Teiid column name may differ (NAMEINSOURCE)."""
+    by_source_name = send_event(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
                       column='tgl_lahir_ktp', new_column='tgl_lahir_2026')
-    assert di_sumber['plan']['impact']['targets'][0]['column'] == 'tanggal_lahir'
-    nama_teiid = kirim(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
+    assert by_source_name['plan']['impact']['targets'][0]['column'] == 'tanggal_lahir'
+    by_teiid_name = send_event(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
                        column='tanggal_lahir', new_column='x')
-    assert nama_teiid['event']['status'] == 'ignored'
+    assert by_teiid_name['event']['status'] == 'ignored'
 
 
 def test_deterministic_uuid_and_unsupported_operation(api, obdf):
-    """UUID versi 5 (deterministik) diterima; DDL tak didukung diberitahukan ke administrator."""
+    """A version-5 (deterministic) UUID is accepted; unsupported DDL is reported to the administrator."""
     import uuid as _uuid
-    uid = str(_uuid.uuid5(_uuid.NAMESPACE_URL, 'ascam:topik:0:42:0'))
-    first = kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
+    uid = str(_uuid.uuid5(_uuid.NAMESPACE_URL, 'ascam:topic:0:42:0'))
+    first = send_event(api, obdf, event_uid=uid, operation='other', source='kemensos',
                   table='penerima_manfaat', column='status_ekonomi',
                   raw={'ddl_command': 'ALTER TABLE penerima_manfaat ALTER COLUMN x TYPE text'})
     assert first['event']['status'] == 'planned'
     plan = first['plan']
     assert plan['decision'] == 'notify' and plan['pattern'] is None and plan['actions'] == []
-    assert any('tidak didukung' in r for r in plan['reasons'])
-    assert kirim(api, obdf, event_uid=uid, operation='other', source='kemensos',
+    assert any('not supported' in r for r in plan['reasons'])
+    assert send_event(api, obdf, event_uid=uid, operation='other', source='kemensos',
                  table='penerima_manfaat')['duplicate'] is True
 
 
 def test_plan_can_be_superseded(api, obdf):
-    plan_id = kirim(api, obdf, operation='drop', source='kemensos', schema='public',
+    plan_id = send_event(api, obdf, operation='drop', source='kemensos', schema='public',
                     table='penerima_manfaat', column='status_ekonomi')['plan']['id']
-    hasil = api.post(f'/api/v1/plans/{plan_id}/supersede', json={'note': 'versi dasar usang'}).json()
-    assert hasil['status'] == 'superseded'
+    result = api.post(f'/api/v1/plans/{plan_id}/supersede', json={'note': 'stale base version'}).json()
+    assert result['status'] == 'superseded'
     assert api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json() == []
     assert api.post(f'/api/v1/plans/{plan_id}/supersede').status_code == 409
     assert 'plan_superseded' in [a['action'] for a in api.get(f'/api/v1/obdf/{obdf}/audit').json()]
 
 
 def test_uid_reuse_with_different_content_is_flagged(api, obdf):
-    """Regresi F6: uid lama dipakai ulang untuk DDL lain setelah topik Kafka dibuat ulang."""
+    """Regression F6: an old uid is reused for another DDL after the Kafka topic was recreated."""
     uid = str(uuid.uuid4())
-    kirim(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
+    send_event(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
           table='penerima_manfaat', column='status_ekonomi')
-    sama = kirim(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
+    same = send_event(api, obdf, event_uid=uid, operation='drop', source='kemensos', schema='public',
                  table='penerima_manfaat', column='status_ekonomi')
-    assert sama['duplicate'] is True and sama['conflict'] is False
-    beda = kirim(api, obdf, event_uid=uid, operation='add', source='kemensos', schema='public',
-                 table='ascam_probe', column='uji')
-    assert beda['duplicate'] is True and beda['conflict'] is True
+    assert same['duplicate'] is True and same['conflict'] is False
+    different = send_event(api, obdf, event_uid=uid, operation='add', source='kemensos', schema='public',
+                 table='ascam_probe', column='test')
+    assert different['duplicate'] is True and different['conflict'] is True
     assert 'event_uid_conflict' in [a['action'] for a in api.get(f'/api/v1/obdf/{obdf}/audit').json()]
 
 
 
 def test_hitl_add_creates_descriptive_notification_and_can_be_acknowledged(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     assert plan['status'] == 'pending_approval' and len(plan['actions']) >= 3
-    belum = api.get(f'/api/v1/obdf/{obdf}/notifications', params={'unread': True}).json()
-    milik = [n for n in belum if n['plan_id'] == plan['id']]
-    assert milik and 'ADD pada kemensos:public.penerima_manfaat.alamat' in milik[0]['message']
-    assert 'menunggu persetujuan' in milik[0]['message']
+    unread = api.get(f'/api/v1/obdf/{obdf}/notifications', params={'unread': True}).json()
+    own = [n for n in unread if n['plan_id'] == plan['id']]
+    assert own and 'ADD change on kemensos:public.penerima_manfaat.alamat' in own[0]['message']
+    assert 'waiting for approval' in own[0]['message']
 
-    dibaca = api.post(f"/api/v1/notifications/{milik[0]['id']}/ack").json()
-    assert dibaca['acknowledged'] is True and dibaca['acknowledged_by'] == 'ui:penguji'
-    sisa = api.get(f'/api/v1/obdf/{obdf}/notifications', params={'unread': True}).json()
-    assert all(n['id'] != milik[0]['id'] for n in sisa)
+    read_back = api.post(f"/api/v1/notifications/{own[0]['id']}/ack").json()
+    assert read_back['acknowledged'] is True and read_back['acknowledged_by'] == 'ui:tester'
+    remaining = api.get(f'/api/v1/obdf/{obdf}/notifications', params={'unread': True}).json()
+    assert all(n['id'] != own[0]['id'] for n in remaining)
     assert api.post('/api/v1/notifications/999999/ack').status_code == 404
 
 
 def test_approval_acknowledges_plan_notification(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    api.post(f"/api/v1/plans/{plan['id']}/approve", json={'note': 'nama property sudah tepat'})
-    semua = api.get(f'/api/v1/obdf/{obdf}/notifications').json()
-    assert all(n['acknowledged'] for n in semua if n['plan_id'] == plan['id'])
+    api.post(f"/api/v1/plans/{plan['id']}/approve", json={'note': 'the property name is right'})
+    every = api.get(f'/api/v1/obdf/{obdf}/notifications').json()
+    assert all(n['acknowledged'] for n in every if n['plan_id'] == plan['id'])
 
 
 def test_only_ui_client_may_assert_human_actor(api, obdf):
-    """Persetujuan HITL tercatat atas nama administrator, bukan hanya nama klien token."""
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    """A HITL approval is recorded under the administrator's name, not only the token client's."""
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
+    result = api.post(f"/api/v1/plans/{plan['id']}/approve",
                      headers={'X-ASCAM-User': 'rahil.admin'}).json()
-    assert hasil['decided_by'] == 'ui:rahil.admin'
+    assert result['decided_by'] == 'ui:rahil.admin'
 
 
 def test_malformed_actor_header_is_ignored(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    hasil = api.post(f"/api/v1/plans/{plan['id']}/reject",
-                     headers={'X-ASCAM-User': 'admin\nPALSU: disetujui'}).json()
-    assert hasil['decided_by'] == 'ui'                  # header berbahaya diabaikan
+    result = api.post(f"/api/v1/plans/{plan['id']}/reject",
+                     headers={'X-ASCAM-User': 'admin\nFAKE: approved'}).json()
+    assert result['decided_by'] == 'ui'                  # a malicious header is ignored
 
 
-# ── revisi rencana ADD oleh administrator (ADR-0024) ───────────────────────────
+# ── revision of ADD plans by the administrator (ADR-0024) ───────────────────────
 def test_admin_can_rename_property_when_approving(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    usulan = plan['impact']['add_options']
-    assert usulan['proposed_iri'].endswith('/alamat')
-    hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
-                     json={'note': 'nama dibuat lebih jelas', 'property_name': 'alamatDomisili',
-                           'domain': usulan['proposed_domain']})
-    assert hasil.status_code == 200, hasil.text
-    revisi = hasil.json()
-    assert revisi['id'] != plan['id'] and revisi['revision_of'] == plan['id']
-    assert revisi['status'] == 'approved' and revisi['decided_by'] == 'ui:penguji'
+    proposal = plan['impact']['add_options']
+    assert proposal['proposed_iri'].endswith('/alamat')
+    result = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                     json={'note': 'clearer name', 'property_name': 'alamatDomisili',
+                           'domain': proposal['proposed_domain']})
+    assert result.status_code == 200, result.text
+    revision = result.json()
+    assert revision['id'] != plan['id'] and revision['revision_of'] == plan['id']
+    assert revision['status'] == 'approved' and revision['decided_by'] == 'ui:tester'
     iri = 'http://bansos.go.id/ontology/alamatDomisili'
-    assert [(a['seq'], a['artifact'], a['operation']) for a in revisi['actions']][:2] == [
+    assert [(a['seq'], a['artifact'], a['operation']) for a in revision['actions']][:2] == [
         (1, 'vdb', 'add_column'), (2, 'ontology', 'add_datatype_property')]
     assert all(a['params'].get('predicate_iri', iri) == iri and a['params'].get('iri', iri) == iri
-               for a in revisi['actions'] if a['artifact'] != 'vdb')
-    assert {a['params']['triples_map_iri'].rsplit('#', 1)[-1] for a in revisi['actions']
+               for a in revision['actions'] if a['artifact'] != 'vdb')
+    assert {a['params']['triples_map_iri'].rsplit('#', 1)[-1] for a in revision['actions']
             if a['artifact'] == 'r2rml'} == {'MapPenerima', 'MapRingkas'}
-    asal = api.get(f"/api/v1/plans/{plan['id']}").json()
-    assert asal['status'] == 'revised'
-    disetujui = api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json()
-    assert [p['id'] for p in disetujui] == [revisi['id']]
+    original = api.get(f"/api/v1/plans/{plan['id']}").json()
+    assert original['status'] == 'revised'
+    approved_plans = api.get(f'/api/v1/obdf/{obdf}/plans', params={'status': 'approved'}).json()
+    assert [p['id'] for p in approved_plans] == [revision['id']]
     assert api.post(f"/api/v1/plans/{plan['id']}/approve").status_code == 409
 
 
 def test_unchanged_choice_approves_original_plan(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    usulan = plan['impact']['add_options']
-    hasil = api.post(f"/api/v1/plans/{plan['id']}/approve",
-                     json={'property_name': 'alamat', 'domain': usulan['proposed_domain']}).json()
-    assert hasil['id'] == plan['id'] and hasil['status'] == 'approved'
+    proposal = plan['impact']['add_options']
+    result = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                     json={'property_name': 'alamat', 'domain': proposal['proposed_domain']}).json()
+    assert result['id'] == plan['id'] and result['status'] == 'approved'
 
 
-@pytest.mark.parametrize('pilihan, potongan', [
-    ({'property_name': '1salah'}, 'diawali huruf'),
-    ({'property_name': 'nik', 'domain': 'http://bansos.go.id/ontology/PenerimaBansos'}, 'domain berbeda'),
-    ({'property_name': 'alamatBaru', 'domain': 'http://bansos.go.id/ontology/KelasLain'}, 'salah satu kelas'),
+@pytest.mark.parametrize('choice, fragment', [
+    ({'property_name': '1invalid'}, 'must start with a letter'),
+    ({'property_name': 'nik', 'domain': 'http://bansos.go.id/ontology/PenerimaBansos'}, 'different domain'),
+    ({'property_name': 'alamatBaru', 'domain': 'http://bansos.go.id/ontology/OtherClass'}, 'one of the classes'),
 ])
-def test_invalid_admin_choice_is_refused(api, obdf, pilihan, potongan):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+def test_invalid_admin_choice_is_refused(api, obdf, choice, fragment):
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
-    r = api.post(f"/api/v1/plans/{plan['id']}/approve", json=pilihan)
-    assert r.status_code == 422 and potongan in r.json()['detail']
+    r = api.post(f"/api/v1/plans/{plan['id']}/approve", json=choice)
+    assert r.status_code == 422 and fragment in r.json()['detail']
     assert api.get(f"/api/v1/plans/{plan['id']}").json()['status'] == 'pending_approval'
 
 
 def test_property_choice_only_for_add_and_approval(api, obdf):
-    plan = kirim(api, obdf, operation='add', source='kemensos', schema='public',
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     r = api.post(f"/api/v1/plans/{plan['id']}/reject", json={'property_name': 'alamatBaru'})
     assert r.status_code == 422

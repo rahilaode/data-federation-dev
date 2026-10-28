@@ -1,13 +1,13 @@
 """
-Skema `spec`: versi spesifikasi OBDF (snapshot per versi) beserta Σ_S, dependensi Teiid,
-ℳ (R2RML), 𝒯 (ontologi), triple generik, lineage, dan masalah konsistensi.
+Schema `spec`: OBDF specification versions (a snapshot per version) with Σ_S, Teiid
+dependencies, ℳ (R2RML), 𝒯 (ontology), generic triples, lineage, and consistency issues.
 
-Setiap tabel membawa `spec_version_id`. Tabel yang dirujuk tabel lain memiliki
-UNIQUE(spec_version_id, id), dan rujukan memakai FK komposit (lihat base.same_version_fk).
-Isi versi hanya dapat diubah selama status versi `candidate` (trigger pada migrasi).
-Baris versi tidak pernah dihapus (tombstone): retensi memakai spec.purge_version(), yang
-menghapus isi versi dan mengubah statusnya menjadi `purged`, sehingga riwayat dan rujukan
-dari skema ops tetap utuh.
+Every table carries `spec_version_id`. Tables referenced by other tables have
+UNIQUE(spec_version_id, id), and references use a composite FK (see base.same_version_fk).
+The content of a version can be changed only while its status is `candidate` (trigger in
+the migration). Version rows are never deleted (tombstone): retention uses
+spec.purge_version(), which deletes the content of a version and sets its status to
+`purged`, so the history and the references from schema ops stay intact.
 """
 from datetime import datetime
 
@@ -35,7 +35,8 @@ def introduced_in():
     return mapped_column(BigInteger, ForeignKey('spec.spec_version.id', ondelete='SET NULL'))
 
 
-# ── versi dan artefak ───────────────────────────────────────────────────────────
+# ── versions and artifacts ──────────────────────────────────────────────────────
+
 class SpecVersion(Base):
     __tablename__ = 'spec_version'
     __table_args__ = (
@@ -59,7 +60,7 @@ class SpecVersion(Base):
     plan_id: Mapped[int | None] = mapped_column(
         ForeignKey('ops.adaptation_plan.id', ondelete='RESTRICT', use_alter=True,
                    name='fk_spec_version_plan_id_adaptation_plan'))
-    content_digest: Mapped[str | None] = mapped_column(Text, comment='sidik jari isi versi (Σ_S + artefak)')
+    content_digest: Mapped[str | None] = mapped_column(Text, comment='fingerprint of the version content (Σ_S + artifacts)')
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at()
     sealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -72,7 +73,7 @@ class Artifact(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     kind: Mapped[str] = mapped_column(Text)
-    name: Mapped[str] = mapped_column(Text, comment='nama berkas')
+    name: Mapped[str] = mapped_column(Text, comment='file name')
     media_type: Mapped[str] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)
     sha256: Mapped[str] = mapped_column(CHAR(64))
@@ -103,7 +104,7 @@ class ConsistencyIssue(Base):
                       {'schema': SCHEMA})
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
-    code: Mapped[str] = mapped_column(Text, comment='kode masalah (docs/knowledge/README.md)')
+    code: Mapped[str] = mapped_column(Text, comment='issue code (docs/knowledge-base.md)')
     severity: Mapped[str] = mapped_column(Text)
     subject_kind: Mapped[str | None] = mapped_column(Text)
     subject_ref: Mapped[str | None] = mapped_column(Text)
@@ -152,8 +153,8 @@ class TeiidTable(Base):
     name: Mapped[str] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(Text)
     name_in_source: Mapped[str | None] = mapped_column(Text)
-    source_schema: Mapped[str | None] = mapped_column(Text, comment='hasil normalisasi')
-    source_table: Mapped[str | None] = mapped_column(Text, comment='hasil normalisasi')
+    source_schema: Mapped[str | None] = mapped_column(Text, comment='normalised')
+    source_table: Mapped[str | None] = mapped_column(Text, comment='normalised')
     managed_by: Mapped[str] = managed_by()
     introduced_in_version: Mapped[int | None] = introduced_in()
 
@@ -168,10 +169,10 @@ class TeiidColumn(Base):
     spec_version_id: Mapped[int] = spec_version_fk()
     table_id: Mapped[int] = mapped_column(BigInteger)
     uid: Mapped[str | None] = mapped_column(Text)
-    name: Mapped[str] = mapped_column(Text, comment='nama di Teiid')
+    name: Mapped[str] = mapped_column(Text, comment='name in Teiid')
     name_in_source: Mapped[str | None] = mapped_column(Text)
-    source_column: Mapped[str | None] = mapped_column(Text, comment='nama efektif di sumber, dinormalisasi')
-    position: Mapped[int] = mapped_column(Integer, comment='tidak dijamin berurutan')
+    source_column: Mapped[str | None] = mapped_column(Text, comment='effective name in the source, normalised')
+    position: Mapped[int] = mapped_column(Integer, comment='not guaranteed to be contiguous')
     data_type: Mapped[str] = mapped_column(Text)
     native_type: Mapped[str | None] = mapped_column(Text)
     nullable: Mapped[bool | None] = mapped_column(Boolean)
@@ -222,9 +223,9 @@ class TeiidDependency(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     dependent_table_id: Mapped[int] = mapped_column(BigInteger)
-    dependent_column_id: Mapped[int | None] = mapped_column(BigInteger, comment='kosong = tingkat view')
+    dependent_column_id: Mapped[int | None] = mapped_column(BigInteger, comment='empty = view level')
     used_table_id: Mapped[int] = mapped_column(BigInteger)
-    used_column_id: Mapped[int | None] = mapped_column(BigInteger, comment='kosong = tingkat tabel')
+    used_column_id: Mapped[int | None] = mapped_column(BigInteger, comment='empty = table level')
     derived_role: Mapped[str] = mapped_column(Text)
 
 
@@ -237,7 +238,7 @@ class TeiidRoutine(Base):
     model_id: Mapped[int] = mapped_column(BigInteger)
     kind: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
-    table_name: Mapped[str | None] = mapped_column(Text, comment='tabel pemicu (trigger)')
+    table_name: Mapped[str | None] = mapped_column(Text, comment='triggering table')
     body: Mapped[str | None] = mapped_column(Text)
 
 
@@ -249,7 +250,7 @@ class TeiidAlter(Base):
     spec_version_id: Mapped[int] = spec_version_fk()
     model_id: Mapped[int] = mapped_column(BigInteger)
     seq: Mapped[int] = mapped_column(Integer)
-    statement: Mapped[str] = mapped_column(Text, comment='ALTER yang ditambahkan ASCAM (ADR-0002)')
+    statement: Mapped[str] = mapped_column(Text, comment='ALTER added by ASCAM (ADR-0002)')
     plan_id: Mapped[int | None] = mapped_column(ForeignKey('ops.adaptation_plan.id', ondelete='RESTRICT'))
 
 
@@ -280,8 +281,8 @@ class LogicalSource(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     triples_map_id: Mapped[int] = mapped_column(BigInteger)
-    teiid_table_id: Mapped[int | None] = mapped_column(BigInteger, comment='kosong bila tidak terselesaikan')
-    reference_name: Mapped[str] = mapped_column(Text, comment='nama tabel/view sebagaimana tertulis')
+    teiid_table_id: Mapped[int | None] = mapped_column(BigInteger, comment='empty when unresolved')
+    reference_name: Mapped[str] = mapped_column(Text, comment='table/view name as written')
     alias: Mapped[str | None] = mapped_column(Text)
 
 
@@ -294,7 +295,7 @@ class LogicalColumn(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     triples_map_id: Mapped[int] = mapped_column(BigInteger)
-    name: Mapped[str] = mapped_column(Text, comment='nama yang dilihat term map')
+    name: Mapped[str] = mapped_column(Text, comment='name seen by the term map')
     expression_kind: Mapped[str] = mapped_column(Text)
     expression_sql: Mapped[str | None] = mapped_column(Text)
 
@@ -330,7 +331,7 @@ class PredicateObjectMap(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     triples_map_id: Mapped[int] = mapped_column(BigInteger)
-    signature: Mapped[str] = mapped_column(Text, comment='tanda tangan struktural, pengganti label blank node')
+    signature: Mapped[str] = mapped_column(Text, comment='structural signature, replaces the blank node label')
     managed_by: Mapped[str] = managed_by()
     introduced_in_version: Mapped[int | None] = introduced_in()
 
@@ -345,7 +346,7 @@ class TermMap(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     triples_map_id: Mapped[int] = mapped_column(BigInteger)
-    pom_id: Mapped[int | None] = mapped_column(BigInteger, comment='kosong untuk subject map')
+    pom_id: Mapped[int | None] = mapped_column(BigInteger, comment='empty for a subject map')
     position: Mapped[str] = mapped_column(Text)
     value_kind: Mapped[str] = mapped_column(Text)
     value: Mapped[str] = mapped_column(Text)
@@ -385,7 +386,7 @@ class SubjectClass(Base):
     class_iri: Mapped[str] = mapped_column(Text)
 
 
-# ── 𝒯: ontologi ─────────────────────────────────────────────────────────────────
+# ── 𝒯: ontology ──────────────────────────────────────────────────────────────────
 class Ontology(Base):
     __tablename__ = 'ontology'
     __table_args__ = (uq_version_id(), UniqueConstraint('spec_version_id', 'iri'),
@@ -435,7 +436,7 @@ class OntDomain(Base):
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
     entity_id: Mapped[int] = mapped_column(BigInteger)
-    class_expression: Mapped[str] = mapped_column(Text, comment='IRI atau bentuk kompleks (mis. union)')
+    class_expression: Mapped[str] = mapped_column(Text, comment='IRI or a complex form (e.g. union)')
     is_simple: Mapped[bool] = mapped_column(Boolean)
 
 
@@ -491,12 +492,12 @@ class ColumnUsage(Base):
     )
     id: Mapped[int] = pk_id()
     spec_version_id: Mapped[int] = spec_version_fk()
-    foreign_column_id: Mapped[int] = mapped_column(BigInteger, comment='kolom foreign table (ujung sumber)')
+    foreign_column_id: Mapped[int] = mapped_column(BigInteger, comment='foreign-table column (source end)')
     triples_map_id: Mapped[int] = mapped_column(BigInteger)
-    term_map_id: Mapped[int | None] = mapped_column(BigInteger, comment='kosong bila hanya di SQL')
+    term_map_id: Mapped[int | None] = mapped_column(BigInteger, comment='empty when used only in SQL')
     role: Mapped[str] = mapped_column(Text)
     predicate_iri: Mapped[str | None] = mapped_column(Text)
     predicate_entity_id: Mapped[int | None] = mapped_column(BigInteger)
     path: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"),
-                                       comment='urutan kolom view yang dilalui')
+                                       comment='view columns passed through, in order')
     weakest_link: Mapped[str] = mapped_column(Text)

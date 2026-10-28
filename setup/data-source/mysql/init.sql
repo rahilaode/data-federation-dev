@@ -9,7 +9,7 @@
 USE dukcapil;
 
 -- ============================================================
--- BAGIAN 1: TABEL BISNIS
+-- PART 1: BUSINESS TABLES
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS master_wilayah (
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS riwayat_perubahan_data (
 
 
 -- ============================================================
--- BAGIAN 2: INSERT DATA AWAL
+-- PART 2: INITIAL DATA
 -- ============================================================
 
 INSERT INTO master_wilayah (provinsi, kabupaten, kecamatan, desa) VALUES
@@ -108,11 +108,11 @@ INSERT INTO riwayat_perubahan_data (nik, kolom_diubah, nilai_lama, nilai_baru, d
 
 
 -- ============================================================
--- BAGIAN 3: DDL CAPTURE SYSTEM
+-- PART 3: DDL CAPTURE SYSTEM
 -- ============================================================
 
 -- ------------------------------------------------------------
--- 3.1 Tabel referensi: daftar tabel yang dimonitor
+-- 3.1 Reference table: the tables that are monitored
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS captured_tables_ref (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS captured_tables_ref (
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_captured_tables UNIQUE (db_name, table_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='Daftar tabel yang diizinkan untuk di-monitor (regulasi).';
+  COMMENT='Tables that may be monitored (regulated).';
 
 INSERT IGNORE INTO captured_tables_ref (db_name, table_name, description) VALUES
 ('dukcapil', 'master_wilayah',         'Tabel master wilayah (provinsi, kabupaten, kecamatan, desa)'),
@@ -133,7 +133,7 @@ INSERT IGNORE INTO captured_tables_ref (db_name, table_name, description) VALUES
 
 
 -- ------------------------------------------------------------
--- 3.2 Tabel log utama
+-- 3.2 Main log table
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ddl_event_log (
     id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -148,11 +148,11 @@ CREATE TABLE IF NOT EXISTS ddl_event_log (
     is_regulated TINYINT(1) DEFAULT 1,
     captured_at  DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='Log event ALTER TABLE: hanya ADD COLUMN, DROP COLUMN, RENAME COLUMN.';
+  COMMENT='Log of ALTER TABLE events: ADD COLUMN, DROP COLUMN, RENAME COLUMN only.';
 
 
 -- ------------------------------------------------------------
--- 3.3 Tabel event capture
+-- 3.3 Event capture table
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ddl_event_capture (
     id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -164,18 +164,18 @@ CREATE TABLE IF NOT EXISTS ddl_event_capture (
     ddl_command  TEXT         NOT NULL,
     captured_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='Titik masuk event DDL — diisi otomatis oleh Event Scheduler.';
+  COMMENT='Entry point of DDL events, filled automatically by the Event Scheduler.';
 
 
 -- ------------------------------------------------------------
--- 3.4 Tabel snapshot kolom
+-- 3.4 Column snapshot table
 --
---     Kolom ordinal_pos dan column_type adalah kunci utama
---     untuk deteksi RENAME otomatis:
---       Jika ada kolom hilang (A) dan kolom baru muncul (B)
---       pada tabel yang sama, dengan ordinal_pos DAN column_type
---       yang identik → dicatat sebagai RENAME COLUMN A → B.
---       Jika tidak ada pasangan cocok → dicatat DROP / ADD terpisah.
+--     The ordinal_pos and column_type columns are what makes
+--     automatic RENAME detection work:
+--       If a column disappears (A) and a new column appears (B)
+--       in the same table, with the SAME ordinal_pos AND column_type,
+--       it is recorded as RENAME COLUMN A → B.
+--       If no pair matches, separate DROP / ADD events are recorded.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ddl_column_snapshot (
     id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -187,9 +187,9 @@ CREATE TABLE IF NOT EXISTS ddl_column_snapshot (
     snapped_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_snapshot (db_name, table_name, column_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='Snapshot struktur kolom untuk deteksi ADD/DROP/RENAME oleh Event Scheduler.';
+  COMMENT='Column structure snapshot for ADD/DROP/RENAME detection by the Event Scheduler.';
 
--- Isi snapshot awal
+-- Initial snapshot
 INSERT IGNORE INTO ddl_column_snapshot (db_name, table_name, column_name, column_type, ordinal_pos)
 SELECT
     c.TABLE_SCHEMA,
@@ -205,12 +205,12 @@ INNER JOIN captured_tables_ref r
 
 
 -- ============================================================
--- BAGIAN 4: TRIGGER
+-- PART 4: TRIGGERS
 -- ============================================================
 
 -- ------------------------------------------------------------
 -- 4.1 BEFORE INSERT ddl_event_capture
---     Isi username dengan CURRENT_USER() jika kosong
+--     Fill username with CURRENT_USER() when it is empty
 -- ------------------------------------------------------------
 DROP TRIGGER IF EXISTS trg_before_insert_ddl_capture;
 
@@ -230,7 +230,7 @@ DELIMITER ;
 
 
 -- ------------------------------------------------------------
--- 4.2 AFTER INSERT ddl_event_capture → forward ke ddl_event_log
+-- 4.2 AFTER INSERT ddl_event_capture → forward to ddl_event_log
 -- ------------------------------------------------------------
 DROP TRIGGER IF EXISTS trg_after_insert_ddl_event;
 
@@ -272,11 +272,11 @@ DELIMITER ;
 
 
 -- ============================================================
--- BAGIAN 5: STORED PROCEDURE
+-- PART 5: STORED PROCEDURES
 -- ============================================================
 
 -- ------------------------------------------------------------
--- 5.1 sp_capture_alter_column — insert manual (opsional/fallback)
+-- 5.1 sp_capture_alter_column — manual insert (optional fallback)
 -- ------------------------------------------------------------
 DROP PROCEDURE IF EXISTS sp_capture_alter_column;
 
@@ -323,16 +323,16 @@ DELIMITER ;
 
 
 -- ------------------------------------------------------------
--- 5.2 sp_detect_ddl_changes — dipanggil Event Scheduler tiap 10 detik
+-- 5.2 sp_detect_ddl_changes — called by the Event Scheduler every 10 seconds
 --
---     Logika deteksi RENAME COLUMN otomatis:
---       1. Kumpulkan kolom yang hilang  → tmp_dropped
---       2. Kumpulkan kolom yang muncul  → tmp_added
---       3. Jika ada pasangan (tabel sama, ordinal_pos sama, column_type sama)
---          → catat sebagai RENAME COLUMN 'lama -> baru'
---       4. Sisa tmp_dropped tanpa pasangan → catat sebagai DROP COLUMN
---       5. Sisa tmp_added  tanpa pasangan → catat sebagai ADD COLUMN
---       6. Sync snapshot agar polling berikutnya akurat
+--     Automatic RENAME COLUMN detection:
+--       1. Collect the columns that disappeared → tmp_dropped
+--       2. Collect the columns that appeared    → tmp_added
+--       3. Each pair (same table, same ordinal_pos, same column_type)
+--          → recorded as RENAME COLUMN 'old -> new'
+--       4. What is left in tmp_dropped → recorded as DROP COLUMN
+--       5. What is left in tmp_added   → recorded as ADD COLUMN
+--       6. Sync the snapshot so that the next poll is accurate
 -- ------------------------------------------------------------
 DROP PROCEDURE IF EXISTS sp_detect_ddl_changes;
 
@@ -340,7 +340,7 @@ DELIMITER $$
 CREATE PROCEDURE sp_detect_ddl_changes()
 BEGIN
 
-    -- Tabel sementara: kolom hilang (kandidat DROP atau nama-lama-RENAME)
+    -- Temporary table: columns that disappeared (DROP candidates or RENAME old names)
     CREATE TEMPORARY TABLE IF NOT EXISTS tmp_dropped (
         db_name     VARCHAR(128),
         table_name  VARCHAR(128),
@@ -363,7 +363,7 @@ BEGIN
         AND c.COLUMN_NAME  = s.column_name
     WHERE c.COLUMN_NAME IS NULL;
 
-    -- Tabel sementara: kolom baru (kandidat ADD atau nama-baru-RENAME)
+    -- Temporary table: new columns (ADD candidates or RENAME new names)
     CREATE TEMPORARY TABLE IF NOT EXISTS tmp_added (
         db_name     VARCHAR(128),
         table_name  VARCHAR(128),
@@ -386,7 +386,7 @@ BEGIN
         AND s.column_name = c.COLUMN_NAME
     WHERE s.column_name IS NULL;
 
-    -- ── RENAME COLUMN: pasangan DROP + ADD dengan ordinal_pos & column_type sama
+    -- ── RENAME COLUMN: a DROP + ADD pair with the same ordinal_pos & column_type
     INSERT INTO ddl_event_capture
         (username, db_name, table_name, alter_type, column_name, ddl_command)
     SELECT
@@ -404,7 +404,7 @@ BEGIN
         AND a.ordinal_pos = d.ordinal_pos
         AND a.column_type = d.column_type;
 
-    -- ── DROP COLUMN murni: hilang tapi tidak ada pasangan RENAME
+    -- ── plain DROP COLUMN: gone, with no RENAME pair
     INSERT INTO ddl_event_capture
         (username, db_name, table_name, alter_type, column_name, ddl_command)
     SELECT
@@ -424,7 +424,7 @@ BEGIN
           AND  a.column_type = d.column_type
     );
 
-    -- ── ADD COLUMN murni: muncul tapi tidak ada pasangan RENAME
+    -- ── plain ADD COLUMN: appeared, with no RENAME pair
     INSERT INTO ddl_event_capture
         (username, db_name, table_name, alter_type, column_name, ddl_command)
     SELECT
@@ -444,20 +444,20 @@ BEGIN
           AND  d.column_type = a.column_type
     );
 
-    -- ── Sync snapshot: hapus nama lama (drop/rename-lama)
+    -- ── Sync the snapshot: remove old names (drop / rename old)
     DELETE s FROM ddl_column_snapshot s
     INNER JOIN tmp_dropped d
         ON  d.db_name     = s.db_name
         AND d.table_name  = s.table_name
         AND d.column_name = s.column_name;
 
-    -- ── Sync snapshot: tambah nama baru (add/rename-baru)
+    -- ── Sync the snapshot: add new names (add / rename new)
     INSERT IGNORE INTO ddl_column_snapshot
         (db_name, table_name, column_name, column_type, ordinal_pos, snapped_at)
     SELECT db_name, table_name, column_name, column_type, ordinal_pos, NOW()
     FROM tmp_added;
 
-    -- ── Bersihkan tabel sementara
+    -- ── Drop the temporary tables
     DROP TEMPORARY TABLE IF EXISTS tmp_dropped;
     DROP TEMPORARY TABLE IF EXISTS tmp_added;
 
@@ -466,8 +466,8 @@ DELIMITER ;
 
 
 -- ============================================================
--- BAGIAN 6: EVENT SCHEDULER
---   Jalankan sp_detect_ddl_changes setiap 10 detik secara otomatis
+-- PART 6: EVENT SCHEDULER
+--   Runs sp_detect_ddl_changes automatically every 10 seconds
 -- ============================================================
 
 SET GLOBAL event_scheduler = ON;
@@ -486,7 +486,7 @@ DELIMITER ;
 
 
 -- ============================================================
--- BAGIAN 7: GRANT PRIVILEGES
+-- PART 7: GRANT PRIVILEGES
 -- ============================================================
 
 GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT 
@@ -498,7 +498,7 @@ FLUSH PRIVILEGES;
 
 
 -- ============================================================
--- BAGIAN 8: CONTOH PEMAKAIAN (semua otomatis ~10 detik)
+-- PART 8: USAGE EXAMPLES (all automatic, ~10 seconds)
 -- ============================================================
 
 -- ── ADD COLUMN ────────────────────────────────────────────────
@@ -507,31 +507,31 @@ FLUSH PRIVILEGES;
 -- ── DROP COLUMN ───────────────────────────────────────────────
 -- ALTER TABLE master_penduduk DROP COLUMN email;
 
--- ── RENAME COLUMN (otomatis, tidak perlu CALL apapun) ─────────
---   Terdeteksi sebagai RENAME karena ordinal_pos & column_type sama
+-- ── RENAME COLUMN (automatic, no CALL needed) ────────────────
+--   Detected as RENAME because ordinal_pos & column_type are equal
 -- ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO ttl;
 
 
 -- ============================================================
--- BAGIAN 9: QUERY MONITORING
+-- PART 9: MONITORING QUERIES
 -- ============================================================
 
--- Semua event yang tercatat di log
+-- Every event in the log
 -- SELECT * FROM ddl_event_log ORDER BY captured_at DESC;
 
--- Event masuk di capture (sebelum forward ke log)
+-- Events in the capture table (before they are forwarded to the log)
 -- SELECT * FROM ddl_event_capture ORDER BY captured_at DESC;
 
--- Hanya tabel yang diregulasi
+-- Regulated tables only
 -- SELECT alter_type, table_name, column_name, ddl_command, captured_at
 -- FROM   ddl_event_log
 -- WHERE  is_regulated = 1
 -- ORDER  BY captured_at DESC;
 
--- Rekapitulasi per jenis operasi
+-- Totals per kind of operation
 -- SELECT alter_type, COUNT(*) AS total
 -- FROM   ddl_event_log
 -- GROUP  BY alter_type;
 
--- Cek snapshot kolom saat ini
+-- Current column snapshot
 -- SELECT * FROM ddl_column_snapshot ORDER BY db_name, table_name, ordinal_pos;

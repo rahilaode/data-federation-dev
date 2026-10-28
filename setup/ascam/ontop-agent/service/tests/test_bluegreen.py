@@ -1,4 +1,4 @@
-"""Blue-green lapisan OBDA (ADR-0022), tanpa Docker sungguhan."""
+"""Blue-green OBDA layer (ADR-0022), without real Docker."""
 import json
 
 import httpx
@@ -28,7 +28,7 @@ class FakeContainer:
 
     def exec_run(self, cmd):
         self.log.append(' '.join(cmd))
-        return (self.exec_code, b'nginx: reload gagal') if hasattr(self, 'exec_code') else (0, b'')
+        return (self.exec_code, b'nginx: reload failed') if hasattr(self, 'exec_code') else (0, b'')
 
 
 class FakeDocker:
@@ -44,7 +44,7 @@ class FakeDocker:
 
 
 def ready_http(down=()):
-    """Endpoint menjawab 200 kecuali host yang disebut `down`."""
+    """The endpoint answers 200 except for the hosts named in `down`."""
     def handler(request):
         return httpx.Response(503 if request.url.host in down else 200, json={'boolean': True})
     return httpx.Client(transport=httpx.MockTransport(handler))
@@ -73,7 +73,7 @@ def test_pin_version_replaces_existing_version():
     pinned = pin_version(PROPERTIES, 3)
     assert 'jdbc.url=jdbc:teiid:government@mm://teiid:31000;version=3' in pinned
     assert pin_version(pinned, 4).count(';version=') == 1 and ';version=4' in pin_version(pinned, 4)
-    assert 'SANGAT-RAHASIA' in pinned                      # baris lain tidak diubah
+    assert 'VERY-SECRET' in pinned                      # other lines are unchanged
     with pytest.raises(BlueGreenError):
         pin_version('jdbc.user=x\n', 2)
 
@@ -89,7 +89,7 @@ def test_prepare_writes_standby_slot_only(lab):
     green = cfg.slots_dir / 'green'
     assert (green / 'mapping.ttl').read_text() == 'M2' and (green / 'ontology_file.ttl').read_text() == 'T2'
     assert ';version=2' in (green / 'government.docker.properties').read_text()
-    assert cfg.path_of('r2rml').read_text() == MAPPING      # instance aktif tidak tersentuh
+    assert cfg.path_of('r2rml').read_text() == MAPPING      # the active instance is untouched
     assert bg.state()['standby_vdb_version'] == '2'
 
 
@@ -110,14 +110,14 @@ def test_start_starts_standby_and_waits(lab):
     bg, docker, _ = lab
     result = bg.start()
     assert result.ok and docker.items['vkg-system-ontop-green'].log == ['start']
-    assert docker.items['vkg-system-ontop-blue'].log == []   # instance aktif tidak disentuh
+    assert docker.items['vkg-system-ontop-blue'].log == []   # the active instance is untouched
 
 
 def test_start_reports_unready_endpoint(lab):
     bg, _, _ = lab
     bg.http = ready_http(down={'vkg-system-ontop-green'})
     result = bg.start(ready_timeout=0.01)
-    assert not result.ok and 'tidak siap' in result.error
+    assert not result.ok and 'not ready' in result.error
 
 
 def test_switch_redirects_proxy_promotes_and_retires(lab):
@@ -128,7 +128,7 @@ def test_switch_redirects_proxy_promotes_and_retires(lab):
     assert 'vkg-system-ontop-green' in (cfg.proxy_runtime_dir / 'upstream.conf').read_text()
     assert docker.items['vkg-system-ontop-teiid'].log == ['nginx -s reload']
     assert docker.items['vkg-system-ontop-blue'].log == ['stop']
-    assert cfg.path_of('r2rml').read_text() == 'M2'          # artefak kanonik = instance aktif
+    assert cfg.path_of('r2rml').read_text() == 'M2'          # canonical artifacts = active instance
     assert set(result.detail['backups']) == {'r2rml', 'ontology'}
     state = bg.state()
     assert state['active'] == 'green' and state['vdb_version'] == '2' and 'standby_vdb_version' not in state
@@ -165,8 +165,8 @@ def test_two_adaptations_alternate_colors(lab):
 
 def test_reset_rebuilds_active_from_canonical(lab):
     bg, docker, cfg = lab
-    bg.prepare('M2', 'T2', '2'); bg.start(); bg.switch()          # aktif: green, versi 2
-    cfg.path_of('r2rml').write_text(MAPPING)                       # git checkout oleh harness
+    bg.prepare('M2', 'T2', '2'); bg.start(); bg.switch()          # active: green, version 2
+    cfg.path_of('r2rml').write_text(MAPPING)                       # git checkout by the harness
     cfg.path_of('ontology').write_text(ONTOLOGY)
     result = bg.reset('1')
     assert result.ok and result.color == 'green'
@@ -212,16 +212,16 @@ def test_legacy_reload_and_validate_target_active_instance(lab, monkeypatch):
     from ascam_ontop_agent.reloader import ReloadResult
     from ascam_ontop_agent.security import TokenRegistry
     bg, _, cfg = lab
-    bg.prepare('M2', 'T2', '2'); bg.start(); bg.switch()          # aktif: green
-    dipanggil = []
+    bg.prepare('M2', 'T2', '2'); bg.start(); bg.switch()          # active: green
+    called = []
     monkeypatch.setattr('ascam_ontop_agent.app.reload_ontop',
                         lambda cfg, docker_client=None, container_name=None:
-                        dipanggil.append(container_name) or ReloadResult(True, 1, 1, 2))
+                        called.append(container_name) or ReloadResult(True, 1, 1, 2))
     app = create_app(cfg=cfg, tokens=TokenRegistry([f'executor:{TOKEN}']), runner=bg.runner,
                      bluegreen=bg)
     with TestClient(app) as client:
         client.headers['Authorization'] = f'Bearer {TOKEN}'
         assert client.post('/api/v1/reload').json()['ok']
         client.post('/api/v1/validate', json={})
-    assert dipanggil == ['vkg-system-ontop-green']
+    assert called == ['vkg-system-ontop-green']
     assert bg.runner.containers[-1] == 'vkg-system-ontop-green'

@@ -1,10 +1,10 @@
 """
-Pekerja Orchestrator: konsumsi topik DDL, normalisasi, kirim ke Knowledge.
+Orchestrator worker: consumes the DDL topics, normalises them, and sends them to Knowledge.
 
-Offset hanya di-commit setelah event berhasil dikirim (at-least-once). Pengiriman ganda aman
-karena `event_uid` bersifat deterministik dan Knowledge memperlakukan event secara idempoten
-(ADR-0016). Bila Knowledge tidak dapat dihubungi, konsumen mundur ke offset pesan yang gagal
-dan mencoba lagi, sehingga tidak ada event yang terlewat.
+Offsets are committed only after the event was sent (at-least-once). A second delivery is safe
+because `event_uid` is deterministic and Knowledge treats events idempotently (ADR-0016). If
+Knowledge cannot be reached, the consumer seeks back to the offset of the failed message and
+retries, so no event is skipped.
 """
 import json
 import logging
@@ -51,14 +51,14 @@ class Orchestrator:
         self._consumer_factory = consumer_factory
         self._stop = threading.Event()
 
-    # ── penyiapan ───────────────────────────────────────────────────────────────
+    # ── set-up ──────────────────────────────────────────────────────────────────
     def prepare(self) -> tuple[KnowledgeClient, int, dict[str, dict]]:
         knowledge = self._knowledge or KnowledgeClient(self.settings.knowledge_url,
                                                        self.settings.bearer())
         obdf_id = knowledge.obdf_id(self.settings.obdf_name)
         by_topic = {s['kafka_topic']: s for s in knowledge.sources(obdf_id) if s.get('kafka_topic')}
         if not by_topic:
-            raise RuntimeError('tidak ada sumber dengan kafka_topic pada Knowledge')
+            raise RuntimeError('no source with kafka_topic in Knowledge')
         self.stats.topics = sorted(by_topic)
         return knowledge, obdf_id, by_topic
 
@@ -70,29 +70,29 @@ class Orchestrator:
                              auto_offset_reset=self.settings.offset_reset,
                              value_deserializer=lambda v: json.loads(v.decode()) if v else None)
 
-    # ── pemrosesan ──────────────────────────────────────────────────────────────
+    # ── processing ──────────────────────────────────────────────────────────────
     def handle(self, knowledge: KnowledgeClient, obdf_id: int, source: dict, message) -> None:
         events = normalize(message.topic, message.partition, message.offset, message.value,
                            source['logical_name'], source.get('dbms', 'postgresql'))
         self.stats.messages += 1
         if not events:
-            # Pesan yang tidak menjadi event dicatat beserta alasannya (temuan F6: setelah
-            # seluruh kontainer dinyalakan ulang, pesan diterima tetapi dibuang tanpa jejak)
-            alasan = skip_reason(message.value)
+            # Messages that give no event are recorded with their reason (finding of F6: after
+            # every container was restarted, messages were received but dropped without a trace)
+            reason = skip_reason(message.value)
             self.stats.skipped += 1
             self.stats.last_skipped = {'topic': message.topic, 'offset': message.offset,
-                                       'alasan': alasan,
-                                       'cuplikan': str(message.value)[:300]}
-            log.warning('pesan %s@%s dilewati: %s', message.topic, message.offset, alasan)
+                                       'reason': reason,
+                                       'excerpt': str(message.value)[:300]}
+            log.warning('message %s@%s skipped: %s', message.topic, message.offset, reason)
             return
         for event in events:
             result = knowledge.post_event(obdf_id, event.payload())
             self.stats.events_sent += 1
             self.stats.last_event_at = datetime.now(timezone.utc).isoformat()
             if result.get('conflict'):
-                # uid sama tetapi isi berbeda: tanda kunci idempotensi bertabrakan
+                # same uid but different content: the idempotency key collided
                 self.stats.conflicts += 1
-                log.warning('event_uid %s bertabrakan dengan event lain yang isinya berbeda',
+                log.warning('event_uid %s collides with another event with different content',
                             event.event_uid)
             if result.get('duplicate'):
                 self.stats.duplicates += 1
@@ -101,14 +101,14 @@ class Orchestrator:
             else:
                 self.stats.events_planned += 1
                 plan = result.get('plan') or {}
-                log.info('event %s -> rencana %s (%s/%s)', event.operation, plan.get('id'),
+                log.info('event %s -> plan %s (%s/%s)', event.operation, plan.get('id'),
                          plan.get('decision'), plan.get('status'))
 
     def run(self) -> None:
-        """Penyiapan diulang sampai berhasil.
+        """The set-up is retried until it succeeds.
 
-        Knowledge dapat sedang restart saat Orchestrator start; penyiapan yang hanya dicoba
-        sekali membuat pekerja mati permanen meski Knowledge kemudian sehat.
+        Knowledge may be restarting when the Orchestrator starts; a set-up tried only once
+        killed the worker for good, even after Knowledge became healthy.
         """
         while not self._stop.is_set():
             try:
@@ -119,7 +119,7 @@ class Orchestrator:
             except Exception as exc:                # noqa: BLE001
                 self.stats.state = 'retrying'
                 self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
-                log.warning('penyiapan gagal (%s); mencoba lagi dalam %.0f detik',
+                log.warning('set-up failed (%s); retrying in %.0f seconds',
                             self.stats.last_error, self.settings.retry_seconds)
                 if self._stop.wait(self.settings.retry_seconds):
                     self.stats.state = 'stopped'
@@ -130,7 +130,7 @@ class Orchestrator:
 
         self.stats.state = 'running'
         self.stats.last_error = None
-        log.info('mendengarkan topik %s pada %s (grup %s, mulai %s)', self.stats.topics, bootstrap,
+        log.info('listening on topics %s at %s (group %s, start %s)', self.stats.topics, bootstrap,
                  self.settings.group_id, self.settings.offset_reset)
         try:
             while not self._stop.is_set():
@@ -142,10 +142,10 @@ class Orchestrator:
                             continue
                         try:
                             self.handle(knowledge, obdf_id, source, message)
-                        except Exception as exc:        # noqa: BLE001 — coba lagi tanpa commit
+                        except Exception as exc:        # noqa: BLE001 — retry without commit
                             self.stats.failures += 1
                             self.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
-                            log.warning('gagal memproses offset %s: %s', message.offset,
+                            log.warning('processing offset %s failed: %s', message.offset,
                                         self.stats.last_error)
                             consumer.seek(TopicPartition(message.topic, message.partition),
                                           message.offset)

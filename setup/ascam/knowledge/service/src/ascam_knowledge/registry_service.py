@@ -1,6 +1,6 @@
 """
-Logika registry yang dipakai bersama oleh API dan penerapan konfigurasi deklaratif.
-Setiap perubahan dicatat di ops.audit_log tanpa memuat rahasia.
+Registry logic shared by the API and by applying the declarative configuration.
+Every change is recorded in ops.audit_log without any secret.
 """
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -29,14 +29,14 @@ def audit(db: Session, actor: str, action: str, obdf_id: int | None,
 def get_obdf(db: Session, obdf_id: int) -> registry.ObdfInstance:
     obj = db.get(registry.ObdfInstance, obdf_id)
     if obj is None:
-        raise NotFound(f'OBDF {obdf_id} tidak ditemukan')
+        raise NotFound(f'OBDF {obdf_id} not found')
     return obj
 
 
 def owned(db: Session, model, obj_id: int, obdf_id: int | None = None):
     obj = db.get(model, obj_id)
     if obj is None or (obdf_id is not None and obj.obdf_id != obdf_id):
-        raise NotFound(f'{model.__tablename__} {obj_id} tidak ditemukan pada OBDF ini')
+        raise NotFound(f'{model.__tablename__} {obj_id} not found in this OBDF')
     return obj
 
 
@@ -46,7 +46,7 @@ def resolve_type_mapping(item: sc.TypeMappingIn) -> dict:
     if data['owl2ql_compatible'] is None:
         data['owl2ql_compatible'] = computed
     elif data['owl2ql_compatible'] != computed:
-        raise Invalid(f'owl2ql_compatible untuk {item.xsd_datatype} seharusnya {computed}')
+        raise Invalid(f'owl2ql_compatible for {item.xsd_datatype} should be {computed}')
     data['native_type'] = data['native_type'].lower()
     return data
 
@@ -73,7 +73,7 @@ def _upsert(db, model, keys: dict, values: dict, label: str, summary: sc.ApplySu
 
 
 def apply_config(db: Session, doc: sc.ConfigDocument, box: SecretBox, actor: str) -> sc.ApplySummary:
-    """Upsert idempoten; tidak menghapus objek yang tidak disebut di dokumen."""
+    """Idempotent upsert; objects not named in the document are not deleted."""
     obdf = db.execute(select(registry.ObdfInstance).filter_by(name=doc.obdf.name)).scalar_one_or_none()
     if obdf is None:
         obdf = registry.ObdfInstance(name=doc.obdf.name, description=doc.obdf.description)
@@ -132,10 +132,11 @@ def apply_config(db: Session, doc: sc.ConfigDocument, box: SecretBox, actor: str
             cred = credentials.get(tgt.credential) or db.execute(
                 select(registry.Credential).filter_by(obdf_id=obdf.id, name=tgt.credential)).scalar_one_or_none()
             if cred is None:
-                raise Invalid(f'target {tgt.name}: kredensial {tgt.credential} tidak dikenal')
+                raise Invalid(f'target {tgt.name}: unknown credential {tgt.credential}')
             cred_id = cred.id
         sc.TargetIn(kind=tgt.kind, name=tgt.name, endpoint=tgt.endpoint,
-                    credential_id=cred_id, enabled=tgt.enabled)          # validasi aturan per jenis
+                    credential_id=cred_id, enabled=tgt.enabled)          # validates the rules per kind
+
         _upsert(db, registry.Target, {'obdf_id': obdf.id, 'name': tgt.name},
                 {'kind': tgt.kind, 'endpoint': tgt.endpoint.model_dump(), 'credential_id': cred_id,
                  'enabled': tgt.enabled},

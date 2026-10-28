@@ -1,12 +1,12 @@
 """
-Membangun snapshot Σ_S dari metadata runtime Teiid.
+Builds the Σ_S snapshot from the Teiid runtime metadata.
 
-Sumber: `get-vdb` (model dan pemetaan sumber), tabel `SYS.*` (tabel, kolom, kunci),
-`SYSADMIN.Views` (definisi view), `SYSADMIN.Usage` (dependensi), `SYSADMIN.MatViews`,
-`StoredProcedures`, dan `Triggers` (ADR-0003, ADR-0006, ADR-0009).
+Sources: `get-vdb` (models and source mappings), tables `SYS.*` (tables, columns, keys),
+`SYSADMIN.Views` (view definitions), `SYSADMIN.Usage` (dependencies), `SYSADMIN.MatViews`,
+`StoredProcedures`, and `Triggers` (ADR-0003, ADR-0006, ADR-0009).
 
-Klasifikasi kolom view memakai sqlglot atas `Body` (pass-through, ekspresi, star); kolom yang
-dirujuk view tetapi bukan sumber kolom view mana pun diberi peran `predicate` (bukti F0.7).
+View columns are classified with sqlglot over `Body` (pass-through, expression, star); a column
+that a view refers to but that is not the source of any view column gets role `predicate` (F0.7).
 """
 import hashlib
 import json
@@ -26,7 +26,7 @@ def strip_ident(value: str) -> str:
 
 
 def split_name_in_source(name_in_source: str | None) -> tuple[str | None, str | None]:
-    """'`db`.`tabel`' atau 'public.tabel' -> (skema, tabel); tanpa titik -> (None, nama)."""
+    """'`db`.`table`' or 'public.table' -> (schema, table); no dot -> (None, name)."""
     if not name_in_source:
         return None, None
     parts, current, quote = [], '', None
@@ -70,8 +70,8 @@ def classify_view(body: str) -> ViewInfo:
         tree = sqlglot.parse_one(body)
         select = tree if isinstance(tree, exp.Select) else tree.find(exp.Select)
         if select is None:
-            raise ValueError('bukan SELECT')
-    except Exception:                                   # noqa: BLE001 — Body tak terurai
+            raise ValueError('not a SELECT')
+    except Exception:                                   # noqa: BLE001 — Body cannot be parsed
         return ViewInfo(body=body, parse_status='failed', uses_star=False)
 
     kinds, uses_star = {}, False
@@ -98,15 +98,15 @@ class SigmaSnapshot:
     models: list[dict]
     tables: list[dict]
     columns: list[dict]
-    views: dict[str, ViewInfo]                 # kunci: "skema.tabel"
+    views: dict[str, ViewInfo]                 # key: "schema.table"
     dependencies: list[dict]
     routines: list[dict]
 
     def digest(self) -> str:
-        """Sidik jari isi Σ_S.
+        """Fingerprint of the Σ_S content.
 
-        Harus mencakup SELURUH atribut yang ikut disimpan; atribut yang terlewat membuat
-        perubahan tidak terdeteksi dan versi baru tidak pernah dibuat.
+        It must cover EVERY attribute that is stored; a missing attribute lets a change go
+        unnoticed, and no new version is ever created.
         """
         payload = {
             'vdb': {k: str(v) for k, v in self.vdb.items() if k in ('name', 'version', 'connection_type')},
@@ -178,7 +178,7 @@ def build(metadata: dict[str, list[dict]], vdb_info: dict,
         src_schema, src_table = split_name_in_source(row.get('NameInSource'))
         tables.append({'model': schema, 'name': name, 'kind': kind, 'uid': row.get('UID'),
                        'name_in_source': row.get('NameInSource'),
-                       # tabel tanpa NAMEINSOURCE memakai skema bawaan koneksi sumber
+                       # tables without NAMEINSOURCE use the default schema of the source connection
                        'source_schema': normalize(src_schema or default_schema_by_model.get(schema), case),
                        'source_table': normalize(src_table or name, case)})
         if row.get('UID'):

@@ -1,4 +1,4 @@
-"""Perilaku integritas: segel versi, rujukan lintas versi, transisi status, append-only."""
+"""Integrity behaviour: sealed versions, cross-version references, status transitions, append-only."""
 import uuid
 
 import pytest
@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from ascam_knowledge.db import ops, registry, spec
 from conftest import expect_db_error
 
-SEALED = '55000'          # object_not_in_prerequisite_state (RAISE pada trigger)
+SEALED = '55000'          # object_not_in_prerequisite_state (RAISE in the triggers)
 FK = '23503'
 UNIQUE = '23505'
 CHECK = '23514'
@@ -21,7 +21,7 @@ def add(session, obj):
 
 @pytest.fixture
 def obdf(session):
-    return add(session, registry.ObdfInstance(name=f'uji-{uuid.uuid4().hex[:8]}'))
+    return add(session, registry.ObdfInstance(name=f'test-{uuid.uuid4().hex[:8]}'))
 
 
 def new_version(session, obdf, no, origin='sync', **kw):
@@ -40,12 +40,12 @@ def test_candidate_is_editable_and_sealing_freezes_content(session, obdf):
     v = new_version(session, obdf, 1)
     _, t, c = model_table_column(session, v)
     c.nullable = False
-    session.flush()                                        # boleh: masih candidate
+    session.flush()                                        # allowed: still candidate
 
     v.status = 'active'
     session.flush()
     session.refresh(v)
-    assert v.sealed_at is not None                         # diisi trigger
+    assert v.sealed_at is not None                         # set by the trigger
 
     def insert_after_seal():
         session.add(spec.TeiidColumn(spec_version_id=v.id, table_id=t.id, name='nama',
@@ -90,7 +90,7 @@ def test_only_one_active_version_per_obdf(session, obdf):
 
 
 @pytest.mark.parametrize('path, allowed', [
-    (['active', 'superseded', 'active'], True),       # rollback ke versi sebelumnya
+    (['active', 'superseded', 'active'], True),       # rollback to the previous version
     (['active', 'rolled_back'], True),
     (['rejected'], True),
     (['superseded'], False),                         # candidate -> superseded
@@ -125,7 +125,7 @@ def test_sealed_version_attributes_are_immutable_but_note_is_not(session, obdf):
         session.execute(text('UPDATE spec.spec_version SET version_no = 9 WHERE id = :i'), {'i': v.id})
     expect_db_error(session, SEALED, change_number)
 
-    session.execute(text("UPDATE spec.spec_version SET note = 'catatan', "
+    session.execute(text("UPDATE spec.spec_version SET note = 'note', "
                          "teiid_connection_type = 'ANY' WHERE id = :i"), {'i': v.id})
 
 
@@ -144,19 +144,19 @@ def test_purge_removes_content_but_keeps_tombstone(session, obdf):
     model_table_column(session, v2)
     purge = text('SELECT spec.purge_version(:i)')
 
-    expect_db_error(session, SEALED, lambda: session.execute(purge, {'i': v1.id}))   # masih active
+    expect_db_error(session, SEALED, lambda: session.execute(purge, {'i': v1.id}))   # still active
 
     session.execute(text("UPDATE spec.spec_version SET status = 'superseded' WHERE id = :i"), {'i': v1.id})
     session.execute(text("UPDATE spec.spec_version SET status = 'active' WHERE id = :i"), {'i': v2.id})
-    expect_db_error(session, SEALED, lambda: session.execute(purge, {'i': v1.id}))   # tanpa izin
+    expect_db_error(session, SEALED, lambda: session.execute(purge, {'i': v1.id}))   # without permission
 
     def purge_by_status_update():
         session.execute(text("UPDATE spec.spec_version SET status = 'purged' WHERE id = :i"), {'i': v1.id})
-    expect_db_error(session, SEALED, purge_by_status_update)                         # jalan pintas ditolak
+    expect_db_error(session, SEALED, purge_by_status_update)                         # shortcut rejected
 
     session.execute(text("SET LOCAL ascam.allow_purge = 'on'"))
     removed = session.execute(purge, {'i': v1.id}).scalar()
-    assert removed == 3                                              # model + tabel + kolom
+    assert removed == 3                                              # model + table + column
     left_v1 = session.execute(text(
         'SELECT (SELECT count(*) FROM spec.teiid_model WHERE spec_version_id = :i) + '
         '(SELECT count(*) FROM spec.teiid_table WHERE spec_version_id = :i) + '
@@ -165,25 +165,25 @@ def test_purge_removes_content_but_keeps_tombstone(session, obdf):
     status, parent_of_v2 = session.execute(text(
         'SELECT (SELECT status FROM spec.spec_version WHERE id = :a), '
         '(SELECT parent_id FROM spec.spec_version WHERE id = :b)'), {'a': v1.id, 'b': v2.id}).one()
-    assert (status, parent_of_v2) == ('purged', v1.id)              # tombstone dan rujukan tetap
+    assert (status, parent_of_v2) == ('purged', v1.id)              # tombstone and references remain
     left_v2 = session.execute(text('SELECT count(*) FROM spec.teiid_column WHERE spec_version_id = :i'),
                               {'i': v2.id}).scalar()
-    assert left_v2 == 1                                              # versi lain tidak tersentuh
+    assert left_v2 == 1                                              # other versions untouched
 
 
 def test_ops_is_append_only_and_audit_is_immutable(session, obdf):
     ev = add(session, ops.SchemaEvent(event_uid=uuid.uuid4(), obdf_id=obdf.id, raw_message={'a': 1}))
     ev.status = 'ignored'
-    session.flush()                                        # status boleh berpindah
+    session.flush()                                        # the status may still move
 
     def delete_event():
         session.execute(text('DELETE FROM ops.schema_event WHERE id = :i'), {'i': ev.id})
     expect_db_error(session, SEALED, delete_event)
 
-    log = add(session, ops.AuditLog(actor='admin', action='uji'))
+    log = add(session, ops.AuditLog(actor='admin', action='test'))
 
     def update_audit():
-        session.execute(text("UPDATE ops.audit_log SET actor = 'lain' WHERE id = :i"), {'i': log.id})
+        session.execute(text("UPDATE ops.audit_log SET actor = 'other' WHERE id = :i"), {'i': log.id})
     expect_db_error(session, SEALED, update_audit)
 
 
@@ -226,8 +226,8 @@ def test_lineage_row_across_tables_of_same_version(session, obdf):
     _, _, col = model_table_column(session, v)
     tm = add(session, spec.TriplesMap(spec_version_id=v.id, iri='urn:tm', logical_table_kind='table',
                                       table_name='dukcapil.master_penduduk', sql_parse_status='not_applicable'))
-    ont = add(session, spec.Ontology(spec_version_id=v.id, iri='http://contoh/ont'))
-    ent = add(session, spec.OntEntity(spec_version_id=v.id, ontology_id=ont.id, iri='http://contoh/ont/nik',
+    ont = add(session, spec.Ontology(spec_version_id=v.id, iri='http://example.org/ont'))
+    ent = add(session, spec.OntEntity(spec_version_id=v.id, ontology_id=ont.id, iri='http://example.org/ont/nik',
                                       kind='datatype_property'))
     usage = add(session, spec.ColumnUsage(spec_version_id=v.id, foreign_column_id=col.id,
                                           triples_map_id=tm.id, role='literal_value',
@@ -237,11 +237,11 @@ def test_lineage_row_across_tables_of_same_version(session, obdf):
 
 
 def test_application_role_cannot_purge_even_with_setting(session, obdf):
-    """D4: role aplikasi dapat membaca/menulis, tetapi purge hanya untuk pemilik skema."""
+    """D4: the application role can read and write, but only the schema owner may purge."""
     can_create = session.execute(text(
         'SELECT rolsuper OR rolcreaterole FROM pg_roles WHERE rolname = current_user')).scalar()
     if not can_create:
-        pytest.skip('role pengujian tidak dapat membuat role')
+        pytest.skip('the test role cannot create roles')
     v1 = new_version(session, obdf, 1)
     v1.status = 'active'
     session.flush()
@@ -249,16 +249,16 @@ def test_application_role_cannot_purge_even_with_setting(session, obdf):
     session.execute(text("UPDATE spec.spec_version SET status = 'superseded' WHERE id = :i"), {'i': v1.id})
     session.execute(text("UPDATE spec.spec_version SET status = 'active' WHERE id = :i"), {'i': v2.id})
 
-    session.execute(text('CREATE ROLE ascam_app_uji NOLOGIN'))          # transaksional, ikut di-rollback
-    session.execute(text('GRANT ascam_app_uji TO CURRENT_USER'))        # PG16: izin SET ROLE eksplisit
-    session.execute(text('GRANT USAGE ON SCHEMA registry, spec, ops TO ascam_app_uji'))
+    session.execute(text('CREATE ROLE ascam_app_test NOLOGIN'))          # transactional, rolled back with the test
+    session.execute(text('GRANT ascam_app_test TO CURRENT_USER'))        # PG16: explicit SET ROLE permission
+    session.execute(text('GRANT USAGE ON SCHEMA registry, spec, ops TO ascam_app_test'))
     session.execute(text('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA registry, spec, ops '
-                         'TO ascam_app_uji'))
-    session.execute(text('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA spec, ops TO ascam_app_uji'))
-    session.execute(text('SET LOCAL ROLE ascam_app_uji'))
+                         'TO ascam_app_test'))
+    session.execute(text('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA spec, ops TO ascam_app_test'))
+    session.execute(text('SET LOCAL ROLE ascam_app_test'))
     session.execute(text("SET LOCAL ascam.allow_purge = 'on'"))
     assert session.execute(text('SELECT count(*) FROM spec.spec_version WHERE id = :i'),
-                           {'i': v1.id}).scalar() == 1               # role aplikasi dapat membaca
+                           {'i': v1.id}).scalar() == 1               # the application role can read
     expect_db_error(session, SEALED, lambda: session.execute(
         text('SELECT spec.purge_version(:i)'), {'i': v1.id}))
     session.execute(text('RESET ROLE'))

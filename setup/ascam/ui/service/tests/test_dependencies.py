@@ -1,7 +1,7 @@
-"""Dependensi runtime: setiap modul pihak ketiga yang diimpor harus dideklarasikan.
+"""Runtime dependencies: every third-party module that is imported must be declared.
 
-Regresi F4a: `httpx` dipakai modul reloader tetapi hanya terdaftar sebagai dependensi
-pengujian, sehingga kontainer gagal start meski seluruh uji lolos.
+Regression F4a: `httpx` was used by the reloader module but was listed only as a test
+dependency, so the container failed to start although every test passed.
 """
 import ast
 import pathlib
@@ -13,33 +13,33 @@ ALIAS = {'kafka-python-ng': 'kafka', 'pyyaml': 'yaml', 'psycopg': 'psycopg',
          'uvicorn': 'uvicorn', 'sqlalchemy': 'sqlalchemy'}
 
 
-def dependensi_dideklarasikan() -> set[str]:
-    isi = (ROOT / 'pyproject.toml').read_text()
-    blok = isi.split('dependencies = [', 1)[1].split(']\n', 1)[0]
-    nama = set()
-    for baris in blok.splitlines():
-        cocok = re.search(r'"([A-Za-z0-9_.\[\]-]+)', baris)
-        if cocok:
-            mentah = cocok.group(1).lower()
-            dasar = mentah.split('[')[0]
-            nama.add(ALIAS.get(mentah, ALIAS.get(dasar, dasar.replace('-', '_'))))
-    return nama
+def declared_dependencies() -> set[str]:
+    content = (ROOT / 'pyproject.toml').read_text()
+    block = content.split('dependencies = [', 1)[1].split(']\n', 1)[0]
+    names = set()
+    for line in block.splitlines():
+        found = re.search(r'"([A-Za-z0-9_.\[\]-]+)', line)
+        if found:
+            raw = found.group(1).lower()
+            base = raw.split('[')[0]
+            names.add(ALIAS.get(raw, ALIAS.get(base, base.replace('-', '_'))))
+    return names
 
 
-def modul_diimpor() -> set[str]:
+def imported_modules() -> set[str]:
     src = ROOT / 'src'
-    paket = {p.name for p in src.iterdir()}
-    diimpor = set()
-    for berkas in src.rglob('*.py'):
-        pohon = ast.parse(berkas.read_text())
-        for simpul in ast.walk(pohon):
-            if isinstance(simpul, ast.Import):
-                diimpor |= {a.name.split('.')[0] for a in simpul.names}
-            elif isinstance(simpul, ast.ImportFrom) and simpul.level == 0 and simpul.module:
-                diimpor.add(simpul.module.split('.')[0])
-    return diimpor - set(sys.stdlib_module_names) - paket
+    packages = {p.name for p in src.iterdir()}
+    imported = set()
+    for path in src.rglob('*.py'):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported |= {a.name.split('.')[0] for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                imported.add(node.module.split('.')[0])
+    return imported - set(sys.stdlib_module_names) - packages
 
 
-def test_semua_impor_pihak_ketiga_dideklarasikan():
-    kurang = sorted(modul_diimpor() - dependensi_dideklarasikan())
-    assert not kurang, f'dipakai tetapi tidak ada di pyproject dependencies: {kurang}'
+def test_every_third_party_import_is_declared():
+    missing = sorted(imported_modules() - declared_dependencies())
+    assert not missing, f'used but not listed in pyproject dependencies: {missing}'

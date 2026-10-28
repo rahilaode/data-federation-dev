@@ -1,19 +1,19 @@
 """
-Mengembalikan OBDF ke kondisi dasar agar eksperimen dapat diulang.
+Returns the OBDF to its base state so that an experiment can be repeated.
 
-Setiap run evaluasi harus berangkat dari keadaan yang sama. Skrip ini:
-  1. mengembalikan artefak OBDA (mapping.ttl, ontology_file.ttl) ke isi di git;
-  2. mengembalikan koneksi Teiid ke VDB versi 1 dan menghapus versi yang lebih baru;
-  3. menghapus kolom uji pada sumber (bawaan: kemensos.penerima_manfaat.email);
-  4. memuat ulang Ontop lalu memverifikasi endpoint menjawab (blue-green: instance aktif
-     dibangun ulang dari artefak di git dan dikunci ke VDB versi dasar, ADR-0022);
-  5. menyinkronkan Knowledge sehingga versi spesifikasi aktif mencerminkan keadaan dasar.
+Every evaluation run must start from the same state. This script:
+  1. restores the OBDA artifacts (mapping.ttl, ontology_file.ttl) to their content in git;
+  2. points the Teiid connection back at VDB version 1 and removes newer versions;
+  3. drops the test column on the source (default: kemensos.penerima_manfaat.email);
+  4. reloads Ontop and checks that the endpoint answers (blue-green: the active instance is
+     rebuilt from the artifacts in git and pinned to the base VDB version, ADR-0022);
+  5. syncs Knowledge so that the active specification version reflects the base state.
 
-Catatan: riwayat di Knowledge (event, rencana, eksekusi) TIDAK dihapus, karena merupakan
-jejak eksperimen. Gunakan `--kolom nama` untuk kolom uji lain, dan `--tanpa-sumber` bila
-sumber tidak perlu diubah.
+Note: the history in Knowledge (events, plans, executions) is NOT deleted, because it is the
+record of the experiment. Use `--column name` for another test column, and `--keep-sources` when
+the sources must not be changed.
 
-Dijalankan dari host: `python3 experiments/reset_obdf.py`
+Run on the host: `python3 experiments/reset_obdf.py`
 """
 import argparse
 import json
@@ -27,31 +27,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 KNOWLEDGE = 'http://127.0.0.1:18000'
 AGENT = 'http://127.0.0.1:18100'
-# Port manajemen WildFly dipetakan ke 19990 pada host (setup/data-federation/docker-compose.yaml)
+# The WildFly management port is mapped to 19990 on the host (setup/data-federation/docker-compose.yaml)
 TEIID = os.getenv('ASCAM_TEIID_MGMT', 'http://localhost:19990/management')
 SECRETS = ROOT / 'setup/ascam/knowledge/secrets'
-ARTEFAK = ['setup/vkg-system/config/mapping.ttl', 'setup/vkg-system/config/ontology_file.ttl']
+ARTIFACTS = ['setup/vkg-system/config/mapping.ttl', 'setup/vkg-system/config/ontology_file.ttl']
 
 
-def rahasia(berkas: str, klien: str | None = None) -> str:
-    for baris in (SECRETS / berkas).read_text().splitlines():
-        baris = baris.strip()
-        if not baris or baris.startswith('#'):
+def secret(file: str, client: str | None = None) -> str:
+    for line in (SECRETS / file).read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
             continue
-        if klien and ':' in baris:
-            if baris.split(':', 1)[0] == klien:
-                return baris.split(':', 1)[1]
+        if client and ':' in line:
+            if line.split(':', 1)[0] == client:
+                return line.split(':', 1)[1]
             continue
-        return baris.split(':', 1)[1] if ':' in baris else baris
-    raise RuntimeError(f'rahasia {klien or berkas} tidak ditemukan')
+        return line.split(':', 1)[1] if ':' in line else line
+    raise RuntimeError(f'secret {client or file} not found')
 
 
-def api(base: str, path: str, bearer: str | None = None, metode: str = 'GET', body=None):
+def api(base: str, path: str, bearer: str | None = None, method: str = 'GET', body=None):
     data = json.dumps(body).encode() if body is not None else None
     headers = {'Content-Type': 'application/json'}
     if bearer:
         headers['Authorization'] = f'Bearer {bearer}'
-    request = urllib.request.Request(f'{base}{path}', data=data, method=metode, headers=headers)
+    request = urllib.request.Request(f'{base}{path}', data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=180) as response:
             return json.loads(response.read() or b'{}')
@@ -61,11 +61,11 @@ def api(base: str, path: str, bearer: str | None = None, metode: str = 'GET', bo
         return {'_error': f'{type(exc).__name__}: {exc}'}
 
 
-def teiid(operasi: dict, pengguna: str, sandi: str):
+def teiid(operation: dict, user: str, password: str):
     manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    manager.add_password(None, TEIID, pengguna, sandi)
+    manager.add_password(None, TEIID, user, password)
     opener = urllib.request.build_opener(urllib.request.HTTPDigestAuthHandler(manager))
-    request = urllib.request.Request(TEIID, data=json.dumps(operasi).encode(), method='POST',
+    request = urllib.request.Request(TEIID, data=json.dumps(operation).encode(), method='POST',
                                      headers={'Content-Type': 'application/json'})
     try:
         with opener.open(request, timeout=60) as response:
@@ -74,94 +74,94 @@ def teiid(operasi: dict, pengguna: str, sandi: str):
         return {'outcome': 'failed', 'failure-description': exc.read()[:200].decode('utf-8', 'replace')}
 
 
-def psql(perintah: str) -> str:
-    hasil = subprocess.run(['docker', 'exec', 'datasources-pgsql', 'psql', '-U', 'postgres',
-                            '-d', 'kemensos', '-tAc', perintah], capture_output=True, text=True)
-    return (hasil.stdout or hasil.stderr).strip()
+def psql(command: str) -> str:
+    result = subprocess.run(['docker', 'exec', 'datasources-pgsql', 'psql', '-U', 'postgres',
+                             '-d', 'kemensos', '-tAc', command], capture_output=True, text=True)
+    return (result.stdout or result.stderr).strip()
 
 
-def judul(teks: str) -> None:
-    print(f'\n===== {teks} =====')
+def heading(text: str) -> None:
+    print(f'\n===== {text} =====')
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--kolom', default='email')
-    parser.add_argument('--tabel', default='penerima_manfaat')
+    parser.add_argument('--column', default='email')
+    parser.add_argument('--table', default='penerima_manfaat')
     parser.add_argument('--vdb', default='government')
-    parser.add_argument('--versi-dasar', default='1')
-    parser.add_argument('--tanpa-sumber', action='store_true')
-    parser.add_argument('--pengguna', default=os.getenv('ASCAM_TEIID_USER', 'admin'))
+    parser.add_argument('--base-version', default='1')
+    parser.add_argument('--keep-sources', action='store_true')
+    parser.add_argument('--user', default=os.getenv('ASCAM_TEIID_USER', 'admin'))
     args = parser.parse_args()
 
-    ui = rahasia('knowledge_api_tokens', 'ui')
-    token_agen = rahasia('ontop_agent_api_tokens')
-    sandi_teiid = rahasia('obdf_teiid_mgmt_password')
+    ui = secret('knowledge_api_tokens', 'ui')
+    agent_token = secret('ontop_agent_api_tokens')
+    teiid_password = secret('obdf_teiid_mgmt_password')
 
-    judul('1) artefak OBDA dikembalikan ke isi di git')
-    subprocess.run(['git', 'checkout', '--', *ARTEFAK], cwd=ROOT, check=False)
-    print(' ', subprocess.run(['git', 'status', '--short', *ARTEFAK], cwd=ROOT,
-                              capture_output=True, text=True).stdout.strip() or 'bersih')
+    heading('1) OBDA artifacts restored to their content in git')
+    subprocess.run(['git', 'checkout', '--', *ARTIFACTS], cwd=ROOT, check=False)
+    print(' ', subprocess.run(['git', 'status', '--short', *ARTIFACTS], cwd=ROOT,
+                              capture_output=True, text=True).stdout.strip() or 'clean')
 
-    judul('2) versi VDB dikembalikan')
-    versi = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
-                  args.pengguna, sandi_teiid)
-    if versi.get('outcome') != 'success':
-        print(f'  TIDAK dapat menghubungi Teiid di {TEIID}: '
-              f"{str(versi.get('failure-description') or versi)[:200]}")
-        print('  setel ASCAM_TEIID_MGMT bila port manajemen berbeda')
+    heading('2) VDB version restored')
+    versions = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
+                     args.user, teiid_password)
+    if versions.get('outcome') != 'success':
+        print(f'  CANNOT reach Teiid at {TEIID}: '
+              f"{str(versions.get('failure-description') or versions)[:200]}")
+        print('  set ASCAM_TEIID_MGMT if the management port is different')
         return 1
-    # Kunci hasil list-vdbs adalah vdb-name dan vdb-version (lihat connectors.py Knowledge)
-    aktif = [(v.get('vdb-name'), str(v.get('vdb-version')), v.get('connection-type'), v.get('status'))
-             for v in (versi.get('result') or []) if isinstance(v, dict)]
-    print('  sebelum:', aktif)
+    # The list-vdbs result keys are vdb-name and vdb-version (see connectors.py in Knowledge)
+    active = [(v.get('vdb-name'), str(v.get('vdb-version')), v.get('connection-type'), v.get('status'))
+              for v in (versions.get('result') or []) if isinstance(v, dict)]
+    print('  before:', active)
     teiid({'operation': 'change-vdb-connection-type', 'address': [{'subsystem': 'teiid'}],
-           'vdb-name': args.vdb, 'vdb-version': args.versi_dasar, 'connection-type': 'ANY'},
-          args.pengguna, sandi_teiid)
-    for nama, nomor, _, _ in aktif:
-        if nama == args.vdb and nomor != args.versi_dasar:
-            deployment = f'{nama}-{nomor}-vdb.xml'
-            for operasi in ('undeploy', 'remove'):
-                teiid({'operation': operasi, 'address': [{'deployment': deployment}]},
-                      args.pengguna, sandi_teiid)
-            print(f'  versi {nomor} dihapus ({deployment})')
-    versi = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
-                  args.pengguna, sandi_teiid)
-    print('  sesudah:', [(v.get('vdb-name'), str(v.get('vdb-version')), v.get('connection-type'),
-                          v.get('status')) for v in (versi.get('result') or [])
-                         if isinstance(v, dict)])
+           'vdb-name': args.vdb, 'vdb-version': args.base_version, 'connection-type': 'ANY'},
+          args.user, teiid_password)
+    for name, number, _, _ in active:
+        if name == args.vdb and number != args.base_version:
+            deployment = f'{name}-{number}-vdb.xml'
+            for operation in ('undeploy', 'remove'):
+                teiid({'operation': operation, 'address': [{'deployment': deployment}]},
+                      args.user, teiid_password)
+            print(f'  version {number} removed ({deployment})')
+    versions = teiid({'operation': 'list-vdbs', 'address': [{'subsystem': 'teiid'}]},
+                     args.user, teiid_password)
+    print('  after:', [(v.get('vdb-name'), str(v.get('vdb-version')), v.get('connection-type'),
+                        v.get('status')) for v in (versions.get('result') or [])
+                       if isinstance(v, dict)])
 
-    if not args.tanpa_sumber:
-        judul('3) kolom uji pada sumber dihapus')
-        ada = psql("SELECT count(*) FROM information_schema.columns "
-                   f"WHERE table_name='{args.tabel}' AND column_name='{args.kolom}'")
-        print(' ', psql(f'ALTER TABLE public.{args.tabel} DROP COLUMN {args.kolom}')
-              if ada == '1' else 'kolom sudah tidak ada')
+    if not args.keep_sources:
+        heading('3) test column dropped on the source')
+        exists = psql("SELECT count(*) FROM information_schema.columns "
+                      f"WHERE table_name='{args.table}' AND column_name='{args.column}'")
+        print(' ', psql(f'ALTER TABLE public.{args.table} DROP COLUMN {args.column}')
+              if exists == '1' else 'column already gone')
 
-    judul('4) Ontop dimuat ulang')
-    # Blue-green (ADR-0022): instance aktif dibangun ulang dari artefak kanonik dan dikunci ke
-    # versi dasar; instance siaga dihentikan. Agen tanpa blue-green menjawab 409, lalu dipakai
-    # muat ulang lama (ADR-0001).
-    hasil = api(AGENT, '/api/v1/bluegreen/reset', token_agen, 'POST', {'vdb_version': args.versi_dasar})
-    if hasil.get('_http') == 409:
-        hasil = api(AGENT, '/api/v1/reload', token_agen, 'POST')
-        print(f"  ok={hasil.get('ok')} total={hasil.get('total_ms')} ms {hasil.get('error') or ''}")
+    heading('4) Ontop reloaded')
+    # Blue-green (ADR-0022): the active instance is rebuilt from the canonical artifacts and
+    # pinned to the base version; the standby instance is stopped. An agent without blue-green
+    # answers 409, and the old reload is used instead (ADR-0001).
+    result = api(AGENT, '/api/v1/bluegreen/reset', agent_token, 'POST', {'vdb_version': args.base_version})
+    if result.get('_http') == 409:
+        result = api(AGENT, '/api/v1/reload', agent_token, 'POST')
+        print(f"  ok={result.get('ok')} total={result.get('total_ms')} ms {result.get('error') or ''}")
     else:
-        print(f"  ok={hasil.get('ok')} instance={hasil.get('color')} "
-              f"durasi={hasil.get('duration_ms')} ms {hasil.get('error') or ''}")
-    artefak = api(AGENT, '/api/v1/artifacts', token_agen)
-    for a in artefak if isinstance(artefak, list) else []:
-        print(f"  artefak {a['kind']:9s} {a['sha256'][:16]}")
+        print(f"  ok={result.get('ok')} instance={result.get('color')} "
+              f"duration={result.get('duration_ms')} ms {result.get('error') or ''}")
+    artifacts = api(AGENT, '/api/v1/artifacts', agent_token)
+    for a in artifacts if isinstance(artifacts, list) else []:
+        print(f"  artifact {a['kind']:9s} {a['sha256'][:16]}")
 
-    judul('5) Knowledge disinkronkan')
+    heading('5) Knowledge synced')
     sync = api(KNOWLEDGE, '/api/v1/obdf/1/sync', ui, 'POST')
-    print(f"  berubah={sync.get('changed')} versi={sync.get('version_no')} "
-          f"drift={sync.get('drift_detected')} masalah={len(sync.get('issues') or [])}")
-    versi_aktif = api(KNOWLEDGE, '/api/v1/obdf/1/versions?limit=1', ui)
-    for v in versi_aktif if isinstance(versi_aktif, list) else []:
-        print(f"  versi {v['version_no']} {v['status']} (VDB v{v['teiid_vdb_version']}, "
+    print(f"  changed={sync.get('changed')} version={sync.get('version_no')} "
+          f"drift={sync.get('drift_detected')} issues={len(sync.get('issues') or [])}")
+    active_version = api(KNOWLEDGE, '/api/v1/obdf/1/versions?limit=1', ui)
+    for v in active_version if isinstance(active_version, list) else []:
+        print(f"  version {v['version_no']} {v['status']} (VDB v{v['teiid_vdb_version']}, "
               f"{v['teiid_connection_type']})")
-    print('\nOBDF siap untuk run berikutnya.')
+    print('\nThe OBDF is ready for the next run.')
     return 0
 
 

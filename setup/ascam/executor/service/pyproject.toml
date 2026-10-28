@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ascam-executor"
 version = "0.1.0"
-description = "Executor ASCAM: menyunting artefak OBDF dan menerapkannya secara blue-green"
+description = "ASCAM Executor: edits the OBDF artifacts and applies them in blue-green fashion"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110,<1",

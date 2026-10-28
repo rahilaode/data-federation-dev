@@ -1,4 +1,4 @@
-"""Data tiruan yang meniru struktur metadata OBDF studi kasus (Teiid 16 + agen Ontop)."""
+"""Fake data that mimics the metadata structure of the case-study OBDF (Teiid 16 + Ontop agent)."""
 from datetime import datetime
 
 MAPPING_TTL = """@prefix rr: <http://www.w3.org/ns/r2rml#> .

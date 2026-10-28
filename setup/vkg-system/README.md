@@ -1,72 +1,32 @@
-Ontop Command Line Interface
-============================
+# OBDA layer (Ontop, blue-green)
 
-This README file is describing the ontop command line interface (CLI).
+Ontop 4.1.1 exposes the federated data as a SPARQL endpoint, reading the mapping ℳ
+(`config/mapping.ttl`, R2RML) and the ontology 𝒯 (`config/ontology_file.ttl`) over the Teiid VDB
+`government` (`config/government.docker.properties`).
 
-Ontop ships a shell script (ontop for Linux/OS X) and a bat file (ontop.bat for Windows).
-The command line interface exposing the core functionality and several utilities through the command line interface. 
-It is an easy way to get the system quickly set-up, tested for correct execution, and querying or materializing, etc, as needed.
+Two Ontop instances run behind an nginx proxy (ADR-0022):
 
-Setup
------
+| Container | Role |
+|---|---|
+| `vkg-system-ontop-teiid` | nginx proxy on port 8080; the SPARQL endpoint is `http://localhost:8080/sparql` |
+| `vkg-system-ontop-blue` | Ontop instance that reads `slots/blue/` |
+| `vkg-system-ontop-green` | Ontop instance that reads `slots/green/` |
 
-### PATH
+Only the active instance runs. Each slot holds a copy of the mapping, the ontology, and the
+properties, with the JDBC URL pinned to one VDB version (`;version=N`). `slots/state.json` records
+the active colour and its VDB version; `proxy/runtime/upstream.conf` tells nginx which instance
+to use. Both are created by `init-bluegreen.sh` and changed afterwards only by the ASCAM agent.
+`config/` always mirrors the active instance and is the canonical copy that Knowledge syncs from.
 
-Consider put the directory of ontop to your `PATH`.
-
-### jdbc configuration
-
-For jdbc drivers, you will need to manually download them and put them into the `jdbc` directory.
-
-
-### Bash-completion
-
-* First you'll need to make sure you have bash-completion installed:
-
-Homebrew:
-
-	$ brew install bash-completion
-
-Then add the following lines to your ~/.bash_profile:
-
-    if [ -f $(brew --prefix)/etc/bash_completion ]; then
-        . $(brew --prefix)/etc/bash_completion
-    fi
-
-Ubuntu:
-
-	$ sudo apt-get install bash-completion
-
-Fedora:
-
-	$ sudo yum install bash-completion
-
-* Then, place `ontop-completion.sh` in your `bash_completion.d` folder, usually something like `/etc/bash_completion.d`, `/usr/local/etc/bash_completion.d`  or `~/bash_completion.d`.
-Another approach is to copy it somewhere (e.g. ~/.ontop-completion.sh) and put the following in your `.bash_profile` file:
-
-    source ~/.ontop-completion.sh
-    
-Usage
------
-
-```console
-$ ./ontop
-usage: ontop <command> [ <args> ]
-
-Commands are:
-    --version             Show version of ontop
-    bootstrap             Bootstrap ontology and mapping from the database
-    endpoint              Start a SPARQL endpoint powered by Ontop
-    extract-db-metadata   Extract the DB metadata and serialize it into an output JSON file
-    help                  Display help information
-    materialize           Materialize the RDF graph exposed by the mapping and the OWL ontology
-    query                 Query the RDF graph exposed by the mapping and the OWL ontology
-    validate              Validate Ontology and Mappings
-    mapping               Manipulate mapping files
-
-See 'ontop help <command>' for more information on a specific command.
+```bash
+setup/vkg-system/up.sh            # create missing slots, start the proxy and the active instance
+setup/vkg-system/up.sh --reset    # rebuild both slots from config/ (used by start.sh)
 ```
 
-More information is available on the documentation:
+`entrypoint/` holds the Ontop 4.1.1 entrypoint patched to `exec java`, so that the JVM stops
+quickly (ADR-0001, see `entrypoint/README.md`). `jdbc/` holds the JDBC drivers, and
+`wait-for-it/` the script that waits for Teiid before Ontop starts.
 
-https://ontop-vkg.org/guide/cli
+The artifacts in `config/` are the base state of the case study. ASCAM writes to them during an
+adaptation; `git checkout -- setup/vkg-system/config/mapping.ttl setup/vkg-system/config/ontology_file.ttl`
+(or `./start.sh`) brings them back.

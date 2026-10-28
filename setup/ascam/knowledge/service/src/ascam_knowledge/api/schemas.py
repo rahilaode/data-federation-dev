@@ -1,4 +1,4 @@
-"""Skema permintaan/respons API (Pydantic v2). Rahasia tidak pernah muncul di respons."""
+"""API request/response schemas (Pydantic v2). Secrets never appear in responses."""
 from datetime import datetime
 from typing import Any, Literal
 
@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
-Name = Field(pattern=r'^[a-z0-9][a-z0-9_.-]{0,62}$', description='huruf kecil, angka, _ . -')
+Name = Field(pattern=r'^[a-z0-9][a-z0-9_.-]{0,62}$', description='lower-case letters, digits, _ . -')
 Dbms = Literal['postgresql', 'mysql']
 TargetKind = Literal['teiid_mgmt', 'teiid_odbc', 'ontop_sparql', 'ontop_agent', 'kafka']
 IdentifierCase = Literal['lower', 'preserve', 'insensitive']
@@ -31,7 +31,7 @@ class ObdfOut(Out):
     active_version_no: int | None = None
 
 
-# ── sumber data ──────────────────────────────────────────────────────────────────
+# ── data sources ─────────────────────────────────────────────────────────────────
 class SourceIn(BaseModel):
     logical_name: str = Name
     dbms: Dbms
@@ -39,7 +39,7 @@ class SourceIn(BaseModel):
     kafka_topic: str | None = None
     identifier_case: IdentifierCase | None = None
     default_schema: str | None = Field(
-        default=None, description='skema bawaan koneksi; kosong = public (PostgreSQL) / nama basis data (MySQL)')
+        default=None, description='default schema of the connection; empty = public (PostgreSQL) / database name (MySQL)')
 
     def resolved_case(self) -> str:
         return self.identifier_case or DEFAULT_IDENTIFIER_CASE[self.dbms]
@@ -102,9 +102,9 @@ class TargetIn(BaseModel):
     @model_validator(mode='after')
     def _check(self):
         if self.kind in REQUIRES_CREDENTIAL and self.credential_id is None:
-            raise ValueError(f'target {self.kind} memerlukan credential_id')
+            raise ValueError(f'target {self.kind} requires credential_id')
         if self.kind == 'teiid_odbc' and not self.endpoint.options.get('vdb'):
-            raise ValueError('target teiid_odbc memerlukan endpoint.options.vdb')
+            raise ValueError('target teiid_odbc requires endpoint.options.vdb')
         return self
 
 
@@ -125,7 +125,7 @@ class TargetOut(Out):
     updated_at: datetime
 
 
-# ── kebijakan ────────────────────────────────────────────────────────────────────
+# ── policies ─────────────────────────────────────────────────────────────────────
 class SettingIn(BaseModel):
     value: Any
 
@@ -141,7 +141,7 @@ class NamingPolicyIn(BaseModel):
         description='placeholder: {namespace}, {column}, {column_camel}, {class_local}')
     on_collision: Literal['qualify_with_class', 'hitl'] = 'hitl'
     label_language: str = 'id'
-    namespace: str | None = Field(default=None, description='disimpan ke setting ontology.namespace')
+    namespace: str | None = Field(default=None, description='stored in the setting ontology.namespace')
 
 
 class NamingPolicyOut(Out):
@@ -156,7 +156,7 @@ class TypeMappingIn(BaseModel):
     native_type: str = Field(min_length=1)
     teiid_type: str
     xsd_datatype: str
-    owl2ql_compatible: bool | None = Field(default=None, description='dihitung bila kosong')
+    owl2ql_compatible: bool | None = Field(default=None, description='computed when empty')
 
 
 class TypeMappingOut(Out):
@@ -179,7 +179,7 @@ class AuditOut(Out):
     detail: dict[str, Any]
 
 
-# ── konfigurasi deklaratif (D5) ──────────────────────────────────────────────────
+# ── declarative configuration (D5) ───────────────────────────────────────────────
 class ConfigCredential(BaseModel):
     name: str = Name
     username: str
@@ -189,7 +189,7 @@ class ConfigCredential(BaseModel):
     @model_validator(mode='after')
     def _one_source(self):
         if (self.secret is None) == (self.secret_file is None):
-            raise ValueError('isi tepat satu dari secret atau secret_file')
+            raise ValueError('give exactly one of secret or secret_file')
         return self
 
 
@@ -219,7 +219,7 @@ class ApplySummary(BaseModel):
     unchanged: list[str] = Field(default_factory=list)
 
 
-# ── uji koneksi ──────────────────────────────────────────────────────────────────
+# ── connection checks ────────────────────────────────────────────────────────────
 class CheckOut(Out):
     id: int
     target_id: int
@@ -235,7 +235,7 @@ class TargetStatusOut(BaseModel):
     last_check: CheckOut | None
 
 
-# ── versi spesifikasi dan sync ───────────────────────────────────────────────────
+# ── specification versions and sync ──────────────────────────────────────────────
 class SpecVersionOut(Out):
     id: int
     version_no: int
@@ -287,16 +287,16 @@ class SyncRunOut(Out):
     finished_at: datetime | None
 
 
-# ── analisis dampak (D11) ────────────────────────────────────────────────────────
+# ── impact analysis (D11) ────────────────────────────────────────────────────────
 class ImpactIn(BaseModel):
     operation: Literal['add', 'drop', 'rename']
-    source: str = Field(description='logical_name sumber terdaftar')
+    source: str = Field(description='logical_name of a registered source')
     schema_name: str | None = Field(default=None, alias='schema',
-                                    description='kosong = skema bawaan sumber')
+                                    description='empty = default schema of the source')
     table: str
     column: str | None = None
-    new_column: str | None = Field(default=None, description='untuk operasi rename')
-    column_type: str | None = Field(default=None, description='tipe asli sumber untuk operasi add')
+    new_column: str | None = Field(default=None, description='for the rename operation')
+    column_type: str | None = Field(default=None, description='original source type for the add operation')
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -325,18 +325,18 @@ class ImpactOut(BaseModel):
     reasons: list[str]
     actions: list[dict[str, Any]]
     targets: list[TargetOutcome]
-    affected: dict[str, list[str]] = Field(default_factory=dict, description='𝒟(c, ℱ) per lapisan')
-    add_options: dict[str, Any] | None = Field(default=None, description='usulan dan pilihan ADD')
+    affected: dict[str, list[str]] = Field(default_factory=dict, description='𝒟(c, ℱ) per layer')
+    add_options: dict[str, Any] | None = Field(default=None, description='ADD proposal and choices')
 
 
-# ── event skema dan rencana adaptasi ─────────────────────────────────────────────
+# ── schema events and adaptation plans ───────────────────────────────────────────
 class EventIn(BaseModel):
-    """Event skema terformalisasi (D7). `event_uid` menjamin idempotensi.
+    """Formalised schema event (D7). `event_uid` guarantees idempotency.
 
-    UUID versi apa pun diterima; Orchestrator memakai UUID deterministik (versi 5) dari
-    topik, partisi, dan offset agar pengiriman ulang tidak menghasilkan rencana ganda.
-    `operation = other` dipakai untuk DDL yang tidak didukung, agar tetap terlihat
-    administrator alih-alih hilang diam-diam.
+    A UUID of any version is accepted; the Orchestrator uses a deterministic UUID (version 5)
+    from topic, partition, and offset so that a redelivery does not create a second plan.
+    `operation = other` is used for unsupported DDL, so that it stays visible to the
+    administrator instead of disappearing silently.
     """
     event_uid: UUID | None = None
     operation: Literal['add', 'drop', 'rename', 'other']
@@ -347,7 +347,7 @@ class EventIn(BaseModel):
     new_column: str | None = None
     column_type: str | None = None
     captured_at: datetime | None = None
-    raw: dict[str, Any] = Field(default_factory=dict, description='pesan asli dari monitor')
+    raw: dict[str, Any] = Field(default_factory=dict, description='original message from the monitor')
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -394,19 +394,19 @@ class EventOut(Out):
 class EventResultOut(BaseModel):
     event: EventOut
     duplicate: bool = False
-    conflict: bool = Field(default=False, description='uid sama tetapi isi event berbeda')
+    conflict: bool = Field(default=False, description='same uid but different event content')
     plan: PlanOut | None = None
 
 
 class DecisionIn(BaseModel):
     note: str | None = None
-    # Hanya untuk rencana ADD (P-001): nama lokal dan domain property pilihan administrator.
-    # Bila berbeda dari usulan, persetujuan menghasilkan rencana revisi (ADR-0024).
+    # ADD plans (P-001) only: local name and domain of the property chosen by the administrator.
+    # When they differ from the proposal, approval creates a revised plan (ADR-0024).
     property_name: str | None = Field(default=None, max_length=100)
     domain: str | None = Field(default=None, max_length=2000)
 
 
-# ── eksekusi rencana ─────────────────────────────────────────────────────────────
+# ── plan execution ───────────────────────────────────────────────────────────────
 class ExecutionStartIn(BaseModel):
     candidate_spec_version_id: int | None = None
 

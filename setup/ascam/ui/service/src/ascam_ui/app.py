@@ -1,12 +1,12 @@
 """
-Konsol administrator ASCAM: backend-for-frontend.
+ASCAM administrator console: backend-for-frontend.
 
-Peramban tidak pernah memegang token layanan. Administrator masuk dengan kata sandi; sesi
-disimpan pada cookie HttpOnly bertanda tangan (SameSite=Strict). Permintaan ke Knowledge
-diteruskan lewat DAFTAR IZIN: hanya pembacaan (termasuk lineage kolom), keputusan rencana,
-notifikasi, pemeriksaan koneksi, sync, analisis dampak, dan kebijakan adaptasi. Setiap permintaan yang mengubah
-keadaan wajib membawa header `X-ASCAM-UI`, yang tidak dapat dikirim lintas situs tanpa CORS.
-Nama administrator diteruskan sebagai `X-ASCAM-User` sehingga jejak audit mencatat manusianya.
+The browser never holds a service token. The administrator logs in with a password; the session
+is kept in a signed HttpOnly cookie (SameSite=Strict). Requests to Knowledge are forwarded through
+an ALLOW LIST: reads only (including column lineage), plan decisions, notifications, connection
+checks, sync, impact analysis, and adaptation policies. Every request that changes state must carry
+the header `X-ASCAM-UI`, which cannot be sent cross-site without CORS. The administrator's name
+is forwarded as `X-ASCAM-User`, so the audit trail records the person.
 """
 import asyncio
 import difflib
@@ -24,7 +24,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .config import Settings
 
 STATIC = Path(__file__).parent / 'static'
-IZIN = {
+ALLOWED = {
     'GET': [
         r'obdf', r'obdf/\d+',
         r'obdf/\d+/(sources|targets|credentials|settings|naming-policy|type-mappings|audit|'
@@ -44,46 +44,46 @@ class LoginIn(BaseModel):
     password: str
 
 
-def diizinkan(metode: str, path: str) -> bool:
-    return any(re.fullmatch(pola, path) for pola in IZIN.get(metode, []))
+def allowed(method: str, path: str) -> bool:
+    return any(re.fullmatch(pattern, path) for pattern in ALLOWED.get(method, []))
 
 
 def create_app(settings: Settings | None = None,
                transport: httpx.AsyncBaseTransport | None = None) -> FastAPI:
     settings = settings or Settings()
     if not settings.session_key:
-        raise RuntimeError('kunci sesi UI belum diset (ASCAM_UI_SESSION_KEY_FILE)')
-    app = FastAPI(title='ASCAM Konsol', version='0.1.0', docs_url=None, redoc_url=None)
+        raise RuntimeError('the UI session key is not set (ASCAM_UI_SESSION_KEY_FILE)')
+    app = FastAPI(title='ASCAM Console', version='0.1.0', docs_url=None, redoc_url=None)
     app.add_middleware(SessionMiddleware, secret_key=settings.session_key,
-                       session_cookie='ascam_sesi', max_age=settings.session_max_age,
+                       session_cookie='ascam_session', max_age=settings.session_max_age,
                        same_site='strict', https_only=settings.secure_cookie)
     app.state.settings = settings
     app.state.http = httpx.AsyncClient(transport=transport, timeout=60.0)
 
     @app.on_event('shutdown')
-    async def _tutup():
+    async def _close():
         await app.state.http.aclose()
 
-    # ── autentikasi ────────────────────────────────────────────────────────────
-    def pengguna(request: Request) -> str:
-        nama = request.session.get('user')
-        if not nama:
-            raise HTTPException(401, 'Silakan masuk terlebih dahulu')
-        return nama
+    # ── authentication ─────────────────────────────────────────────────────────
+    def current_user(request: Request) -> str:
+        user = request.session.get('user')
+        if not user:
+            raise HTTPException(401, 'Please log in first')
+        return user
 
-    def pengguna_mengubah(request: Request, nama: str = Depends(pengguna)) -> str:
+    def changing_user(request: Request, user: str = Depends(current_user)) -> str:
         if request.headers.get('X-ASCAM-UI') != '1':
-            raise HTTPException(403, 'Permintaan tanpa header X-ASCAM-UI ditolak')
-        return nama
+            raise HTTPException(403, 'Request without the X-ASCAM-UI header rejected')
+        return user
 
     @app.post('/api/ui/login')
     async def login(body: LoginIn, request: Request):
-        benar_nama = hmac.compare_digest(body.username, settings.admin_user)
-        benar_sandi = bool(settings.admin_password) and hmac.compare_digest(
+        name_ok = hmac.compare_digest(body.username, settings.admin_user)
+        password_ok = bool(settings.admin_password) and hmac.compare_digest(
             body.password, settings.admin_password or '')
-        if not (benar_nama and benar_sandi):
-            await asyncio.sleep(0.5)                  # memperlambat tebakan kata sandi
-            raise HTTPException(401, 'Nama pengguna atau kata sandi salah')
+        if not (name_ok and password_ok):
+            await asyncio.sleep(0.5)                  # slows down password guessing
+            raise HTTPException(401, 'Wrong user name or password')
         request.session.clear()
         request.session['user'] = body.username
         return {'user': body.username}
@@ -94,109 +94,109 @@ def create_app(settings: Settings | None = None,
         return {'ok': True}
 
     @app.get('/api/ui/me')
-    async def me(nama: str = Depends(pengguna)):
-        return {'user': nama, 'obdf': settings.obdf_name}
+    async def me(user: str = Depends(current_user)):
+        return {'user': user, 'obdf': settings.obdf_name}
 
-    # ── penerus ke Knowledge ───────────────────────────────────────────────────
-    async def knowledge(metode: str, path: str, nama: str, tipe: str | None = None,
+    # ── forwarding to Knowledge ────────────────────────────────────────────────
+    async def knowledge(method: str, path: str, user: str, content_type: str | None = None,
                         **kwargs) -> httpx.Response:
-        headers = {'Authorization': f'Bearer {settings.knowledge_token}', 'X-ASCAM-User': nama}
-        if tipe:
-            headers['Content-Type'] = tipe
-        return await app.state.http.request(metode, f'{settings.knowledge_url}/api/v1/{path}',
+        headers = {'Authorization': f'Bearer {settings.knowledge_token}', 'X-ASCAM-User': user}
+        if content_type:
+            headers['Content-Type'] = content_type
+        return await app.state.http.request(method, f'{settings.knowledge_url}/api/v1/{path}',
                                             headers=headers, **kwargs)
 
-    async def teruskan(request: Request, path: str, nama: str) -> Response:
-        if not diizinkan(request.method, path):
-            raise HTTPException(403, f'{request.method} /{path} tidak diizinkan dari konsol')
+    async def forward(request: Request, path: str, user: str) -> Response:
+        if not allowed(request.method, path):
+            raise HTTPException(403, f'{request.method} /{path} is not allowed from the console')
         body = await request.body()
         try:
-            hasil = await knowledge(request.method, path, nama, params=request.query_params,
+            response = await knowledge(request.method, path, user, params=request.query_params,
                                     content=body or None,
-                                    tipe=request.headers.get('content-type'))
+                                    content_type=request.headers.get('content-type'))
         except httpx.HTTPError as exc:
-            raise HTTPException(502, f'Knowledge tidak dapat dihubungi: {type(exc).__name__}')
-        return Response(hasil.content, status_code=hasil.status_code,
-                        media_type=hasil.headers.get('content-type', 'application/json'))
+            raise HTTPException(502, f'Knowledge cannot be reached: {type(exc).__name__}')
+        return Response(response.content, status_code=response.status_code,
+                        media_type=response.headers.get('content-type', 'application/json'))
 
     @app.get('/api/k/{path:path}')
-    async def baca_knowledge(path: str, request: Request, nama: str = Depends(pengguna)):
-        return await teruskan(request, path, nama)
+    async def read_knowledge(path: str, request: Request, user: str = Depends(current_user)):
+        return await forward(request, path, user)
 
     @app.api_route('/api/k/{path:path}', methods=['POST', 'PUT'])
-    async def ubah_knowledge(path: str, request: Request, nama: str = Depends(pengguna_mengubah)):
-        return await teruskan(request, path, nama)
+    async def change_knowledge(path: str, request: Request, user: str = Depends(changing_user)):
+        return await forward(request, path, user)
 
-    # ── ringkasan dan kesehatan ────────────────────────────────────────────────
-    async def json_atau_galat(url: str, headers: dict | None = None) -> dict:
+    # ── overview and health ────────────────────────────────────────────────────
+    async def json_or_error(url: str, headers: dict | None = None) -> dict:
         try:
-            hasil = await app.state.http.get(url, headers=headers, timeout=5.0)
-            if hasil.status_code >= 400:
-                return {'_galat': f'HTTP {hasil.status_code}'}
-            return hasil.json()
+            response = await app.state.http.get(url, headers=headers, timeout=5.0)
+            if response.status_code >= 400:
+                return {'_error': f'HTTP {response.status_code}'}
+            return response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            return {'_galat': type(exc).__name__}
+            return {'_error': type(exc).__name__}
 
     @app.get('/api/ui/health')
-    async def kesehatan(nama: str = Depends(pengguna)):
-        knowledge_siap, orch, exe, agen = await asyncio.gather(
-            json_atau_galat(f'{settings.knowledge_url}/ready'),
-            json_atau_galat(f'{settings.orchestrator_url}/health'),
-            json_atau_galat(f'{settings.executor_url}/health'),
-            json_atau_galat(f'{settings.agent_url}/health'))
-        return {'knowledge': knowledge_siap, 'orchestrator': orch, 'executor': exe, 'agent': agen}
+    async def health(user: str = Depends(current_user)):
+        knowledge_ready, orch, exe, agent = await asyncio.gather(
+            json_or_error(f'{settings.knowledge_url}/ready'),
+            json_or_error(f'{settings.orchestrator_url}/health'),
+            json_or_error(f'{settings.executor_url}/health'),
+            json_or_error(f'{settings.agent_url}/health'))
+        return {'knowledge': knowledge_ready, 'orchestrator': orch, 'executor': exe, 'agent': agent}
 
     @app.get('/api/ui/overview')
-    async def ringkasan(nama: str = Depends(pengguna)):
-        daftar = (await knowledge('GET', 'obdf', nama)).json()
-        obdf = next((o for o in daftar if o['name'] == settings.obdf_name), None)
+    async def overview(user: str = Depends(current_user)):
+        listing = (await knowledge('GET', 'obdf', user)).json()
+        obdf = next((o for o in listing if o['name'] == settings.obdf_name), None)
         if obdf is None:
-            raise HTTPException(404, f'OBDF {settings.obdf_name} belum terdaftar di Knowledge')
+            raise HTTPException(404, f'OBDF {settings.obdf_name} is not registered in Knowledge')
         oid = obdf['id']
-        versi, event, menunggu, eksekusi, notif = await asyncio.gather(
-            knowledge('GET', f'obdf/{oid}/versions', nama, params={'limit': 1}),
-            knowledge('GET', f'obdf/{oid}/events', nama, params={'limit': 8}),
-            knowledge('GET', f'obdf/{oid}/plans', nama, params={'status': 'pending_approval'}),
-            knowledge('GET', f'obdf/{oid}/executions', nama, params={'limit': 6}),
-            knowledge('GET', f'obdf/{oid}/notifications', nama, params={'unread': True}))
-        return {'obdf': obdf, 'active_version': (versi.json() or [None])[0],
-                'events': event.json(), 'pending': menunggu.json(),
-                'executions': eksekusi.json(), 'notifications': notif.json()}
+        version, event, pending, executions, notif = await asyncio.gather(
+            knowledge('GET', f'obdf/{oid}/versions', user, params={'limit': 1}),
+            knowledge('GET', f'obdf/{oid}/events', user, params={'limit': 8}),
+            knowledge('GET', f'obdf/{oid}/plans', user, params={'status': 'pending_approval'}),
+            knowledge('GET', f'obdf/{oid}/executions', user, params={'limit': 6}),
+            knowledge('GET', f'obdf/{oid}/notifications', user, params={'unread': True}))
+        return {'obdf': obdf, 'active_version': (version.json() or [None])[0],
+                'events': event.json(), 'pending': pending.json(),
+                'executions': executions.json(), 'notifications': notif.json()}
 
-    # ── perbandingan artefak antarversi ─────────────────────────────────────────
+    # ── comparison of artifacts between versions ────────────────────────────────
     @app.get('/api/ui/diff')
-    async def beda(dari: int, ke: int, kind: str, nama: str = Depends(pengguna)):
-        if not re.fullmatch(r'[a-z0-9_]+', kind):          # r2rml memuat angka
-            raise HTTPException(400, 'jenis artefak tidak valid')
-        a, b = await asyncio.gather(knowledge('GET', f'versions/{dari}/artifacts/{kind}', nama),
-                                    knowledge('GET', f'versions/{ke}/artifacts/{kind}', nama))
+    async def diff(from_version: int, to_version: int, kind: str, user: str = Depends(current_user)):
+        if not re.fullmatch(r'[a-z0-9_]+', kind):          # r2rml contains digits
+            raise HTTPException(400, 'invalid artifact kind')
+        a, b = await asyncio.gather(knowledge('GET', f'versions/{from_version}/artifacts/{kind}', user),
+                                    knowledge('GET', f'versions/{to_version}/artifacts/{kind}', user))
         if a.status_code == 404 or b.status_code == 404:
-            raise HTTPException(404, f'artefak {kind} tidak ada pada salah satu versi')
-        isi_a, isi_b = a.json()['content'], b.json()['content']
-        baris = list(difflib.unified_diff(isi_a.splitlines(), isi_b.splitlines(),
-                                          fromfile=f'versi {dari}', tofile=f'versi {ke}',
+            raise HTTPException(404, f'artifact {kind} does not exist in one of the versions')
+        content_a, content_b = a.json()['content'], b.json()['content']
+        lines = list(difflib.unified_diff(content_a.splitlines(), content_b.splitlines(),
+                                          fromfile=f'version {from_version}', tofile=f'version {to_version}',
                                           lineterm='', n=3))
-        return {'kind': kind, 'dari': dari, 'ke': ke, 'identik': not baris,
-                'tambah': sum(1 for x in baris if x.startswith('+') and not x.startswith('+++')),
-                'hapus': sum(1 for x in baris if x.startswith('-') and not x.startswith('---')),
-                'diff': baris}
+        return {'kind': kind, 'from': from_version, 'to': to_version, 'identical': not lines,
+                'added': sum(1 for x in lines if x.startswith('+') and not x.startswith('+++')),
+                'removed': sum(1 for x in lines if x.startswith('-') and not x.startswith('---')),
+                'diff': lines}
 
-    # ── kendali Executor ────────────────────────────────────────────────────────
-    @app.post('/api/ui/executor/{aksi}')
-    async def kendali(aksi: str, nama: str = Depends(pengguna_mengubah)):
-        if aksi not in ('pause', 'resume'):
-            raise HTTPException(404, 'aksi tidak dikenal')
+    # ── Executor control ────────────────────────────────────────────────────────
+    @app.post('/api/ui/executor/{action}')
+    async def control(action: str, user: str = Depends(changing_user)):
+        if action not in ('pause', 'resume'):
+            raise HTTPException(404, 'unknown action')
         try:
-            hasil = await app.state.http.post(f'{settings.executor_url}/control/{aksi}')
+            response = await app.state.http.post(f'{settings.executor_url}/control/{action}')
         except httpx.HTTPError as exc:
-            raise HTTPException(502, f'Executor tidak dapat dihubungi: {type(exc).__name__}')
-        return JSONResponse(hasil.json(), status_code=hasil.status_code)
+            raise HTTPException(502, f'the Executor cannot be reached: {type(exc).__name__}')
+        return JSONResponse(response.json(), status_code=response.status_code)
 
-    # ── berkas statis ──────────────────────────────────────────────────────────
+    # ── static files ───────────────────────────────────────────────────────────
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
 
     @app.get('/')
-    async def indeks():
+    async def index():
         return FileResponse(STATIC / 'index.html')
 
     @app.get('/healthz')

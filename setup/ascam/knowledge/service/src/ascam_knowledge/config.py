@@ -1,11 +1,11 @@
 """
-Konfigurasi koneksi basis data Knowledge.
+Connection settings of the Knowledge database.
 
-Urutan sumber:
-1. ASCAM_KNOWLEDGE_DB_URL (lengkap; dipakai pada pengujian lokal);
-2. komponen terpisah: ASCAM_KNOWLEDGE_DB_HOST, _PORT, _NAME, _USER, dan kata sandi dari
-   berkas ASCAM_KNOWLEDGE_DB_PASSWORD_FILE (Docker secret), sehingga kata sandi tidak
-   pernah berada di variabel lingkungan maupun di repository (D4).
+Sources, in order:
+1. ASCAM_KNOWLEDGE_DB_URL (complete; used for local tests);
+2. separate parts: ASCAM_KNOWLEDGE_DB_HOST, _PORT, _NAME, _USER, and the password from the
+   file ASCAM_KNOWLEDGE_DB_PASSWORD_FILE (Docker secret), so the password is never in an
+   environment variable or in the repository (D4).
 """
 import os
 
@@ -18,7 +18,8 @@ def database_url() -> URL:
         return make_url(direct)
     password_file = os.getenv('ASCAM_KNOWLEDGE_DB_PASSWORD_FILE')
     if not password_file:
-        raise RuntimeError('Set ASCAM_KNOWLEDGE_DB_URL atau ASCAM_KNOWLEDGE_DB_PASSWORD_FILE')
+        raise RuntimeError('Set ASCAM_KNOWLEDGE_DB_URL or ASCAM_KNOWLEDGE_DB_PASSWORD_FILE'
+)
     with open(password_file, encoding='utf-8') as fh:
         password = fh.read().strip()
     return URL.create(

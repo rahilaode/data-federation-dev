@@ -1,11 +1,11 @@
-"""Penyuntingan mapping R2RML: penambahan dan penghapusan predicate-object map."""
+"""R2RML mapping editing: adding and removing predicate-object maps."""
 import pytest
 from rdflib import Graph, Namespace
 
 from ascam_executor.artifacts import r2rml
 
 RR = Namespace('http://www.w3.org/ns/r2rml#')
-MAPPING = """# Mapping bansos (header dipertahankan)
+MAPPING = """# bansos mapping (header kept)
 @prefix rr: <http://www.w3.org/ns/r2rml#> .
 @prefix bansos: <http://bansos.go.id/ontology/> .
 
@@ -28,104 +28,104 @@ NIK = 'http://bansos.go.id/ontology/nik'
 
 
 def test_add_predicate_object_map():
-    hasil = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL,
+    result = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL,
                                            datatype_iri='http://www.w3.org/2001/XMLSchema#string')
-    assert EMAIL in r2rml.predicates_of(hasil)
-    graf = Graph()
-    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
-    kolom = {str(o) for o in graf.objects(None, RR.column)}
-    assert 'email' in kolom and 'nik' in kolom                 # pemetaan lama tetap ada
-    assert hasil.startswith('# Mapping bansos')                # header dipertahankan
+    assert EMAIL in r2rml.predicates_of(result)
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
+    columns = {str(o) for o in graph.objects(None, RR.column)}
+    assert 'email' in columns and 'nik' in columns                 # existing mappings remain
+    assert result.startswith('# bansos mapping')                # header kept
 
 
 def test_add_is_idempotent():
-    sekali = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
-    assert r2rml.add_predicate_object_map(sekali, 'penerima_manfaat', 'email', EMAIL) == sekali
+    once = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
+    assert r2rml.add_predicate_object_map(once, 'penerima_manfaat', 'email', EMAIL) == once
 
 
 def test_remove_predicate_object_map():
-    hasil, jumlah = r2rml.remove_predicate_object_map(MAPPING, STATUS)
-    assert jumlah == 1 and STATUS not in r2rml.predicates_of(hasil)
-    assert NIK in r2rml.predicates_of(hasil)
-    graf = Graph()
-    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
-    assert 'status_ekonomi' not in {str(o) for o in graf.objects(None, RR.column)}
+    result, count = r2rml.remove_predicate_object_map(MAPPING, STATUS)
+    assert count == 1 and STATUS not in r2rml.predicates_of(result)
+    assert NIK in r2rml.predicates_of(result)
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
+    assert 'status_ekonomi' not in {str(o) for o in graph.objects(None, RR.column)}
 
 
 def test_remove_can_be_scoped_to_one_table():
-    """Predikat yang sama dipakai dua TriplesMap; hanya yang relevan dihapus."""
-    hasil, jumlah = r2rml.remove_predicate_object_map(MAPPING, NIK, table='penerima_manfaat')
-    assert jumlah == 1
-    graf = Graph()
-    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
-    kolom = {str(o) for o in graf.objects(None, RR.column)}
-    assert 'nik_petugas' in kolom and 'nik' not in kolom
-    semua, jumlah_semua = r2rml.remove_predicate_object_map(MAPPING, NIK)
-    assert jumlah_semua == 2
+    """The same predicate is used by two TriplesMaps; only the relevant one is removed."""
+    result, count = r2rml.remove_predicate_object_map(MAPPING, NIK, table='penerima_manfaat')
+    assert count == 1
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
+    columns = {str(o) for o in graph.objects(None, RR.column)}
+    assert 'nik_petugas' in columns and 'nik' not in columns
+    whole, count_all = r2rml.remove_predicate_object_map(MAPPING, NIK)
+    assert count_all == 2
 
 
 def test_missing_targets_are_reported():
-    assert r2rml.remove_predicate_object_map(MAPPING, 'http://contoh/tidak-ada')[1] == 0
-    with pytest.raises(r2rml.MappingError, match='tidak ditemukan'):
+    assert r2rml.remove_predicate_object_map(MAPPING, 'http://example.org/does-not-exist')[1] == 0
+    with pytest.raises(r2rml.MappingError, match='not found'):
         r2rml.apply_actions(MAPPING, [{'operation': 'remove_predicate_object_map',
-                                       'predicate_iri': 'http://contoh/tidak-ada'}])
+                                       'predicate_iri': 'http://example.org/does-not-exist'}])
     with pytest.raises(r2rml.MappingError, match='TriplesMap'):
-        r2rml.add_predicate_object_map(MAPPING, 'tabel_asing', 'x', EMAIL)
-    with pytest.raises(r2rml.MappingError, match='tidak dapat diurai'):
-        r2rml.predicates_of('bukan turtle @@@')
+        r2rml.add_predicate_object_map(MAPPING, 'other_table', 'x', EMAIL)
+    with pytest.raises(r2rml.MappingError, match='cannot be parsed'):
+        r2rml.predicates_of('not turtle @@@')
 
 
 def test_apply_actions_runs_plan():
-    hasil = r2rml.apply_actions(MAPPING, [
+    result = r2rml.apply_actions(MAPPING, [
         {'operation': 'add_predicate_object_map', 'table': 'penerima_manfaat',
          'column': 'email', 'predicate_iri': EMAIL},
         {'operation': 'remove_predicate_object_map', 'predicate_iri': STATUS}])
-    predikat = r2rml.predicates_of(hasil)
-    assert EMAIL in predikat and STATUS not in predikat
+    predicates = r2rml.predicates_of(result)
+    assert EMAIL in predicates and STATUS not in predicates
 
 
-# ── penyuntingan append-only untuk pemetaan milik ASCAM ─────────────────────────
+# ── append-only editing of mappings owned by ASCAM ─────────────────────────────
 def test_add_is_append_only_and_preserves_file():
-    hasil = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
-    assert hasil.startswith(MAPPING.rstrip('\n'))            # berkas asli tidak ditulis ulang
-    assert '# Mapping bansos (header dipertahankan)' in hasil
-    assert '<#MapPenerima> rr:predicateObjectMap [' in hasil
-    assert '# ascam:mulai pom %s pada %s#MapPenerima' % (EMAIL, r2rml.BASE) in hasil
-    graf = Graph()
-    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)   # tetap Turtle yang sah
-    assert EMAIL in r2rml.predicates_of(hasil)
-    # triple tambahan menyatu dengan TriplesMap yang sama, bukan membuat TriplesMap baru
-    assert len(set(graf.subjects(RR.logicalTable, None))) == 2
+    result = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
+    assert result.startswith(MAPPING.rstrip('\n'))            # the original file is not rewritten
+    assert '# bansos mapping (header kept)' in result
+    assert '<#MapPenerima> rr:predicateObjectMap [' in result
+    assert '# ascam:begin pom %s on %s#MapPenerima' % (EMAIL, r2rml.BASE) in result
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)   # still valid Turtle
+    assert EMAIL in r2rml.predicates_of(result)
+    # the extra triples merge with the same TriplesMap instead of creating a new one
+    assert len(set(graph.subjects(RR.logicalTable, None))) == 2
 
 
 def test_ascam_owned_mapping_is_removed_as_text():
-    ditambah = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
-    dihapus, jumlah = r2rml.remove_predicate_object_map(ditambah, EMAIL, table='penerima_manfaat')
-    assert jumlah == 1
-    assert dihapus.rstrip('\n') == MAPPING.rstrip('\n')      # kembali persis seperti semula
-    tanpa_tabel, jumlah2 = r2rml.remove_predicate_object_map(ditambah, EMAIL)
-    assert jumlah2 == 1 and EMAIL not in r2rml.predicates_of(tanpa_tabel)
+    added = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'email', EMAIL)
+    removed, count = r2rml.remove_predicate_object_map(added, EMAIL, table='penerima_manfaat')
+    assert count == 1
+    assert removed.rstrip('\n') == MAPPING.rstrip('\n')      # back exactly as before
+    without_table, count2 = r2rml.remove_predicate_object_map(added, EMAIL)
+    assert count2 == 1 and EMAIL not in r2rml.predicates_of(without_table)
 
 
 def test_human_written_mapping_removal_falls_back_to_rewrite():
-    hasil, jumlah = r2rml.remove_predicate_object_map(MAPPING, STATUS)
-    assert jumlah == 1 and STATUS not in r2rml.predicates_of(hasil)
-    assert '@prefix bansos:' in hasil                        # prefix asal dipertahankan
-    assert hasil.startswith('# Mapping bansos')
+    result, count = r2rml.remove_predicate_object_map(MAPPING, STATUS)
+    assert count == 1 and STATUS not in r2rml.predicates_of(result)
+    assert '@prefix bansos:' in result                        # the original prefixes are kept
+    assert result.startswith('# bansos mapping')
 
 
 def test_datatype_is_written_when_given():
-    hasil = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'usia', EMAIL,
+    result = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'usia', EMAIL,
                                            datatype_iri='http://www.w3.org/2001/XMLSchema#integer')
-    assert 'rr:datatype xsd:integer' in hasil
-    graf = Graph()
-    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
-    assert (None, RR.datatype, None) in graf
+    assert 'rr:datatype xsd:integer' in result
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
+    assert (None, RR.datatype, None) in graph
 
 
-# ── penargetan TriplesMap dari rencana (regresi F4c) ────────────────────────────
+# ── TriplesMap targeting from the plan (regression F4c) ─────────────────────────
 LINK = 'urn:ascam:mapping#MapLink'
-MAPPING_DUA = MAPPING + """
+MAPPING_TWO = MAPPING + """
 <#MapLink> a rr:TriplesMap ;
     rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, nik FROM kemensos.penerima_manfaat" ] ;
     rr:subjectMap [ rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ] ;
@@ -136,37 +136,37 @@ MAPPING_DUA = MAPPING + """
 
 
 def test_triples_map_iri_from_plan_is_used():
-    """Dua TriplesMap membaca tabel yang sama; rencana menentukan yang benar."""
-    hasil = r2rml.add_predicate_object_map(MAPPING_DUA, None, 'email', EMAIL,
+    """Two TriplesMaps read the same table; the plan decides which one is right."""
+    result = r2rml.add_predicate_object_map(MAPPING_TWO, None, 'email', EMAIL,
                                            triples_map_iri='urn:ascam:mapping#MapPenerima')
-    assert '<#MapPenerima> rr:predicateObjectMap [' in hasil
-    assert '<#MapLink> rr:predicateObjectMap [' not in hasil.split('# ascam:mulai')[1]
-    graf = Graph()
-    graf.parse(data=hasil, format='turtle', publicID=r2rml.BASE)
-    pemilik = {str(s) for s in graf.subjects(RR.predicateObjectMap, None)
-               for p in graf.objects(s, RR.predicateObjectMap)
-               if (p, RR.predicate, __import__('rdflib').URIRef(EMAIL)) in graf}
-    assert pemilik == {'urn:ascam:mapping#MapPenerima'}
+    assert '<#MapPenerima> rr:predicateObjectMap [' in result
+    assert '<#MapLink> rr:predicateObjectMap [' not in result.split('# ascam:begin')[1]
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
+    owners = {str(s) for s in graph.subjects(RR.predicateObjectMap, None)
+               for p in graph.objects(s, RR.predicateObjectMap)
+               if (p, RR.predicate, __import__('rdflib').URIRef(EMAIL)) in graph}
+    assert owners == {'urn:ascam:mapping#MapPenerima'}
 
 
 def test_unknown_triples_map_is_reported():
-    with pytest.raises(r2rml.MappingError, match='tidak ada pada mapping'):
-        r2rml.add_predicate_object_map(MAPPING_DUA, None, 'email', EMAIL,
-                                       triples_map_iri='urn:ascam:mapping#TidakAda')
+    with pytest.raises(r2rml.MappingError, match='does not exist in the mapping'):
+        r2rml.add_predicate_object_map(MAPPING_TWO, None, 'email', EMAIL,
+                                       triples_map_iri='urn:ascam:mapping#DoesNotExist')
 
 
 def test_removal_is_scoped_to_the_named_triples_map():
-    dua = r2rml.add_predicate_object_map(MAPPING_DUA, None, 'email', EMAIL,
+    two = r2rml.add_predicate_object_map(MAPPING_TWO, None, 'email', EMAIL,
                                          triples_map_iri='urn:ascam:mapping#MapPenerima')
-    dua = r2rml.add_predicate_object_map(dua, None, 'email', EMAIL, triples_map_iri=LINK)
-    assert dua.count('# ascam:mulai pom') == 2
-    sebagian, jumlah = r2rml.remove_predicate_object_map(dua, EMAIL, triples_map_iri=LINK)
-    assert jumlah == 1 and sebagian.count('# ascam:mulai pom') == 1
-    assert 'MapPenerima' in sebagian.split('# ascam:mulai')[1]
+    two = r2rml.add_predicate_object_map(two, None, 'email', EMAIL, triples_map_iri=LINK)
+    assert two.count('# ascam:begin pom') == 2
+    partial, count = r2rml.remove_predicate_object_map(two, EMAIL, triples_map_iri=LINK)
+    assert count == 1 and partial.count('# ascam:begin pom') == 1
+    assert 'MapPenerima' in partial.split('# ascam:begin')[1]
 
 
-# ── penulisan ulang logical table saat kolom dihapus (regresi A002) ─────────────
-MAPPING_EKSPLISIT = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
+# ── rewriting the logical table when a column is dropped (regression A002) ──────
+MAPPING_EXPLICIT = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
 @prefix bansos: <http://bansos.go.id/ontology/> .
 
 <#MapProgram> a rr:TriplesMap ;
@@ -175,49 +175,49 @@ MAPPING_EKSPLISIT = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
     rr:predicateObjectMap [ rr:predicate bansos:tipeProgram ;
                             rr:objectMap [ rr:column "tipe_program" ] ] .
 """
-TIPE = 'http://bansos.go.id/ontology/tipeProgram'
+TIPE_PROGRAM = 'http://bansos.go.id/ontology/tipeProgram'
 MAP_PROGRAM = 'urn:ascam:mapping#MapProgram'
 
 
-def kueri_logical(teks: str) -> str:
-    graf = Graph()
-    graf.parse(data=teks, format='turtle', publicID=r2rml.BASE)
-    logical = graf.value(__import__('rdflib').URIRef(MAP_PROGRAM), RR.logicalTable)
-    return str(graf.value(logical, RR.sqlQuery))
+def logical_query(text: str) -> str:
+    graph = Graph()
+    graph.parse(data=text, format='turtle', publicID=r2rml.BASE)
+    logical = graph.value(__import__('rdflib').URIRef(MAP_PROGRAM), RR.logicalTable)
+    return str(graph.value(logical, RR.sqlQuery))
 
 
 def test_dropped_column_is_removed_from_explicit_select():
-    hasil, diubah = r2rml.rewrite_logical_table(MAPPING_EKSPLISIT, MAP_PROGRAM, 'tipe_program')
-    assert diubah
-    kueri = kueri_logical(hasil).lower()
-    assert 'tipe_program' not in kueri
-    assert all(k in kueri for k in ('program_id', 'nama_program', 'nominal'))
-    assert 'kemensos.program_bansos' in kueri
+    result, changed = r2rml.rewrite_logical_table(MAPPING_EXPLICIT, MAP_PROGRAM, 'tipe_program')
+    assert changed
+    query = logical_query(result).lower()
+    assert 'tipe_program' not in query
+    assert all(k in query for k in ('program_id', 'nama_program', 'nominal'))
+    assert 'kemensos.program_bansos' in query
 
 
 def test_rewrite_is_noop_when_column_not_projected():
-    _, diubah = r2rml.rewrite_logical_table(MAPPING_EKSPLISIT, MAP_PROGRAM, 'kolom_lain')
-    assert diubah is False
-    bintang = MAPPING_EKSPLISIT.replace(
+    _, changed = r2rml.rewrite_logical_table(MAPPING_EXPLICIT, MAP_PROGRAM, 'other_column')
+    assert changed is False
+    star = MAPPING_EXPLICIT.replace(
         'SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos',
         'SELECT * FROM kemensos.program_bansos')
-    _, diubah = r2rml.rewrite_logical_table(bintang, MAP_PROGRAM, 'tipe_program')
-    assert diubah is False                      # SELECT * ikut menyesuaikan sendiri
+    _, changed = r2rml.rewrite_logical_table(star, MAP_PROGRAM, 'tipe_program')
+    assert changed is False                      # SELECT * adjusts by itself
 
 
 def test_rewrite_refuses_when_nothing_would_remain():
-    satu = MAPPING_EKSPLISIT.replace(
+    single = MAPPING_EXPLICIT.replace(
         'SELECT program_id, nama_program, tipe_program, nominal FROM kemensos.program_bansos',
         'SELECT tipe_program FROM kemensos.program_bansos')
-    with pytest.raises(r2rml.MappingError, match='tidak dapat disunting otomatis'):
-        r2rml.rewrite_logical_table(satu, MAP_PROGRAM, 'tipe_program')
+    with pytest.raises(r2rml.MappingError, match='cannot be edited automatically'):
+        r2rml.rewrite_logical_table(single, MAP_PROGRAM, 'tipe_program')
 
 
 def test_drop_plan_rewrites_query_and_removes_mapping():
-    hasil = r2rml.apply_actions(MAPPING_EKSPLISIT, [
-        {'operation': 'remove_predicate_object_map', 'predicate_iri': TIPE,
+    result = r2rml.apply_actions(MAPPING_EXPLICIT, [
+        {'operation': 'remove_predicate_object_map', 'predicate_iri': TIPE_PROGRAM,
          'triples_map_iri': MAP_PROGRAM},
         {'operation': 'rewrite_logical_table', 'triples_map_iri': MAP_PROGRAM,
          'column': 'tipe_program'}])
-    assert TIPE not in r2rml.predicates_of(hasil)
-    assert 'tipe_program' not in kueri_logical(hasil).lower()
+    assert TIPE_PROGRAM not in r2rml.predicates_of(result)
+    assert 'tipe_program' not in logical_query(result).lower()

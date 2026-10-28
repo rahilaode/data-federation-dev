@@ -1,13 +1,13 @@
 __pycache__/
 *.pyc
 
-# Lingkungan Python lokal
+# Local Python environment
 .venv/
 results/
 
-# cadangan artefak OBDA yang dibuat Ontop Agent (ADR-0018)
+# backups of the OBDA artifacts made by the Ontop Agent (ADR-0018)
 setup/vkg-system/config/ascam-backups/
 
-# slot blue-green dan upstream proxy, dibuat init-bluegreen.sh dan diubah agen (ADR-0022)
+# blue-green slots and proxy upstream, created by init-bluegreen.sh and changed by the agent (ADR-0022)
 setup/vkg-system/slots/
 setup/vkg-system/proxy/runtime/

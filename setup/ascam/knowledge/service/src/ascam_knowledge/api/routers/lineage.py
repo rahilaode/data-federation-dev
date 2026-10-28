@@ -1,4 +1,4 @@
-"""Lineage kolom ℱ untuk konsol: kolom sumber sampai property ontologi (ADR-0024). Baca saja."""
+"""Column lineage of ℱ for the console: source column to ontology property (ADR-0024). Read-only."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -18,15 +18,15 @@ router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['line
 def column_lineage(obdf_id: int, version_id: int | None = None, source: str | None = None,
                    table: str | None = None, column: str | None = None,
                    db: Session = Depends(get_db)):
-    """Graf lineage versi aktif (atau `version_id`), opsional disaring per sumber, tabel, dan
-    kolom DI SUMBER (nama yang sama dengan isi event skema)."""
+    """Lineage graph of the active version (or `version_id`), optionally filtered by source, table,
+    and column IN THE SOURCE (the same names as in schema events)."""
     svc.get_obdf(db, obdf_id)
     if version_id is None:
         version = impact_service.active_version(db, obdf_id)
         if version is None:
-            raise svc.NotFound('belum ada versi spesifikasi aktif')
+            raise svc.NotFound('no active specification version yet')
     else:
         version = db.get(spec.SpecVersion, version_id)
         if version is None or version.obdf_id != obdf_id:
-            raise svc.NotFound(f'versi spesifikasi {version_id} tidak ditemukan')
+            raise svc.NotFound(f'specification version {version_id} not found')
     return lineage_view.build(db, obdf_id, version, source, table, column)

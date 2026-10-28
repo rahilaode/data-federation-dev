@@ -1,18 +1,18 @@
-# Lapisan OBDA dengan blue-green (ADR-0022).
+# OBDA layer with blue-green deployment (ADR-0022).
 #
-#   ontop-proxy   nginx; menempati nama dan port endpoint lama (vkg-system-ontop-teiid:8080),
-#                 sehingga Knowledge, harness, dan pengguna tidak perlu diubah
-#   ontop-blue    instance Ontop yang membaca slots/blue
-#   ontop-green   instance Ontop yang membaca slots/green
+#   ontop-proxy   nginx; takes the name and port of the old endpoint (vkg-system-ontop-teiid:8080),
+#                 so Knowledge, the harness, and users need no change
+#   ontop-blue    Ontop instance that reads slots/blue
+#   ontop-green   Ontop instance that reads slots/green
 #
-# Hanya satu instance yang melayani; instance siaga dihentikan oleh start.sh/jalankan.sh dan
-# dinyalakan agen ASCAM ketika adaptasi berikutnya disiapkan. Slot dibuat oleh
-# init-bluegreen.sh sebelum lapisan ini dinyalakan.
+# Only one instance serves; the standby instance is stopped by start.sh/restart-ascam.sh and
+# started by the ASCAM agent when the next adaptation is prepared. The slots are created by
+# init-bluegreen.sh before this layer is started.
 #
-# Pengaturan Ontop yang dipertahankan dari rancangan lama:
-#   ONTOP_DEV_MODE=false agar urutan Σ'_S -> M' -> T' terkendali oleh ASCAM;
-#   init (tini) dan entrypoint yang meng-exec Java agar penghentian berlangsung cepat
-#   (docs/adr/0001-reload-ontop.md, entrypoint/README.md).
+# Ontop settings kept from the earlier design:
+#   ONTOP_DEV_MODE=false so that the order Σ'_S -> M' -> T' is controlled by ASCAM;
+#   init (tini) and an entrypoint that execs Java, so that shutdown is fast
+#   (ADR-0001 in docs/design-decisions.md, entrypoint/README.md).
 x-ontop: &ontop
   image: ontop/ontop-endpoint:4.1.1
   restart: unless-stopped

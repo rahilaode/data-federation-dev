@@ -1,4 +1,4 @@
-"""Autentikasi bearer token (berkas `<klien>:<token>`, satu klien per baris)."""
+"""Bearer token authentication (file of `<client>:<token>`, one client per line)."""
 import hashlib
 import hmac
 
@@ -17,10 +17,10 @@ class TokenRegistry:
                 continue
             client, _, token = line.partition(':')
             if not client or not token:
-                raise ValueError('Format token harus <klien>:<token>')
+                raise ValueError('Token format must be <client>:<token>')
             self._digests.append((hashlib.sha256(token.encode()).digest(), client))
         if not self._digests:
-            raise ValueError('Tidak ada token API')
+            raise ValueError('No API token')
 
     @classmethod
     def from_file(cls, path: str) -> 'TokenRegistry':
@@ -41,6 +41,6 @@ def current_client(request: Request,
     registry: TokenRegistry = request.app.state.tokens
     client = registry.client_for(creds.credentials) if creds else None
     if client is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, 'Token tidak valid',
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, 'Invalid token',
                             headers={'WWW-Authenticate': 'Bearer'})
     return client

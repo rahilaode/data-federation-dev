@@ -1,4 +1,4 @@
-"""API kecil Orchestrator: kesehatan dan statistik pemrosesan."""
+"""Small Orchestrator API: health and processing statistics."""
 import logging
 import threading
 from contextlib import asynccontextmanager
@@ -23,10 +23,10 @@ def create_app(settings: Settings | None = None, orchestrator: Orchestrator | No
             def loop():
                 try:
                     worker.run()
-                except Exception as exc:               # noqa: BLE001 — kesehatan tetap terlihat
+                except Exception as exc:               # noqa: BLE001 — health stays visible
                     worker.stats.state = 'failed'
                     worker.stats.last_error = f'{type(exc).__name__}: {exc}'[:300]
-                    log.exception('pekerja berhenti')
+                    log.exception('worker stopped')
             thread = threading.Thread(target=loop, name='ascam-orchestrator', daemon=True)
             thread.start()
         yield
@@ -37,10 +37,10 @@ def create_app(settings: Settings | None = None, orchestrator: Orchestrator | No
     app = FastAPI(title='ASCAM Orchestrator', version='0.1.0', lifespan=lifespan)
     app.state.worker = worker
 
-    @app.get('/health', tags=['kesehatan'])
+    @app.get('/health', tags=['health'])
     def health():
         stats = worker.stats.snapshot()
-        sehat = stats['state'] in ('running', 'starting', 'retrying')
-        return {'status': 'ok' if sehat else 'degraded', **stats}
+        healthy = stats['state'] in ('running', 'starting', 'retrying')
+        return {'status': 'ok' if healthy else 'degraded', **stats}
 
     return app

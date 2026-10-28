@@ -1,1 +1,1 @@
-"""Konsol administrator ASCAM (lihat setup/ascam/ui/README.md)."""
+"""ASCAM administrator console (see setup/ascam/ui/README.md)."""

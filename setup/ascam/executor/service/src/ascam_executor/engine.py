@@ -1,35 +1,39 @@
 """
-Mesin eksekusi rencana adaptasi (ADR-0004, ADR-0018, ADR-0019).
+Execution engine for adaptation plans (ADR-0004, ADR-0018, ADR-0019).
 
-Urutan langkah:
-  1. deploy_vdb   Σ′_S di-deploy sebagai VERSI BARU di samping versi yang melayani.
-                  Bila FAILED, versi lama tidak tersentuh dan eksekusi berhenti.
-  2. validate     ℳ′ dan 𝒯′ ditulis lewat agen, lalu `ontop validate` dijalankan terhadap
-                  versi VDB baru. Bila gagal, artefak dipulihkan dan VDB baru dihapus.
-  3. switch       Koneksi dipindahkan ke versi baru (connection type ANY).
-  4. reload_ontop Ontop dimuat ulang agar membaca ℳ′ dan 𝒯′.
-  5. verify       Jawaban OBDF diperiksa dengan sidik jari graf, sesuai pola adaptasi.
-  6. rollback     Bila verifikasi gagal: koneksi dikembalikan, artefak dipulihkan, Ontop
-                  dimuat ulang, dan eksekusi ditandai rolled_back.
+Steps:
+  1. deploy_vdb   Σ′_S is deployed as a NEW VERSION next to the version that is serving.
+                  If it is FAILED, the old version is untouched and the execution stops.
+  2. validate     ℳ′ and 𝒯′ are written through the agent, then `ontop validate` runs against
+                  the new VDB version. If it fails, the artifacts are restored and the new VDB
+                  is removed.
+  3. switch       Connections move to the new version (connection type ANY).
+  4. reload_ontop Ontop is reloaded so that it reads ℳ′ and 𝒯′.
+  5. verify       The answers of the OBDF are checked with graph fingerprints, according to the
+                  adaptation pattern.
+  6. rollback     If verification fails: connections are moved back, the artifacts restored,
+                  Ontop reloaded, and the execution marked rolled_back.
 
-Strategi `bluegreen` (ADR-0022, bawaan) menerapkan blue-green juga pada lapisan OBDA:
-  1. deploy_vdb   sama seperti di atas; versi N tetap melayani.
-  2. validate     ℳ′ dan 𝒯′ ditulis ke slot instance Ontop SIAGA yang dikunci ke versi N+1,
-                  lalu `ontop validate` dijalankan dengan volume instance itu.
-  3. start_ontop  instance siaga dinyalakan; instance aktif terus melayani.
-  4. verify       sidik jari graf diambil LANGSUNG dari instance siaga, sebelum lalu lintas
-                  dialihkan, dan dibandingkan dengan sidik jari instance aktif.
-  5. switch       proxy dialihkan ke instance siaga, artefaknya dipromosikan, instance lama
-                  dihentikan, dan versi N+1 menerima koneksi tanpa versi (ANY).
-  5. rollback     bila verifikasi gagal: instance siaga dihentikan dan versi N+1 dihapus;
-                  pengguna tidak pernah melihat versi yang belum terverifikasi.
+The `bluegreen` strategy (ADR-0022, default) applies blue-green to the OBDA layer as well:
+  1. deploy_vdb   as above; version N keeps serving.
+  2. validate     ℳ′ and 𝒯′ are written to the slot of the STANDBY Ontop instance, which is
+                  bound to version N+1, and `ontop validate` runs with that instance's volume.
+  3. start_ontop  the standby instance is started; the active instance keeps serving.
+  4. verify       the graph fingerprint is taken DIRECTLY from the standby instance, before any
+                  traffic is switched, and compared with the fingerprint of the active instance.
+  5. switch       the proxy is switched to the standby instance, its artifacts are promoted, the
+                  old instance is stopped, and version N+1 accepts connections without a version
+                  (ANY).
+  5. rollback     if verification fails: the standby instance is stopped and version N+1 removed;
+                  users never see a version that has not been verified.
 
-Sidik jari dasar diambil SESUDAH DDL diterapkan di sumber, karena Executor bekerja atas event.
-Bila sidik jari utuh gagal pada saat itu (mis. view tanpa kunci membuat Ontop membaca kolom yang
-sudah dihapus, temuan uji VM A007/A008 2026-10-09), sidik jari diambil per predikat: predikat yang
-gagal dicatat, dan cara yang sama dipakai untuk instance baru agar keduanya sebanding.
+The baseline fingerprint is taken AFTER the DDL was applied at the source, because the Executor
+works on events. If the whole fingerprint fails at that moment (e.g. a view without keys makes
+Ontop read a column that has already been dropped, finding of VM test A007/A008 2026-10-09), the
+fingerprint is taken per predicate: failing predicates are recorded, and the same method is used
+for the new instance so that both are comparable.
 
-Setiap langkah dilaporkan ke Knowledge sehingga jejaknya tetap ada meski Executor berhenti.
+Every step is reported to Knowledge, so its trail remains even if the Executor stops.
 """
 import logging
 import time
@@ -44,27 +48,27 @@ from rdflib import OWL, RDF, Graph, Namespace
 from .artifacts import ontology, r2rml, vdb
 
 log = logging.getLogger('ascam.executor')
-# Galat sementara saat mencatat hasil eksekusi: jaringan, 5xx, dan 409 dari pembacaan yang
-# mendahului commit permintaan sebelumnya (temuan evaluasi F6).
-PERCOBAAN_FINISH = 3
-STATUS_SEMENTARA = {409, 500, 502, 503, 504}
+# Transient errors while recording the result of an execution: network, 5xx, and 409 from a read
+# that overtook the commit of the previous request (finding of evaluation F6).
+FINISH_ATTEMPTS = 3
+TRANSIENT_STATUS = {409, 500, 502, 503, 504}
 
 
 @dataclass
-class Konteks:
+class Context:
     obdf_id: int
     plan: dict
     execution_id: int
     vdb_name: str
-    versi_lama: str
-    versi_baru: str
+    old_version: str
+    new_version: str
     deployment: str
     backups: dict[str, str] = field(default_factory=dict)
     baseline: dict[str, int] = field(default_factory=dict)
     timings: dict[str, int] = field(default_factory=dict)
-    predikat: set[str] = field(default_factory=set)       # kandidat predikat untuk sidik jari per predikat
-    per_predikat: bool = False                            # sidik jari utuh gagal pada instance lama
-    baseline_gagal: list[str] = field(default_factory=list)
+    predicates: set[str] = field(default_factory=set)     # candidate predicates for per-predicate fingerprints
+    per_predicate: bool = False                           # the whole fingerprint failed on the old instance
+    baseline_failed: list[str] = field(default_factory=list)
 
 
 class ExecutionError(Exception):
@@ -76,54 +80,54 @@ class ExecutionError(Exception):
 RR = Namespace('http://www.w3.org/ns/r2rml#')
 
 
-def daftar_predikat(mapping_lama: str, mapping_baru: str, ontologi: str) -> set[str]:
-    """Predikat yang mungkin muncul di graf: konstanta rr:predicate pada ℳ dan ℳ′, property yang
-    dideklarasikan 𝒯, dan rdf:type."""
-    hasil = {str(RDF.type)}
-    for teks, publik in ((mapping_lama, 'urn:ascam:mapping'), (mapping_baru, 'urn:ascam:mapping'),
-                         (ontologi, None)):
+def candidate_predicates(old_mapping: str, new_mapping: str, ontology_text: str) -> set[str]:
+    """Predicates that can appear in the graph: rr:predicate constants of ℳ and ℳ′, properties
+    declared in 𝒯, and rdf:type."""
+    result = {str(RDF.type)}
+    for text, public_id in ((old_mapping, 'urn:ascam:mapping'), (new_mapping, 'urn:ascam:mapping'),
+                            (ontology_text, None)):
         try:
-            graf = Graph().parse(data=teks, format='turtle', publicID=publik)
-        except Exception:                            # noqa: BLE001 — hanya untuk cadangan sidik jari
-            log.exception('artefak tidak dapat diurai untuk daftar predikat')
+            graph = Graph().parse(data=text, format='turtle', publicID=public_id)
+        except Exception:                            # noqa: BLE001 — only for the fingerprint fallback
+            log.exception('artifact cannot be parsed for the predicate list')
             continue
-        hasil |= {str(o) for o in graf.objects(None, RR.predicate)}
-        for jenis in (OWL.ObjectProperty, OWL.DatatypeProperty):
-            hasil |= {str(s) for s in graf.subjects(RDF.type, jenis)}
-    return hasil
+        result |= {str(o) for o in graph.objects(None, RR.predicate)}
+        for kind in (OWL.ObjectProperty, OWL.DatatypeProperty):
+            result |= {str(s) for s in graph.subjects(RDF.type, kind)}
+    return result
 
 
 def _actions(plan: dict, artifact: str) -> list[dict]:
-    keluaran = []
+    out = []
     for action in plan.get('actions', []):
         if action['artifact'] != artifact:
             continue
-        keluaran.append({'operation': action['operation'], **(action.get('params') or {})})
-    return keluaran
+        out.append({'operation': action['operation'], **(action.get('params') or {})})
+    return out
 
 
 def _type_lookup(type_mappings: list[dict], dbms: str | None = None):
-    tabel = {}
+    table_types = {}
     for row in type_mappings:
-        tabel.setdefault(row['native_type'].lower(), row['teiid_type'])
+        table_types.setdefault(row['native_type'].lower(), row['teiid_type'])
     def lookup(native_type: str | None) -> str | None:
         if not native_type:
             return None
-        dasar = native_type.lower().split('(')[0].strip()
-        panjang = native_type[len(dasar):].strip() if native_type.lower().startswith(dasar) else ''
-        teiid = tabel.get(native_type.lower()) or tabel.get(dasar)
+        base = native_type.lower().split('(')[0].strip()
+        length_suffix = native_type[len(base):].strip() if native_type.lower().startswith(base) else ''
+        teiid = table_types.get(native_type.lower()) or table_types.get(base)
         if teiid is None:
             return None
-        return f'{teiid}{panjang}' if panjang.startswith('(') and teiid == 'string' else teiid
+        return f'{teiid}{length_suffix}' if length_suffix.startswith('(') and teiid == 'string' else teiid
     return lookup
 
 
 def _xsd_for(type_mappings: list[dict], native_type: str | None) -> str | None:
     if not native_type:
         return None
-    dasar = native_type.lower().split('(')[0].strip()
+    base = native_type.lower().split('(')[0].strip()
     for row in type_mappings:
-        if row['native_type'].lower() in (native_type.lower(), dasar):
+        if row['native_type'].lower() in (native_type.lower(), base):
             return row['xsd_datatype']
     return None
 
@@ -133,9 +137,9 @@ class Executor:
                  teiid_jdbc_host: str = 'teiid', teiid_jdbc_port: int = 31000,
                  obda_strategy: str = 'restart', sparql_for=None, view_statement: str = 'alter'):
         if obda_strategy not in ('restart', 'bluegreen'):
-            raise ValueError(f'strategi OBDA tidak dikenal: {obda_strategy!r}')
+            raise ValueError(f'unknown OBDA strategy: {obda_strategy!r}')
         if obda_strategy == 'bluegreen' and sparql_for is None:
-            raise ValueError('strategi bluegreen memerlukan sparql_for (klien SPARQL per instance)')
+            raise ValueError('the bluegreen strategy requires sparql_for (a SPARQL client per instance)')
         self.knowledge = knowledge
         self.admin = admin
         self.agent = agent
@@ -147,385 +151,385 @@ class Executor:
         self.sparql_for = sparql_for
         self.view_statement = view_statement
 
-    # ── pelaporan ───────────────────────────────────────────────────────────────
-    def _step(self, konteks: Konteks, seq: int, nama: str, status: str, mulai: float,
+    # ── reporting ───────────────────────────────────────────────────────────────
+    def _step(self, ctx: Context, seq: int, name: str, status: str, started: float,
               **detail: Any) -> None:
-        # `detail` tidak boleh memakai kunci yang bentrok dengan parameter fungsi ini
-        assert not {'seq', 'name', 'status'} & set(detail), 'kunci detail bentrok'
-        durasi = int((time.perf_counter() - mulai) * 1000)
-        konteks.timings[nama] = durasi
-        self.knowledge.add_step(konteks.execution_id, seq=seq, name=nama, status=status,
-                                detail={'duration_ms': durasi, **detail},
+        # `detail` must not use keys that clash with the parameters of this function
+        assert not {'seq', 'name', 'status'} & set(detail), 'detail keys clash'
+        duration = int((time.perf_counter() - started) * 1000)
+        ctx.timings[name] = duration
+        self.knowledge.add_step(ctx.execution_id, seq=seq, name=name, status=status,
+                                detail={'duration_ms': duration, **detail},
                                 finished_at=datetime.now(timezone.utc).isoformat())
 
-    # ── langkah ─────────────────────────────────────────────────────────────────
-    def _siapkan_artefak(self, plan: dict, versi_aktif: dict) -> dict:
+    # ── steps ───────────────────────────────────────────────────────────────────
+    def _prepare_artifacts(self, plan: dict, active_version: dict) -> dict:
         type_mappings = self.knowledge.type_mappings(self.obdf_id)
-        xml = self.knowledge.artifact(versi_aktif['id'], 'vdb_xml')['content']
-        versi_baru = vdb.next_version(xml)
-        xml_baru, statements = vdb.apply_actions(xml, _actions(plan, 'vdb'),
-                                                 type_lookup=_type_lookup(type_mappings),
-                                                 new_version=versi_baru,
-                                                 view_statement=self.view_statement)
+        xml = self.knowledge.artifact(active_version['id'], 'vdb_xml')['content']
+        new_version = vdb.next_version(xml)
+        new_xml, statements = vdb.apply_actions(xml, _actions(plan, 'vdb'),
+                                                type_lookup=_type_lookup(type_mappings),
+                                                new_version=new_version,
+                                                view_statement=self.view_statement)
         mapping = self.agent.artifact('r2rml')
         ont = self.agent.artifact('ontology')
-        aksi_mapping = []
+        mapping_actions = []
         for action in _actions(plan, 'r2rml'):
-            salinan = dict(action)
+            action_copy = dict(action)
             if action['operation'] == 'add_predicate_object_map':
-                # TriplesMap sasaran berasal dari rencana (lineage Knowledge); nama tabel hanya
-                # cadangan bila rencana lama belum memuatnya
-                salinan.setdefault('table', (plan['impact']['targets'] or [{}])[0].get('table')
-                                   or _tabel_dari_vdb(plan))
-                salinan['datatype_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
-            aksi_mapping.append(salinan)
-        aksi_ontologi = []
+                # the target TriplesMap comes from the plan (Knowledge lineage); the table name is
+                # only a fallback for older plans that do not carry it yet
+                action_copy.setdefault('table', (plan['impact']['targets'] or [{}])[0].get('table')
+                                       or _table_from_vdb(plan))
+                action_copy['datatype_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
+            mapping_actions.append(action_copy)
+        ontology_actions = []
         for action in _actions(plan, 'ontology'):
-            salinan = dict(action)
+            action_copy = dict(action)
             if action['operation'] == 'add_datatype_property':
-                salinan['range_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
-            aksi_ontologi.append(salinan)
+                action_copy['range_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
+            ontology_actions.append(action_copy)
         return {
-            'vdb_xml': xml_baru, 'vdb_statements': statements, 'vdb_version': versi_baru,
-            'r2rml': r2rml.apply_actions(mapping['content'], aksi_mapping),
+            'vdb_xml': new_xml, 'vdb_statements': statements, 'vdb_version': new_version,
+            'r2rml': r2rml.apply_actions(mapping['content'], mapping_actions),
             'r2rml_sha': mapping['sha256'],
-            'ontology': ontology.apply_actions(ont['content'], aksi_ontologi),
+            'ontology': ontology.apply_actions(ont['content'], ontology_actions),
             'ontology_sha': ont['sha256'],
-            'predikat': daftar_predikat(mapping['content'],
-                                        r2rml.apply_actions(mapping['content'], aksi_mapping),
-                                        ont['content']),
+            'predicates': candidate_predicates(mapping['content'],
+                                               r2rml.apply_actions(mapping['content'], mapping_actions),
+                                               ont['content']),
         }
 
-    def _sidik_jari(self, konteks: Konteks, sparql) -> tuple[dict[str, int], list[str]]:
-        """(sidik jari, predikat yang kuerinya gagal). Cara pengambilan ditentukan saat dasar."""
-        if not konteks.per_predikat:
+    def _fingerprint(self, ctx: Context, sparql) -> tuple[dict[str, int], list[str]]:
+        """(fingerprint, predicates whose query failed). The method is fixed at the baseline."""
+        if not ctx.per_predicate:
             try:
                 return sparql.fingerprint(), []
             except Exception as exc:                # noqa: BLE001
-                if konteks.baseline or konteks.baseline_gagal:
-                    raise                           # instance baru harus menjawab sidik jari utuh
-                log.warning('sidik jari utuh gagal pada instance lama (%s); per predikat', exc)
-                konteks.per_predikat = True
-        return sparql.fingerprint_per_predicate(sorted(konteks.predikat))
+                if ctx.baseline or ctx.baseline_failed:
+                    raise                           # the new instance must answer the whole fingerprint
+                log.warning('whole fingerprint failed on the old instance (%s); per predicate', exc)
+                ctx.per_predicate = True
+        return sparql.fingerprint_per_predicate(sorted(ctx.predicates))
 
-    def _ambil_dasar(self, konteks: Konteks) -> None:
-        konteks.baseline, konteks.baseline_gagal = self._sidik_jari(konteks, self.sparql)
+    def _take_baseline(self, ctx: Context) -> None:
+        ctx.baseline, ctx.baseline_failed = self._fingerprint(ctx, self.sparql)
 
-    def _verifikasi(self, konteks: Konteks, sparql=None) -> tuple[bool, dict]:
-        sesudah, gagal = self._sidik_jari(konteks, sparql or self.sparql)
-        sebelum = konteks.baseline
-        gagal_sebelum = set(konteks.baseline_gagal)
-        pattern = konteks.plan.get('pattern')
-        predikat = _predikat(konteks.plan)
-        hilang = sorted(set(sebelum) - set(sesudah))
-        rincian = {'predikat_sebelum': len(sebelum), 'predikat_sesudah': len(sesudah),
-                   'hilang': hilang, 'predikat_sasaran': predikat}
-        if konteks.per_predikat:
-            rincian.update(sidik_jari='per_predikat', gagal_sebelum=sorted(gagal_sebelum),
-                           gagal_sesudah=gagal)
-        usang = _predikat_usang(konteks.plan)
+    def _compare(self, ctx: Context, sparql=None) -> tuple[bool, dict]:
+        after, failed = self._fingerprint(ctx, sparql or self.sparql)
+        before = ctx.baseline
+        failed_before = set(ctx.baseline_failed)
+        pattern = ctx.plan.get('pattern')
+        predicate = _target_predicate(ctx.plan)
+        missing = sorted(set(before) - set(after))
+        details = {'predicates_before': len(before), 'predicates_after': len(after),
+                   'missing': missing, 'target_predicates': predicate}
+        if ctx.per_predicate:
+            details.update(fingerprint='per_predicate', failed_before=sorted(failed_before),
+                           failed_after=failed)
+        deprecated = _deprecated_predicates(ctx.plan)
         if pattern == 'P-002':
-            # Satu kolom dapat diekspos beberapa predikat, termasuk lewat view (ADR-0023):
-            # semua predikat yang di-deprecate harus hilang, dan hanya predikat itu yang boleh hilang.
-            # Predikat yang gagal pada instance lama dan bukan sasaran harus terjawab sekarang.
-            # Bila tidak ada yang di-deprecate (keep_property: predikat masih diisi mapping lain),
-            # usang = ∅ sehingga tidak boleh ada predikat yang hilang sama sekali.
-            ok = (not gagal and not (usang & set(sesudah)) and set(hilang) <= usang
-                  and (gagal_sebelum - usang) <= set(sesudah))
-            rincian['predikat_sasaran'] = sorted(usang)
-            rincian['harapan'] = ('predikat sasaran hilang, predikat lain tetap' if usang
-                                  else 'tidak ada predikat yang hilang (predikat masih dipakai)')
+            # One column can be exposed by several predicates, including through views (ADR-0023):
+            # every deprecated predicate must disappear, and only those may disappear.
+            # Predicates that failed on the old instance and are not targets must answer now.
+            # If nothing is deprecated (keep_property: another mapping still fills the predicate),
+            # deprecated = ∅, so no predicate may disappear at all.
+            ok = (not failed and not (deprecated & set(after)) and set(missing) <= deprecated
+                  and (failed_before - deprecated) <= set(after))
+            details['target_predicates'] = sorted(deprecated)
+            details['expectation'] = ('target predicates disappear, other predicates remain' if deprecated
+                                      else 'no predicate disappears (the predicate is still used)')
         elif pattern == 'P-003':
-            # predikat yang gagal pada instance lama (kolom sudah berganti nama) tidak dapat
-            # dibandingkan nilainya, tetapi harus kembali terjawab
-            ok = (not gagal and all(sesudah.get(p) == n for p, n in sebelum.items())
-                  and set(sesudah) - set(sebelum) <= gagal_sebelum)
-            rincian['harapan'] = 'jawaban identik dengan sebelum adaptasi'
-        else:                                        # P-001: kolom baru boleh belum berisi data
-            ok = not gagal and not hilang
-            rincian['harapan'] = 'tidak ada predikat yang hilang'
-        return ok, rincian
+            # predicates that failed on the old instance (the column was already renamed) cannot
+            # be compared by value, but they must answer again
+            ok = (not failed and all(after.get(p) == n for p, n in before.items())
+                  and set(after) - set(before) <= failed_before)
+            details['expectation'] = 'answers identical to those before the adaptation'
+        else:                                        # P-001: the new column may still be empty
+            ok = not failed and not missing
+            details['expectation'] = 'no predicate disappears'
+        return ok, details
 
-    def _pulihkan_artefak(self, konteks: Konteks) -> dict:
-        dipulihkan = {}
-        for kind, backup_id in konteks.backups.items():
+    def _restore_artifacts(self, ctx: Context) -> dict:
+        restored = {}
+        for kind, backup_id in ctx.backups.items():
             if backup_id:
-                dipulihkan[kind] = self.agent.restore(backup_id)['sha256'][:12]
-        return dipulihkan
+                restored[kind] = self.agent.restore(backup_id)['sha256'][:12]
+        return restored
 
-    # ── alur utama ──────────────────────────────────────────────────────────────
+    # ── main flow ───────────────────────────────────────────────────────────────
     def execute(self, plan: dict) -> dict:
-        versi_aktif = self.knowledge.active_version(self.obdf_id)
-        if plan['base_spec_version_id'] != versi_aktif['id']:
-            # Ditandai usang agar tidak dicoba ulang setiap siklus (temuan evaluasi F6)
+        active_version = self.knowledge.active_version(self.obdf_id)
+        if plan['base_spec_version_id'] != active_version['id']:
+            # marked superseded so that it is not retried in every cycle (finding of evaluation F6)
             try:
-                self.knowledge.supersede(plan['id'], f"versi dasar {plan['base_spec_version_id']} "
-                                                     f"bukan versi aktif {versi_aktif['id']}")
+                self.knowledge.supersede(plan['id'], f"base version {plan['base_spec_version_id']} "
+                                                     f"is not the active version {active_version['id']}")
             except Exception:                       # noqa: BLE001
                 pass
-            raise ExecutionError('rencana disusun di atas versi spesifikasi lain',
-                                 {'base': plan['base_spec_version_id'], 'aktif': versi_aktif['id']})
+            raise ExecutionError('the plan was built on another specification version',
+                                 {'base': plan['base_spec_version_id'], 'active': active_version['id']})
         execution = self.knowledge.start_execution(plan['id'])
-        # Sejak eksekusi dimulai, setiap jalan keluar harus menutupnya: eksekusi yang tertinggal
-        # berstatus running tidak pernah selesai dan menahan siklus berikutnya (temuan F6).
-        konteks = None
+        # Once the execution has started, every exit must close it: an execution left `running`
+        # never finishes and blocks the next cycles (finding of F6).
+        ctx = None
         try:
-            artefak = self._siapkan_artefak(plan, versi_aktif)
-            konteks = Konteks(obdf_id=self.obdf_id, plan=plan, execution_id=execution['id'],
-                              predikat=artefak.get('predikat') or set(),
-                              vdb_name=versi_aktif['teiid_vdb_name'],
-                              versi_lama=str(versi_aktif['teiid_vdb_version']),
-                              versi_baru=artefak['vdb_version'],
-                              deployment=f"{versi_aktif['teiid_vdb_name']}-{artefak['vdb_version']}-vdb.xml")
-            mulai_total = time.perf_counter()
+            artifacts = self._prepare_artifacts(plan, active_version)
+            ctx = Context(obdf_id=self.obdf_id, plan=plan, execution_id=execution['id'],
+                          predicates=artifacts.get('predicates') or set(),
+                          vdb_name=active_version['teiid_vdb_name'],
+                          old_version=str(active_version['teiid_vdb_version']),
+                          new_version=artifacts['vdb_version'],
+                          deployment=f"{active_version['teiid_vdb_name']}-{artifacts['vdb_version']}-vdb.xml")
+            started_total = time.perf_counter()
             if self.obda_strategy == 'bluegreen':
-                return self._jalankan_bluegreen(konteks, artefak, mulai_total)
-            self._deploy(konteks, artefak)
-            self._tulis_dan_validasi(konteks, artefak)
-            self._ambil_dasar(konteks)
-            self._switch(konteks)
-            self._reload(konteks)
-            ok, rincian = self._verify(konteks)
+                return self._run_bluegreen(ctx, artifacts, started_total)
+            self._deploy(ctx, artifacts)
+            self._write_and_validate(ctx, artifacts)
+            self._take_baseline(ctx)
+            self._switch(ctx)
+            self._reload(ctx)
+            ok, details = self._verify(ctx)
             if not ok:
-                return self._rollback(konteks, rincian, mulai_total)
-            return self._selesai(konteks, mulai_total)
+                return self._rollback(ctx, details, started_total)
+            return self._complete(ctx, started_total)
         except ExecutionError as exc:
             self._finish(execution['id'], status='failed',
-                         timings=konteks.timings if konteks else {},
+                         timings=ctx.timings if ctx else {},
                          failure={'message': str(exc), **exc.detail})
             raise
         except Exception as exc:
-            tahap = next(reversed(konteks.timings), None) if konteks else None
+            last_step = next(reversed(ctx.timings), None) if ctx else None
             try:
                 self._finish(execution['id'], status='failed',
-                             timings=konteks.timings if konteks else {},
-                             failure={'message': f'galat tak terduga: {type(exc).__name__}: {exc}'[:500],
-                                      'after_step': tahap})
-            except Exception:                       # noqa: BLE001 — galat asal lebih penting
-                log.exception('eksekusi %s tidak dapat ditutup', execution['id'])
+                             timings=ctx.timings if ctx else {},
+                             failure={'message': f'unexpected error: {type(exc).__name__}: {exc}'[:500],
+                                      'after_step': last_step})
+            except Exception:                       # noqa: BLE001 — the original error matters more
+                log.exception('execution %s cannot be closed', execution['id'])
             raise
 
     def _finish(self, execution_id: int, **body) -> dict:
-        """Mencatat akhir eksekusi, mengulang untuk galat sementara."""
-        for percobaan in range(1, PERCOBAAN_FINISH + 1):
+        """Records the end of an execution, retrying on transient errors."""
+        for attempt in range(1, FINISH_ATTEMPTS + 1):
             try:
                 return self.knowledge.finish_execution(execution_id, **body)
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-                sementara = (isinstance(exc, httpx.TransportError)
-                             or exc.response.status_code in STATUS_SEMENTARA)
-                if not sementara or percobaan == PERCOBAAN_FINISH:
+                transient = (isinstance(exc, httpx.TransportError)
+                             or exc.response.status_code in TRANSIENT_STATUS)
+                if not transient or attempt == FINISH_ATTEMPTS:
                     raise
-                log.warning('mencatat akhir eksekusi %s gagal (%s); mencoba lagi',
+                log.warning('recording the end of execution %s failed (%s); retrying',
                             execution_id, exc)
-                self.sleep(0.5 * percobaan)
+                self.sleep(0.5 * attempt)
 
-    def _deploy(self, konteks: Konteks, artefak: dict) -> None:
-        mulai = time.perf_counter()
-        self.admin.deploy(konteks.deployment, artefak['vdb_xml'].encode())
-        status, errors = self.admin.wait_until_settled(konteks.vdb_name, konteks.versi_baru,
+    def _deploy(self, ctx: Context, artifacts: dict) -> None:
+        started = time.perf_counter()
+        self.admin.deploy(ctx.deployment, artifacts['vdb_xml'].encode())
+        status, errors = self.admin.wait_until_settled(ctx.vdb_name, ctx.new_version,
                                                        sleep=self.sleep)
-        self.knowledge.add_validation(konteks.execution_id, validator='teiid_status',
+        self.knowledge.add_validation(ctx.execution_id, validator='teiid_status',
                                       passed=status == 'ACTIVE',
                                       details={'status': status, 'errors': errors,
-                                               'vdb_version': konteks.versi_baru})
+                                               'vdb_version': ctx.new_version})
         if status != 'ACTIVE':
-            self._step(konteks, 1, 'deploy_vdb', 'failed', mulai, vdb_status=status,
+            self._step(ctx, 1, 'deploy_vdb', 'failed', started, vdb_status=status,
                        errors=errors)
-            self.admin.undeploy(konteks.deployment)
-            raise ExecutionError(f'VDB versi {konteks.versi_baru} berstatus {status}',
+            self.admin.undeploy(ctx.deployment)
+            raise ExecutionError(f'VDB version {ctx.new_version} has status {status}',
                                  {'errors': errors})
-        self._step(konteks, 1, 'deploy_vdb', 'succeeded', mulai, vdb_version=konteks.versi_baru,
-                   statements=artefak['vdb_statements'])
+        self._step(ctx, 1, 'deploy_vdb', 'succeeded', started, vdb_version=ctx.new_version,
+                   statements=artifacts['vdb_statements'])
 
-    def _tulis_dan_validasi(self, konteks: Konteks, artefak: dict) -> None:
-        mulai = time.perf_counter()
+    def _write_and_validate(self, ctx: Context, artifacts: dict) -> None:
+        started = time.perf_counter()
         try:
-            konteks.backups['r2rml'] = self.agent.write('r2rml', artefak['r2rml'],
-                                                        artefak['r2rml_sha'])['backup_id']
-            konteks.backups['ontology'] = self.agent.write('ontology', artefak['ontology'],
-                                                           artefak['ontology_sha'])['backup_id']
+            ctx.backups['r2rml'] = self.agent.write('r2rml', artifacts['r2rml'],
+                                                    artifacts['r2rml_sha'])['backup_id']
+            ctx.backups['ontology'] = self.agent.write('ontology', artifacts['ontology'],
+                                                       artifacts['ontology_sha'])['backup_id']
             host, port = self.jdbc
-            db_url = (f'jdbc:teiid:{konteks.vdb_name}@mm://{host}:{port}'
-                      f';version={konteks.versi_baru}')
-            hasil = self.agent.validate(db_url)
+            db_url = (f'jdbc:teiid:{ctx.vdb_name}@mm://{host}:{port}'
+                      f';version={ctx.new_version}')
+            result = self.agent.validate(db_url)
         except Exception as exc:                    # noqa: BLE001
-            self._pulihkan_artefak(konteks)
-            self.admin.undeploy(konteks.deployment)
-            self._step(konteks, 2, 'validate', 'failed', mulai, error=str(exc)[:300])
-            raise ExecutionError(f'penulisan atau validasi artefak gagal: {exc}') from exc
+            self._restore_artifacts(ctx)
+            self.admin.undeploy(ctx.deployment)
+            self._step(ctx, 2, 'validate', 'failed', started, error=str(exc)[:300])
+            raise ExecutionError(f'writing or validating the artifacts failed: {exc}') from exc
 
-        self.knowledge.add_validation(konteks.execution_id, validator='ontop_validate',
-                                      passed=bool(hasil.get('ok')),
-                                      details={'exit_code': hasil.get('exit_code'),
-                                               'output': (hasil.get('output') or '')[-1000:]})
-        if not hasil.get('ok'):
-            self._pulihkan_artefak(konteks)
-            self.admin.undeploy(konteks.deployment)
-            self._step(konteks, 2, 'validate', 'failed', mulai, exit_code=hasil.get('exit_code'))
-            raise ExecutionError('ontop validate menolak artefak baru',
-                                 {'output': (hasil.get('output') or '')[-500:]})
-        self._step(konteks, 2, 'validate', 'succeeded', mulai, exit_code=0)
+        self.knowledge.add_validation(ctx.execution_id, validator='ontop_validate',
+                                      passed=bool(result.get('ok')),
+                                      details={'exit_code': result.get('exit_code'),
+                                               'output': (result.get('output') or '')[-1000:]})
+        if not result.get('ok'):
+            self._restore_artifacts(ctx)
+            self.admin.undeploy(ctx.deployment)
+            self._step(ctx, 2, 'validate', 'failed', started, exit_code=result.get('exit_code'))
+            raise ExecutionError('ontop validate rejected the new artifacts',
+                                 {'output': (result.get('output') or '')[-500:]})
+        self._step(ctx, 2, 'validate', 'succeeded', started, exit_code=0)
 
-    def _switch(self, konteks: Konteks) -> None:
-        mulai = time.perf_counter()
-        self.admin.set_connection_type(konteks.vdb_name, konteks.versi_baru, 'ANY')
-        self._step(konteks, 3, 'switch', 'succeeded', mulai, connection_type='ANY',
-                   vdb_version=konteks.versi_baru)
+    def _switch(self, ctx: Context) -> None:
+        started = time.perf_counter()
+        self.admin.set_connection_type(ctx.vdb_name, ctx.new_version, 'ANY')
+        self._step(ctx, 3, 'switch', 'succeeded', started, connection_type='ANY',
+                   vdb_version=ctx.new_version)
 
-    def _reload(self, konteks: Konteks) -> None:
-        mulai = time.perf_counter()
-        hasil = self.agent.reload()
-        status = 'succeeded' if hasil.get('ok') else 'failed'
-        self._step(konteks, 4, 'reload_ontop', status, mulai, **{k: hasil.get(k) for k in
-                                                                 ('stop_ms', 'ready_ms', 'total_ms',
-                                                                  'error')})
-        if not hasil.get('ok'):
-            raise ExecutionError(f"muat ulang Ontop gagal: {hasil.get('error')}")
+    def _reload(self, ctx: Context) -> None:
+        started = time.perf_counter()
+        result = self.agent.reload()
+        status = 'succeeded' if result.get('ok') else 'failed'
+        self._step(ctx, 4, 'reload_ontop', status, started, **{k: result.get(k) for k in
+                                                               ('stop_ms', 'ready_ms', 'total_ms',
+                                                                'error')})
+        if not result.get('ok'):
+            raise ExecutionError(f"reloading Ontop failed: {result.get('error')}")
 
-    def _verify(self, konteks: Konteks, sparql=None, seq: int = 5,
-                **ekstra: Any) -> tuple[bool, dict]:
-        mulai = time.perf_counter()
+    def _verify(self, ctx: Context, sparql=None, seq: int = 5,
+                **extra: Any) -> tuple[bool, dict]:
+        started = time.perf_counter()
         try:
-            ok, rincian = self._verifikasi(konteks, sparql)
+            ok, details = self._compare(ctx, sparql)
         except Exception as exc:                    # noqa: BLE001
-            ok, rincian = False, {'error': str(exc)[:300]}
-        rincian.update(ekstra)
-        self.knowledge.add_validation(konteks.execution_id, validator='sparql_regression',
-                                      passed=ok, details=rincian)
-        self._step(konteks, seq, 'verify', 'succeeded' if ok else 'failed', mulai, **rincian)
-        return ok, rincian
+            ok, details = False, {'error': str(exc)[:300]}
+        details.update(extra)
+        self.knowledge.add_validation(ctx.execution_id, validator='sparql_regression',
+                                      passed=ok, details=details)
+        self._step(ctx, seq, 'verify', 'succeeded' if ok else 'failed', started, **details)
+        return ok, details
 
-    # ── blue-green lapisan OBDA (ADR-0022) ──────────────────────────────────────
-    def _jalankan_bluegreen(self, konteks: Konteks, artefak: dict, mulai_total: float) -> dict:
-        self._deploy(konteks, artefak)
+    # ── blue-green OBDA layer (ADR-0022) ────────────────────────────────────────
+    def _run_bluegreen(self, ctx: Context, artifacts: dict, started_total: float) -> dict:
+        self._deploy(ctx, artifacts)
         try:
-            siaga = self._siapkan_siaga(konteks, artefak)
-            self._ambil_dasar(konteks)                          # instance aktif, lewat proxy
-            self._nyalakan_siaga(konteks)
-            ok, rincian = self._verify(konteks, sparql=self.sparql_for(siaga['standby_sparql_url']),
-                                       seq=4, instance=siaga['standby'])
+            standby = self._prepare_standby(ctx, artifacts)
+            self._take_baseline(ctx)                            # active instance, through the proxy
+            self._start_standby(ctx)
+            ok, details = self._verify(ctx, sparql=self.sparql_for(standby['standby_sparql_url']),
+                                       seq=4, instance=standby['standby'])
         except ExecutionError:
-            raise                                               # sudah dibersihkan langkahnya
+            raise                                               # the step has already cleaned up
         except Exception:
-            # Galat tak terduga sebelum peralihan (mis. pencatatan langkah ditolak Knowledge):
-            # instance siaga dan VDB baru tetap harus dibersihkan (temuan uji VM 2026-10-08).
-            self._gagal_sebelum_peralihan(konteks)
+            # Unexpected error before the switch (e.g. Knowledge rejected a step record): the
+            # standby instance and the new VDB must still be cleaned up (finding of VM test 2026-10-08).
+            self._discard_before_switch(ctx)
             raise
         if not ok:
-            return self._batalkan_siaga(konteks, rincian, mulai_total)
-        self._alihkan(konteks)
-        return self._selesai(konteks, mulai_total)
+            return self._abort_standby(ctx, details, started_total)
+        self._switch_over(ctx)
+        return self._complete(ctx, started_total)
 
-    def _gagal_sebelum_peralihan(self, konteks: Konteks) -> None:
-        """Instance siaga dihentikan dan versi VDB baru dihapus; versi aktif tidak tersentuh."""
+    def _discard_before_switch(self, ctx: Context) -> None:
+        """The standby instance is stopped and the new VDB version removed; the active version is untouched."""
         try:
             self.agent.bluegreen_discard()
-        except Exception:                           # noqa: BLE001 — galat asal lebih penting
-            log.exception('instance siaga tidak dapat dihentikan')
-        self.admin.undeploy(konteks.deployment)
+        except Exception:                           # noqa: BLE001 — the original error matters more
+            log.exception('the standby instance cannot be stopped')
+        self.admin.undeploy(ctx.deployment)
 
-    def _siapkan_siaga(self, konteks: Konteks, artefak: dict) -> dict:
-        mulai = time.perf_counter()
+    def _prepare_standby(self, ctx: Context, artifacts: dict) -> dict:
+        started = time.perf_counter()
         try:
-            siaga = self.agent.bluegreen_state()
-            self.agent.bluegreen_prepare(artefak['r2rml'], artefak['ontology'], konteks.versi_baru,
-                                         artefak['r2rml_sha'], artefak['ontology_sha'])
+            standby = self.agent.bluegreen_state()
+            self.agent.bluegreen_prepare(artifacts['r2rml'], artifacts['ontology'], ctx.new_version,
+                                         artifacts['r2rml_sha'], artifacts['ontology_sha'])
             host, port = self.jdbc
-            hasil = self.agent.bluegreen_validate(f'jdbc:teiid:{konteks.vdb_name}@mm://{host}:{port}'
-                                                  f';version={konteks.versi_baru}')
+            result = self.agent.bluegreen_validate(f'jdbc:teiid:{ctx.vdb_name}@mm://{host}:{port}'
+                                                   f';version={ctx.new_version}')
         except Exception as exc:                    # noqa: BLE001
-            self._gagal_sebelum_peralihan(konteks)
-            self._step(konteks, 2, 'validate', 'failed', mulai, error=str(exc)[:300])
-            raise ExecutionError(f'penulisan atau validasi artefak gagal: {exc}') from exc
-        self.knowledge.add_validation(konteks.execution_id, validator='ontop_validate',
-                                      passed=bool(hasil.get('ok')),
-                                      details={'exit_code': hasil.get('exit_code'),
-                                               'instance': siaga['standby'],
-                                               'output': (hasil.get('output') or '')[-1000:]})
-        if not hasil.get('ok'):
-            self._gagal_sebelum_peralihan(konteks)
-            self._step(konteks, 2, 'validate', 'failed', mulai, exit_code=hasil.get('exit_code'),
-                       instance=siaga['standby'])
-            raise ExecutionError('ontop validate menolak artefak baru',
-                                 {'output': (hasil.get('output') or '')[-500:]})
-        self._step(konteks, 2, 'validate', 'succeeded', mulai, exit_code=0,
-                   instance=siaga['standby'], vdb_version=konteks.versi_baru)
-        return siaga
+            self._discard_before_switch(ctx)
+            self._step(ctx, 2, 'validate', 'failed', started, error=str(exc)[:300])
+            raise ExecutionError(f'writing or validating the artifacts failed: {exc}') from exc
+        self.knowledge.add_validation(ctx.execution_id, validator='ontop_validate',
+                                      passed=bool(result.get('ok')),
+                                      details={'exit_code': result.get('exit_code'),
+                                               'instance': standby['standby'],
+                                               'output': (result.get('output') or '')[-1000:]})
+        if not result.get('ok'):
+            self._discard_before_switch(ctx)
+            self._step(ctx, 2, 'validate', 'failed', started, exit_code=result.get('exit_code'),
+                       instance=standby['standby'])
+            raise ExecutionError('ontop validate rejected the new artifacts',
+                                 {'output': (result.get('output') or '')[-500:]})
+        self._step(ctx, 2, 'validate', 'succeeded', started, exit_code=0,
+                   instance=standby['standby'], vdb_version=ctx.new_version)
+        return standby
 
-    def _nyalakan_siaga(self, konteks: Konteks) -> None:
-        mulai = time.perf_counter()
-        hasil = self.agent.bluegreen_start()
-        detail = {'instance': hasil.get('color'), 'error': hasil.get('error'),
-                  **(hasil.get('detail') or {})}
-        if not hasil.get('ok'):
-            self._gagal_sebelum_peralihan(konteks)
-            self._step(konteks, 3, 'start_ontop', 'failed', mulai, **detail)
-            raise ExecutionError(f"instance Ontop siaga tidak siap: {hasil.get('error')}")
-        self._step(konteks, 3, 'start_ontop', 'succeeded', mulai, **detail)
+    def _start_standby(self, ctx: Context) -> None:
+        started = time.perf_counter()
+        result = self.agent.bluegreen_start()
+        detail = {'instance': result.get('color'), 'error': result.get('error'),
+                  **(result.get('detail') or {})}
+        if not result.get('ok'):
+            self._discard_before_switch(ctx)
+            self._step(ctx, 3, 'start_ontop', 'failed', started, **detail)
+            raise ExecutionError(f"the standby Ontop instance is not ready: {result.get('error')}")
+        self._step(ctx, 3, 'start_ontop', 'succeeded', started, **detail)
 
-    def _alihkan(self, konteks: Konteks) -> None:
-        mulai = time.perf_counter()
-        hasil = self.agent.bluegreen_switch()
-        if not hasil.get('ok'):                     # proxy tetap pada instance lama (agen)
-            self._gagal_sebelum_peralihan(konteks)
-            self._step(konteks, 5, 'switch', 'failed', mulai, error=hasil.get('error'))
-            raise ExecutionError(f"peralihan proxy gagal: {hasil.get('error')}")
-        self.admin.set_connection_type(konteks.vdb_name, konteks.versi_baru, 'ANY')
-        detail = hasil.get('detail') or {}
-        self._step(konteks, 5, 'switch', 'succeeded', mulai, connection_type='ANY',
-                   vdb_version=konteks.versi_baru, instance=hasil.get('color'),
+    def _switch_over(self, ctx: Context) -> None:
+        started = time.perf_counter()
+        result = self.agent.bluegreen_switch()
+        if not result.get('ok'):                    # the proxy stays on the old instance (agent)
+            self._discard_before_switch(ctx)
+            self._step(ctx, 5, 'switch', 'failed', started, error=result.get('error'))
+            raise ExecutionError(f"switching the proxy failed: {result.get('error')}")
+        self.admin.set_connection_type(ctx.vdb_name, ctx.new_version, 'ANY')
+        detail = result.get('detail') or {}
+        self._step(ctx, 5, 'switch', 'succeeded', started, connection_type='ANY',
+                   vdb_version=ctx.new_version, instance=result.get('color'),
                    proxy_ms=detail.get('switch_ms'), retired=detail.get('retired'))
 
-    def _batalkan_siaga(self, konteks: Konteks, rincian: dict, mulai_total: float) -> dict:
-        mulai = time.perf_counter()
-        self._gagal_sebelum_peralihan(konteks)
-        self._step(konteks, 5, 'rollback', 'succeeded', mulai, alasan=rincian,
-                   dampak='tidak ada; lalu lintas tidak pernah dialihkan')
-        konteks.timings['total_ms'] = int((time.perf_counter() - mulai_total) * 1000)
-        return self._finish(konteks.execution_id, status='rolled_back', timings=konteks.timings,
-                            failure={'message': 'verifikasi gagal', **rincian})
+    def _abort_standby(self, ctx: Context, details: dict, started_total: float) -> dict:
+        started = time.perf_counter()
+        self._discard_before_switch(ctx)
+        self._step(ctx, 5, 'rollback', 'succeeded', started, reason=details,
+                   impact='none; traffic was never switched')
+        ctx.timings['total_ms'] = int((time.perf_counter() - started_total) * 1000)
+        return self._finish(ctx.execution_id, status='rolled_back', timings=ctx.timings,
+                            failure={'message': 'verification failed', **details})
 
-    def _rollback(self, konteks: Konteks, rincian: dict, mulai_total: float) -> dict:
-        mulai = time.perf_counter()
-        self.admin.set_connection_type(konteks.vdb_name, konteks.versi_baru, 'NONE')
-        self.admin.set_connection_type(konteks.vdb_name, konteks.versi_lama, 'ANY')
-        dipulihkan = self._pulihkan_artefak(konteks)
-        muat = self.agent.reload()
-        self._step(konteks, 6, 'rollback', 'succeeded' if muat.get('ok') else 'failed', mulai,
-                   artefak=dipulihkan, alasan=rincian, reload_ok=muat.get('ok'))
-        konteks.timings['total_ms'] = int((time.perf_counter() - mulai_total) * 1000)
-        return self._finish(konteks.execution_id, status='rolled_back',
-                                               timings=konteks.timings,
-                                               failure={'message': 'verifikasi gagal', **rincian})
+    def _rollback(self, ctx: Context, details: dict, started_total: float) -> dict:
+        started = time.perf_counter()
+        self.admin.set_connection_type(ctx.vdb_name, ctx.new_version, 'NONE')
+        self.admin.set_connection_type(ctx.vdb_name, ctx.old_version, 'ANY')
+        restored = self._restore_artifacts(ctx)
+        reloaded = self.agent.reload()
+        self._step(ctx, 6, 'rollback', 'succeeded' if reloaded.get('ok') else 'failed', started,
+                   artifacts=restored, reason=details, reload_ok=reloaded.get('ok'))
+        ctx.timings['total_ms'] = int((time.perf_counter() - started_total) * 1000)
+        return self._finish(ctx.execution_id, status='rolled_back',
+                            timings=ctx.timings,
+                            failure={'message': 'verification failed', **details})
 
-    def _selesai(self, konteks: Konteks, mulai_total: float) -> dict:
-        self.admin.set_connection_type(konteks.vdb_name, konteks.versi_lama, 'NONE')
-        try:                                        # kebersihan, bukan bagian dari keberhasilan
+    def _complete(self, ctx: Context, started_total: float) -> dict:
+        self.admin.set_connection_type(ctx.vdb_name, ctx.old_version, 'NONE')
+        try:                                        # housekeeping, not part of success
             self.agent.prune_backups(keep=20)
         except Exception:                           # noqa: BLE001
             pass
-        mulai = time.perf_counter()
-        hasil_sync = self.knowledge.sync(self.obdf_id)
-        self._step(konteks, 6, 'sync', 'succeeded', mulai,
-                   spec_version_id=hasil_sync.get('spec_version_id'),
-                   version_no=hasil_sync.get('version_no'))
-        konteks.timings['total_ms'] = int((time.perf_counter() - mulai_total) * 1000)
+        started = time.perf_counter()
+        sync_result = self.knowledge.sync(self.obdf_id)
+        self._step(ctx, 6, 'sync', 'succeeded', started,
+                   spec_version_id=sync_result.get('spec_version_id'),
+                   version_no=sync_result.get('version_no'))
+        ctx.timings['total_ms'] = int((time.perf_counter() - started_total) * 1000)
         return self._finish(
-            konteks.execution_id, status='succeeded', timings=konteks.timings,
-            candidate_spec_version_id=hasil_sync.get('spec_version_id'))
+            ctx.execution_id, status='succeeded', timings=ctx.timings,
+            candidate_spec_version_id=sync_result.get('spec_version_id'))
 
 
 XSD = 'http://www.w3.org/2001/XMLSchema#'
 
 
 def _expand(datatype: str | None) -> str | None:
-    """'xsd:string' -> IRI penuh, agar artefak tidak memuat IRI berskema 'xsd'."""
+    """'xsd:string' -> full IRI, so that the artifacts contain no IRI with the scheme 'xsd'."""
     if datatype and datatype.startswith('xsd:'):
         return XSD + datatype[4:]
     return datatype
 
 
-def _predikat(plan: dict) -> str | None:
+def _target_predicate(plan: dict) -> str | None:
     for action in plan.get('actions', []):
         params = action.get('params') or {}
         if params.get('predicate_iri'):
@@ -535,8 +539,8 @@ def _predikat(plan: dict) -> str | None:
     return None
 
 
-def _predikat_usang(plan: dict) -> set[str]:
-    """Predikat yang di-deprecate rencana P-002 (tidak lagi diisi mapping mana pun)."""
+def _deprecated_predicates(plan: dict) -> set[str]:
+    """Predicates that a P-002 plan deprecates (no mapping fills them any longer)."""
     return {(a.get('params') or {}).get('predicate_iri') for a in plan.get('actions', [])
             if a.get('operation') == 'deprecate_property'
             and (a.get('params') or {}).get('predicate_iri')}
@@ -550,7 +554,7 @@ def _column_type(plan: dict) -> str | None:
     return None
 
 
-def _tabel_dari_vdb(plan: dict) -> str | None:
+def _table_from_vdb(plan: dict) -> str | None:
     for action in plan.get('actions', []):
         if action['artifact'] == 'vdb':
             return (action.get('params') or {}).get('table')

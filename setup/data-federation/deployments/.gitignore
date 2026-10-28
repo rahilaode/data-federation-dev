@@ -1,4 +1,4 @@
-# Marker file deployment scanner WildFly (dibuat saat runtime)
+# WildFly deployment scanner marker files (created at runtime)
 *.dodeploy
 *.isdeploying
 *.deployed
@@ -7,5 +7,5 @@
 *.undeployed
 *.pending
 *.skipdeploy
-# Berkas sementara dari atomic write ASCAM
+# Temporary files from ASCAM atomic writes
 .*.tmp

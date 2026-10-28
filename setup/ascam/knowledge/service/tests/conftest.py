@@ -1,9 +1,9 @@
 """
-Fixture pengujian Knowledge.
+Knowledge test fixtures.
 
-Uji ini MENGHAPUS dan MEMBUAT ULANG skema (downgrade base -> upgrade head), sehingga
-hanya boleh dijalankan pada basis data khusus uji: nama basis data wajib berakhiran
-`_test`. URL diberikan lewat ASCAM_KNOWLEDGE_DB_URL.
+These tests DROP AND RECREATE the schemas (downgrade base -> upgrade head), so they may run
+only against a database dedicated to tests: its name must end with `_test`. The URL is given
+in ASCAM_KNOWLEDGE_DB_URL.
 """
 import os
 import pathlib
@@ -23,15 +23,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 def db_url():
     url = os.getenv('ASCAM_KNOWLEDGE_DB_URL')
     if not url:
-        pytest.skip('ASCAM_KNOWLEDGE_DB_URL belum diset')
+        pytest.skip('ASCAM_KNOWLEDGE_DB_URL is not set')
     if not (make_url(url).database or '').endswith('_test'):
-        pytest.exit('Basis data uji harus bernama *_test (uji menghapus skema).', returncode=2)
+        pytest.exit('The test database must be named *_test (the tests drop the schemas).', returncode=2)
     return url
 
 
 @pytest.fixture(scope='session')
 def alembic_cfg(db_url):
-    # dipakai juga oleh create_app() saat paket dipasang (bukan dijalankan dari folder sumber)
+    # also used by create_app() when the package is installed (not run from the source folder)
     os.environ.setdefault('ASCAM_KNOWLEDGE_ALEMBIC_INI', str(ROOT / 'alembic.ini'))
     return Config(str(ROOT / 'alembic.ini'))
 
@@ -52,7 +52,7 @@ def engine(db_url, migrated):
 
 @pytest.fixture
 def session(engine):
-    """Setiap uji berjalan dalam satu transaksi yang di-rollback di akhir."""
+    """Every test runs in one transaction that is rolled back at the end."""
     conn = engine.connect()
     trans = conn.begin()
     s = Session(bind=conn, join_transaction_mode='create_savepoint')
@@ -63,7 +63,7 @@ def session(engine):
 
 
 def expect_db_error(session, sqlstate, action):
-    """Jalankan `action` di savepoint; pastikan gagal dengan SQLSTATE tertentu."""
+    """Run `action` in a savepoint and expect it to fail with the given SQLSTATE."""
     sp = session.begin_nested()
     with pytest.raises(DBAPIError) as info:
         action()
@@ -75,7 +75,7 @@ def expect_db_error(session, sqlstate, action):
 
 
 # ── fixture API ──────────────────────────────────────────────────────────────────
-TOKENS = {'ui': 'token-ui-uji', 'orchestrator': 'token-orch-uji'}
+TOKENS = {'ui': 'token-ui-test', 'orchestrator': 'token-orch-test'}
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ def api(migrated, alembic_cfg, db_url, keys):
                      tokens=TokenRegistry([f'{k}:{v}' for k, v in TOKENS.items()]))
     with TestClient(app) as client:
         client.headers['Authorization'] = f"Bearer {TOKENS['ui']}"
-        client.headers['X-ASCAM-User'] = 'penguji'
+        client.headers['X-ASCAM-User'] = 'tester'
         client.factory = factory
         client.app_ref = app
         yield client
@@ -104,7 +104,7 @@ def api(migrated, alembic_cfg, db_url, keys):
 
 
 def pytest_configure(config):
-    # peringatan pustaka pihak ketiga pada TestClient; tidak terkait kode ASCAM
+    # third-party library warnings in TestClient; unrelated to ASCAM code
     config.addinivalue_line('filterwarnings', 'ignore::DeprecationWarning:starlette.*')
     config.addinivalue_line('filterwarnings', 'ignore::DeprecationWarning:fastapi.*')
     config.addinivalue_line('filterwarnings', 'ignore:Using `httpx` with `starlette.testclient`')

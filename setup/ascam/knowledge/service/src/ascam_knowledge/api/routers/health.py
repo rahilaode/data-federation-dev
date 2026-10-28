@@ -5,18 +5,18 @@ from ..transaction import TransactionalRoute
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-router = APIRouter(route_class=TransactionalRoute, tags=['kesehatan'])
+router = APIRouter(route_class=TransactionalRoute, tags=['health'])
 
 
 @router.get('/health')
 def health():
-    """Liveness: proses berjalan."""
+    """Liveness: the process is running."""
     return {'status': 'ok'}
 
 
 @router.get('/ready')
 def ready(request: Request):
-    """Readiness: basis data dapat dijangkau dan skema berada pada revisi migrasi terbaru."""
+    """Readiness: the database is reachable and the schema is at the latest migration revision."""
     expected = request.app.state.migration_head
     try:
         with request.app.state.session_factory() as db:

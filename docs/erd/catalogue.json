@@ -1,0 +1,3529 @@
+{
+  "tables": {
+    "registry.connection_check": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "target_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "checked_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "ok",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "latency_ms",
+          "type": "integer",
+          "nullable": true
+        },
+        {
+          "name": "detail",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "actor",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "registry.credential": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "username",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "secret_ciphertext",
+          "type": "bytea",
+          "nullable": false
+        },
+        {
+          "name": "key_version",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "rotated_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "name",
+        "obdf_id"
+      ]
+    },
+    "registry.naming_policy": {
+      "columns": [
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "property_iri_template",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "on_collision",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "label_language",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "obdf_id"
+      ],
+      "unique": []
+    },
+    "registry.obdf_instance": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "name"
+      ]
+    },
+    "registry.setting": {
+      "columns": [
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "key",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "value",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "key",
+        "obdf_id"
+      ],
+      "unique": []
+    },
+    "registry.source_system": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "logical_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "dbms",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "database_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "kafka_topic",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "identifier_case",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "default_schema",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "logical_name",
+        "obdf_id"
+      ]
+    },
+    "registry.target": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "endpoint",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "credential_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "name",
+        "obdf_id"
+      ]
+    },
+    "registry.type_mapping": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "dbms",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "native_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "teiid_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "xsd_datatype",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "owl2ql_compatible",
+          "type": "boolean",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "dbms",
+        "native_type",
+        "obdf_id"
+      ]
+    },
+    "spec.artifact": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "media_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "sha256",
+          "type": "character",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "kind",
+        "name",
+        "spec_version_id"
+      ]
+    },
+    "spec.column_usage": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "foreign_column_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "term_map_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "predicate_iri",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "predicate_entity_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "path",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "weakest_link",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.consistency_issue": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "severity",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject_kind",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "subject_ref",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "message",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "detected_by",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.join_condition": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "term_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "child_column",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "parent_column",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "parent_triples_map_iri",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.logical_column": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "expression_kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "expression_sql",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "name",
+        "spec_version_id",
+        "triples_map_id"
+      ]
+    },
+    "spec.logical_column_source": {
+      "columns": [
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "logical_column_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "teiid_column_id",
+          "type": "bigint",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "logical_column_id",
+        "spec_version_id",
+        "teiid_column_id"
+      ],
+      "unique": []
+    },
+    "spec.logical_source": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "teiid_table_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "reference_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "alias",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.ont_annotation": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "entity_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "property_iri",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "value",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "lang",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "managed_by",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.ont_domain": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "entity_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "class_expression",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "is_simple",
+          "type": "boolean",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.ont_entity": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "ontology_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "iri",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "declared_in",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "deprecated",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "functional",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "managed_by",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "introduced_in_version",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "iri",
+        "kind",
+        "ontology_id",
+        "spec_version_id"
+      ]
+    },
+    "spec.ont_import": {
+      "columns": [
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "ontology_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "imported_iri",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "imported_iri",
+        "ontology_id",
+        "spec_version_id"
+      ],
+      "unique": []
+    },
+    "spec.ont_property_relation": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "entity_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "relation",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "other_iri",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.ont_range": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "entity_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "range_iri",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "owl2ql_compatible",
+          "type": "boolean",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.ontology": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "artifact_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "iri",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "version_iri",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "version_info",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "iri",
+        "spec_version_id"
+      ]
+    },
+    "spec.predicate_object_map": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "signature",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "managed_by",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "introduced_in_version",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "signature",
+        "spec_version_id",
+        "triples_map_id"
+      ]
+    },
+    "spec.rdf_triple": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "artifact_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "predicate",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "object",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "object_kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "datatype",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "lang",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.spec_version": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "version_no",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "parent_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "origin",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "teiid_vdb_name",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "teiid_vdb_version",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "teiid_connection_type",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "plan_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "sealed_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "content_digest",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "obdf_id",
+        "version_no"
+      ]
+    },
+    "spec.sql_reference": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "teiid_column_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "clause",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.subject_class": {
+      "columns": [
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "class_iri",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "class_iri",
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "unique": []
+    },
+    "spec.teiid_alter": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "seq",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "statement",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "plan_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "model_id",
+        "seq",
+        "spec_version_id"
+      ]
+    },
+    "spec.teiid_column": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "table_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "uid",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name_in_source",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "source_column",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "data_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "native_type",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "nullable",
+          "type": "boolean",
+          "nullable": true
+        },
+        {
+          "name": "length",
+          "type": "integer",
+          "nullable": true
+        },
+        {
+          "name": "precision",
+          "type": "integer",
+          "nullable": true
+        },
+        {
+          "name": "scale",
+          "type": "integer",
+          "nullable": true
+        },
+        {
+          "name": "in_primary_key",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "managed_by",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "introduced_in_version",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "name",
+        "spec_version_id",
+        "table_id"
+      ]
+    },
+    "spec.teiid_dependency": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "dependent_table_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "dependent_column_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "used_table_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "used_column_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "derived_role",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.teiid_model": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "model_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "visible",
+          "type": "boolean",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "name",
+        "spec_version_id"
+      ]
+    },
+    "spec.teiid_model_source": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "source_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "translator",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "jndi_name",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "source_system_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "model_id",
+        "source_name",
+        "spec_version_id"
+      ]
+    },
+    "spec.teiid_routine": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "table_name",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "spec.teiid_table": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "uid",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name_in_source",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "source_schema",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "source_table",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "managed_by",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "introduced_in_version",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "model_id",
+        "name",
+        "spec_version_id"
+      ]
+    },
+    "spec.teiid_view": {
+      "columns": [
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "table_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "parse_status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "uses_star",
+          "type": "boolean",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "spec_version_id",
+        "table_id"
+      ],
+      "unique": []
+    },
+    "spec.teiid_view_column": {
+      "columns": [
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "column_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "expression_kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "expression_sql",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "column_id",
+        "spec_version_id"
+      ],
+      "unique": []
+    },
+    "spec.term_map": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "triples_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "pom_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "position",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "value_kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "value",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "term_type",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "datatype",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "language",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "spec_version_id"
+      ]
+    },
+    "spec.term_map_column": {
+      "columns": [
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "term_map_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "logical_column_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "template_position",
+          "type": "integer",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "logical_column_id",
+        "spec_version_id",
+        "term_map_id"
+      ],
+      "unique": []
+    },
+    "spec.triples_map": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "artifact_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "iri",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "logical_table_kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "table_name",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "sql_query",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "sql_parse_status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "managed_by",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "introduced_in_version",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "id",
+        "iri",
+        "spec_version_id"
+      ]
+    },
+    "ops.adaptation_plan": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "event_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "base_spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "pattern",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "decision",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "impact",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "reasons",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "decided_by",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "decided_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "revision_of",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "ops.audit_log": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "actor",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "object_kind",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "object_ref",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "detail",
+          "type": "jsonb",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "ops.execution": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "plan_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "candidate_spec_version_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "timings",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "failure",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "started_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamptz",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "ops.execution_step": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "execution_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "seq",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "started_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "detail",
+          "type": "jsonb",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "execution_id",
+        "seq"
+      ]
+    },
+    "ops.notification": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "plan_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "severity",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "message",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "acknowledged",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "acknowledged_by",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "acknowledged_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "ops.plan_action": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "plan_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "seq",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "artifact",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "operation",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "params",
+          "type": "jsonb",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "plan_id",
+        "seq"
+      ]
+    },
+    "ops.schema_event": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "event_uid",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "source_system_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "raw_message",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "structured",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "captured_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "received_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "ignore_reason",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        "event_uid"
+      ]
+    },
+    "ops.sync_run": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "obdf_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "trigger",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "produced_spec_version_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "drift_detected",
+          "type": "boolean",
+          "nullable": true
+        },
+        {
+          "name": "drift_summary",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "error",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "started_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamptz",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "ops.validation": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "execution_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "spec_version_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "validator",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "passed",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "details",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    }
+  },
+  "foreign_keys": [
+    {
+      "from": "ops.adaptation_plan",
+      "columns": [
+        "base_spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_adaptation_plan_base_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "ops.adaptation_plan",
+      "columns": [
+        "event_id"
+      ],
+      "to": "ops.schema_event",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_adaptation_plan_event_id_schema_event",
+      "nullable": false
+    },
+    {
+      "from": "ops.adaptation_plan",
+      "columns": [
+        "revision_of"
+      ],
+      "to": "ops.adaptation_plan",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_adaptation_plan_revision_of_adaptation_plan",
+      "nullable": true
+    },
+    {
+      "from": "ops.audit_log",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_audit_log_obdf_id_obdf_instance",
+      "nullable": true
+    },
+    {
+      "from": "ops.execution",
+      "columns": [
+        "candidate_spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_execution_candidate_spec_version_id_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "ops.execution",
+      "columns": [
+        "plan_id"
+      ],
+      "to": "ops.adaptation_plan",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_execution_plan_id_adaptation_plan",
+      "nullable": false
+    },
+    {
+      "from": "ops.execution_step",
+      "columns": [
+        "execution_id"
+      ],
+      "to": "ops.execution",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_execution_step_execution_id_execution",
+      "nullable": false
+    },
+    {
+      "from": "ops.notification",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_notification_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "ops.notification",
+      "columns": [
+        "plan_id"
+      ],
+      "to": "ops.adaptation_plan",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_notification_plan_id_adaptation_plan",
+      "nullable": true
+    },
+    {
+      "from": "ops.plan_action",
+      "columns": [
+        "plan_id"
+      ],
+      "to": "ops.adaptation_plan",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_plan_action_plan_id_adaptation_plan",
+      "nullable": false
+    },
+    {
+      "from": "ops.schema_event",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_schema_event_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "ops.schema_event",
+      "columns": [
+        "source_system_id"
+      ],
+      "to": "registry.source_system",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_schema_event_source_system_id_source_system",
+      "nullable": true
+    },
+    {
+      "from": "ops.sync_run",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_sync_run_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "ops.sync_run",
+      "columns": [
+        "produced_spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_sync_run_produced_spec_version_id_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "ops.validation",
+      "columns": [
+        "execution_id"
+      ],
+      "to": "ops.execution",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_validation_execution_id_execution",
+      "nullable": true
+    },
+    {
+      "from": "ops.validation",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_validation_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "registry.connection_check",
+      "columns": [
+        "target_id"
+      ],
+      "to": "registry.target",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_connection_check_target_id_target",
+      "nullable": false
+    },
+    {
+      "from": "registry.credential",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_credential_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "registry.naming_policy",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_naming_policy_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "registry.setting",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_setting_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "registry.source_system",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_source_system_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "registry.target",
+      "columns": [
+        "credential_id"
+      ],
+      "to": "registry.credential",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_target_credential_id_credential",
+      "nullable": true
+    },
+    {
+      "from": "registry.target",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_target_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "registry.type_mapping",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_type_mapping_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "spec.artifact",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_artifact_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.column_usage",
+      "columns": [
+        "spec_version_id",
+        "foreign_column_id"
+      ],
+      "to": "spec.teiid_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_column_usage_spec_version_id_foreign_column_id_teiid_column",
+      "nullable": false
+    },
+    {
+      "from": "spec.column_usage",
+      "columns": [
+        "spec_version_id",
+        "predicate_entity_id"
+      ],
+      "to": "spec.ont_entity",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_column_usage_spec_version_id_predicate_entity_id_ont_entity",
+      "nullable": true
+    },
+    {
+      "from": "spec.column_usage",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_column_usage_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.column_usage",
+      "columns": [
+        "spec_version_id",
+        "term_map_id"
+      ],
+      "to": "spec.term_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_column_usage_spec_version_id_term_map_id_term_map",
+      "nullable": true
+    },
+    {
+      "from": "spec.column_usage",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_column_usage_spec_version_id_triples_map_id_triples_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.consistency_issue",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_consistency_issue_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.join_condition",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_join_condition_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.join_condition",
+      "columns": [
+        "spec_version_id",
+        "term_map_id"
+      ],
+      "to": "spec.term_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_join_condition_spec_version_id_term_map_id_term_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_column",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_logical_column_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_column",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_logical_column_spec_version_id_triples_map_id_triples_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_column_source",
+      "columns": [
+        "spec_version_id",
+        "logical_column_id"
+      ],
+      "to": "spec.logical_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_logical_column_source_spec_version_id_logical_column_3d3a",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_column_source",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_logical_column_source_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_column_source",
+      "columns": [
+        "spec_version_id",
+        "teiid_column_id"
+      ],
+      "to": "spec.teiid_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_logical_column_source_spec_version_id_teiid_column_i_168a",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_source",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_logical_source_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.logical_source",
+      "columns": [
+        "spec_version_id",
+        "teiid_table_id"
+      ],
+      "to": "spec.teiid_table",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_logical_source_spec_version_id_teiid_table_id_teiid_table",
+      "nullable": true
+    },
+    {
+      "from": "spec.logical_source",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_logical_source_spec_version_id_triples_map_id_triples_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_annotation",
+      "columns": [
+        "spec_version_id",
+        "entity_id"
+      ],
+      "to": "spec.ont_entity",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ont_annotation_spec_version_id_entity_id_ont_entity",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_annotation",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_annotation_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_domain",
+      "columns": [
+        "spec_version_id",
+        "entity_id"
+      ],
+      "to": "spec.ont_entity",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ont_domain_spec_version_id_entity_id_ont_entity",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_domain",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_domain_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_entity",
+      "columns": [
+        "introduced_in_version"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_entity_introduced_in_version_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "spec.ont_entity",
+      "columns": [
+        "spec_version_id",
+        "ontology_id"
+      ],
+      "to": "spec.ontology",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ont_entity_spec_version_id_ontology_id_ontology",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_entity",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_entity_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_import",
+      "columns": [
+        "spec_version_id",
+        "ontology_id"
+      ],
+      "to": "spec.ontology",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ont_import_spec_version_id_ontology_id_ontology",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_import",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_import_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_property_relation",
+      "columns": [
+        "spec_version_id",
+        "entity_id"
+      ],
+      "to": "spec.ont_entity",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ont_property_relation_spec_version_id_entity_id_ont_entity",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_property_relation",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_property_relation_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_range",
+      "columns": [
+        "spec_version_id",
+        "entity_id"
+      ],
+      "to": "spec.ont_entity",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ont_range_spec_version_id_entity_id_ont_entity",
+      "nullable": false
+    },
+    {
+      "from": "spec.ont_range",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ont_range_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.ontology",
+      "columns": [
+        "spec_version_id",
+        "artifact_id"
+      ],
+      "to": "spec.artifact",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_ontology_spec_version_id_artifact_id_artifact",
+      "nullable": true
+    },
+    {
+      "from": "spec.ontology",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_ontology_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.predicate_object_map",
+      "columns": [
+        "introduced_in_version"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_predicate_object_map_introduced_in_version_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "spec.predicate_object_map",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_predicate_object_map_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.predicate_object_map",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_predicate_object_map_spec_version_id_triples_map_id__d7b5",
+      "nullable": false
+    },
+    {
+      "from": "spec.rdf_triple",
+      "columns": [
+        "spec_version_id",
+        "artifact_id"
+      ],
+      "to": "spec.artifact",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_rdf_triple_spec_version_id_artifact_id_artifact",
+      "nullable": false
+    },
+    {
+      "from": "spec.rdf_triple",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_rdf_triple_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.spec_version",
+      "columns": [
+        "obdf_id"
+      ],
+      "to": "registry.obdf_instance",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_spec_version_obdf_id_obdf_instance",
+      "nullable": false
+    },
+    {
+      "from": "spec.spec_version",
+      "columns": [
+        "parent_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_spec_version_parent_id_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "spec.spec_version",
+      "columns": [
+        "plan_id"
+      ],
+      "to": "ops.adaptation_plan",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_spec_version_plan_id_adaptation_plan",
+      "nullable": true
+    },
+    {
+      "from": "spec.sql_reference",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_sql_reference_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.sql_reference",
+      "columns": [
+        "spec_version_id",
+        "teiid_column_id"
+      ],
+      "to": "spec.teiid_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_sql_reference_spec_version_id_teiid_column_id_teiid_column",
+      "nullable": false
+    },
+    {
+      "from": "spec.sql_reference",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_sql_reference_spec_version_id_triples_map_id_triples_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.subject_class",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_subject_class_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.subject_class",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_subject_class_spec_version_id_triples_map_id_triples_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_alter",
+      "columns": [
+        "plan_id"
+      ],
+      "to": "ops.adaptation_plan",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_alter_plan_id_adaptation_plan",
+      "nullable": true
+    },
+    {
+      "from": "spec.teiid_alter",
+      "columns": [
+        "spec_version_id",
+        "model_id"
+      ],
+      "to": "spec.teiid_model",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_alter_spec_version_id_model_id_teiid_model",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_alter",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_alter_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_column",
+      "columns": [
+        "introduced_in_version"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_column_introduced_in_version_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "spec.teiid_column",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_column_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_column",
+      "columns": [
+        "spec_version_id",
+        "table_id"
+      ],
+      "to": "spec.teiid_table",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_column_spec_version_id_table_id_teiid_table",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_dependency",
+      "columns": [
+        "spec_version_id",
+        "dependent_column_id"
+      ],
+      "to": "spec.teiid_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_dependency_spec_version_id_dependent_column_id_83fc",
+      "nullable": true
+    },
+    {
+      "from": "spec.teiid_dependency",
+      "columns": [
+        "spec_version_id",
+        "dependent_table_id"
+      ],
+      "to": "spec.teiid_table",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_dependency_spec_version_id_dependent_table_id__f6b4",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_dependency",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_dependency_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_dependency",
+      "columns": [
+        "spec_version_id",
+        "used_column_id"
+      ],
+      "to": "spec.teiid_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_dependency_spec_version_id_used_column_id_teiid_column",
+      "nullable": true
+    },
+    {
+      "from": "spec.teiid_dependency",
+      "columns": [
+        "spec_version_id",
+        "used_table_id"
+      ],
+      "to": "spec.teiid_table",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_dependency_spec_version_id_used_table_id_teiid_table",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_model",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_model_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_model_source",
+      "columns": [
+        "source_system_id"
+      ],
+      "to": "registry.source_system",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_model_source_source_system_id_source_system",
+      "nullable": true
+    },
+    {
+      "from": "spec.teiid_model_source",
+      "columns": [
+        "spec_version_id",
+        "model_id"
+      ],
+      "to": "spec.teiid_model",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_model_source_spec_version_id_model_id_teiid_model",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_model_source",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_model_source_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_routine",
+      "columns": [
+        "spec_version_id",
+        "model_id"
+      ],
+      "to": "spec.teiid_model",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_routine_spec_version_id_model_id_teiid_model",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_routine",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_routine_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_table",
+      "columns": [
+        "introduced_in_version"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_table_introduced_in_version_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "spec.teiid_table",
+      "columns": [
+        "spec_version_id",
+        "model_id"
+      ],
+      "to": "spec.teiid_model",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_table_spec_version_id_model_id_teiid_model",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_table",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_table_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_view",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_view_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_view",
+      "columns": [
+        "spec_version_id",
+        "table_id"
+      ],
+      "to": "spec.teiid_table",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_view_spec_version_id_table_id_teiid_table",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_view_column",
+      "columns": [
+        "spec_version_id",
+        "column_id"
+      ],
+      "to": "spec.teiid_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_teiid_view_column_spec_version_id_column_id_teiid_column",
+      "nullable": false
+    },
+    {
+      "from": "spec.teiid_view_column",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_teiid_view_column_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.term_map",
+      "columns": [
+        "spec_version_id",
+        "pom_id"
+      ],
+      "to": "spec.predicate_object_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_term_map_spec_version_id_pom_id_predicate_object_map",
+      "nullable": true
+    },
+    {
+      "from": "spec.term_map",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_term_map_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.term_map",
+      "columns": [
+        "spec_version_id",
+        "triples_map_id"
+      ],
+      "to": "spec.triples_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_term_map_spec_version_id_triples_map_id_triples_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.term_map_column",
+      "columns": [
+        "spec_version_id",
+        "logical_column_id"
+      ],
+      "to": "spec.logical_column",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_term_map_column_spec_version_id_logical_column_id_lo_2700",
+      "nullable": false
+    },
+    {
+      "from": "spec.term_map_column",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_term_map_column_spec_version_id_spec_version",
+      "nullable": false
+    },
+    {
+      "from": "spec.term_map_column",
+      "columns": [
+        "spec_version_id",
+        "term_map_id"
+      ],
+      "to": "spec.term_map",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_term_map_column_spec_version_id_term_map_id_term_map",
+      "nullable": false
+    },
+    {
+      "from": "spec.triples_map",
+      "columns": [
+        "introduced_in_version"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_triples_map_introduced_in_version_spec_version",
+      "nullable": true
+    },
+    {
+      "from": "spec.triples_map",
+      "columns": [
+        "spec_version_id",
+        "artifact_id"
+      ],
+      "to": "spec.artifact",
+      "ref_columns": [
+        "spec_version_id",
+        "id"
+      ],
+      "name": "fk_triples_map_spec_version_id_artifact_id_artifact",
+      "nullable": true
+    },
+    {
+      "from": "spec.triples_map",
+      "columns": [
+        "spec_version_id"
+      ],
+      "to": "spec.spec_version",
+      "ref_columns": [
+        "id"
+      ],
+      "name": "fk_triples_map_spec_version_id_spec_version",
+      "nullable": false
+    }
+  ],
+  "views": [
+    "spec.active_version"
+  ]
+}

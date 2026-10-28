@@ -1,4 +1,4 @@
-"""Endpoint registry: OBDF, sumber, kredensial, target, kebijakan, audit."""
+"""Registry endpoints: OBDF, sources, credentials, targets, policies, audit."""
 from fastapi import APIRouter, Depends, Request, status
 from ..transaction import TransactionalRoute
 from sqlalchemy import delete, func, select
@@ -42,7 +42,7 @@ def get_obdf(obdf_id: int, db: Session = Depends(get_db)):
     return _obdf_out(db, svc.get_obdf(db, obdf_id))
 
 
-# ── sumber data ──────────────────────────────────────────────────────────────────
+# ── data sources ─────────────────────────────────────────────────────────────────
 @router.post('/obdf/{obdf_id}/sources', response_model=SourceOut, status_code=201)
 def create_source(obdf_id: int, body: SourceIn, db: Session = Depends(get_db),
                   actor: str = Depends(current_actor)):
@@ -136,7 +136,7 @@ def patch_target(target_id: int, body: TargetPatch, db: Session = Depends(get_db
     merged = TargetIn(kind=obj.kind, name=obj.name,
                       endpoint=changes.get('endpoint', obj.endpoint),
                       credential_id=changes.get('credential_id', obj.credential_id),
-                      enabled=changes.get('enabled', obj.enabled))      # validasi ulang aturan per jenis
+                      enabled=changes.get('enabled', obj.enabled))      # validates the rules per kind again
     obj.endpoint = merged.endpoint.model_dump()
     obj.credential_id = merged.credential_id
     obj.enabled = merged.enabled
@@ -146,7 +146,7 @@ def patch_target(target_id: int, body: TargetPatch, db: Session = Depends(get_db
     return obj
 
 
-# ── pengaturan dan kebijakan ─────────────────────────────────────────────────────
+# ── settings and policies ────────────────────────────────────────────────────────
 @router.get('/obdf/{obdf_id}/settings', response_model=list[SettingOut])
 def list_settings(obdf_id: int, db: Session = Depends(get_db)):
     svc.get_obdf(db, obdf_id)
@@ -175,7 +175,7 @@ def get_naming_policy(obdf_id: int, db: Session = Depends(get_db)):
     svc.get_obdf(db, obdf_id)
     obj = db.get(registry.NamingPolicy, obdf_id)
     if obj is None:
-        raise svc.NotFound('kebijakan penamaan belum diatur')
+        raise svc.NotFound('naming policy is not set')
     return obj
 
 
@@ -213,7 +213,7 @@ def list_type_mappings(obdf_id: int, db: Session = Depends(get_db)):
 @router.put('/obdf/{obdf_id}/type-mappings', response_model=list[TypeMappingOut])
 def replace_type_mappings(obdf_id: int, body: list[TypeMappingIn], db: Session = Depends(get_db),
                           actor: str = Depends(current_actor)):
-    """Mengganti seluruh pemetaan tipe OBDF (operasi atomik)."""
+    """Replace all type mappings of the OBDF (atomic operation)."""
     svc.get_obdf(db, obdf_id)
     rows = [svc.resolve_type_mapping(item) for item in body]
     db.execute(delete(registry.TypeMapping).where(registry.TypeMapping.obdf_id == obdf_id))

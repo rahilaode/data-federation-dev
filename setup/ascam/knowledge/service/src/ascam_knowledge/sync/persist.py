@@ -1,4 +1,4 @@
-"""Menyimpan struktur ℳ dan 𝒯 hasil penguraian ke versi spesifikasi."""
+"""Stores the parsed structures of ℳ and 𝒯 in a specification version."""
 from sqlalchemy.orm import Session
 
 from ..db import spec as spec_db
@@ -32,8 +32,8 @@ def persist_mapping(db: Session, version_id: int, artifact_id: int, content: str
         if tm.sql_parse_status == 'failed':
             issues.append({'code': 'sql_unparsed', 'severity': 'warning', 'subject_kind': 'triples_map',
                            'subject_ref': tm.iri,
-                           'message': 'kueri logical table tidak dapat diurai; perubahan kolom '
-                                      'tabel yang dirujuk diperlakukan konservatif'})
+                           'message': 'the logical-table query cannot be parsed; column changes in '
+                                      'the referenced tables are treated conservatively'})
 
         alias_to_table: dict[str | None, str] = {}
         for source in tm.sources:
@@ -46,12 +46,12 @@ def persist_mapping(db: Session, version_id: int, artifact_id: int, content: str
             if teiid_table_id is None:
                 issues.append({'code': 'logical_source_unresolved', 'severity': 'error',
                                'subject_kind': 'triples_map', 'subject_ref': tm.iri,
-                               'message': f"tabel {source['reference_name']} tidak ada di Σ_S"})
+                               'message': f"table {source['reference_name']} does not exist in Σ_S"})
             else:
                 alias_to_table[source.get('alias')] = key
                 alias_to_table.setdefault(None, key)
 
-        # kolom logis: hasil proyeksi SQL, atau seluruh kolom tabel bila rr:tableName / SELECT *
+        # logical columns: the SQL projection, or all table columns for rr:tableName / SELECT *
         logical_ids: dict[str, int] = {}
 
         def add_logical(name: str, kind: str, expression: str | None,
@@ -68,7 +68,7 @@ def persist_mapping(db: Session, version_id: int, artifact_id: int, content: str
                 if teiid_column_id is None:
                     issues.append({'code': 'logical_column_unresolved', 'severity': 'warning',
                                    'subject_kind': 'logical_column', 'subject_ref': f'{tm.iri}#{name}',
-                                   'message': f'kolom {source_name} tidak dapat ditautkan ke Σ_S'})
+                                   'message': f'column {source_name} cannot be linked to Σ_S'})
                     continue
                 db.add(spec_db.LogicalColumnSource(spec_version_id=version_id,
                                                    logical_column_id=column.id,
@@ -110,7 +110,7 @@ def persist_mapping(db: Session, version_id: int, artifact_id: int, content: str
                 if logical_id is None:
                     issues.append({'code': 'term_map_column_unresolved', 'severity': 'warning',
                                    'subject_kind': 'term_map', 'subject_ref': f'{tm.iri}#{term.value}',
-                                   'message': f'kolom {column_name} tidak ada pada logical table'})
+                                   'message': f'column {column_name} does not exist in the logical table'})
                     continue
                 db.add(spec_db.TermMapColumn(spec_version_id=version_id, term_map_id=term_row.id,
                                              logical_column_id=logical_id, template_position=index))

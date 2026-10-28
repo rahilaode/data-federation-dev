@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ascam-ontop-agent"
 version = "0.1.0"
-description = "Agen ASCAM di host Ontop: membaca artefak OBDA, validasi, dan (F4) penerapan artefak"
+description = "ASCAM agent on the Ontop host: reads, validates, and (since F4) writes the OBDA artifacts"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110,<1",

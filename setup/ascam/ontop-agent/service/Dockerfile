@@ -8,6 +8,6 @@ COPY src ./src
 RUN pip install --no-cache-dir .
 
 EXPOSE 8000
-# Agen memerlukan akses Docker socket untuk menjalankan CLI Ontop dan (F4) memuat ulang Ontop,
-# sehingga dijalankan sebagai root di dalam kontainernya sendiri.
+# The agent needs the Docker socket to run the Ontop CLI and (F4) to reload Ontop,
+# so it runs as root inside its own container.
 CMD ["ascam-ontop-agent", "serve"]

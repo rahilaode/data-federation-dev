@@ -1,8 +1,8 @@
 """
-Penulisan ulang teks definisi view Teiid (ADR-0023), tanpa dependensi basis data.
+Rewriting of Teiid view definition text (ADR-0023), with no database dependency.
 
-Dipisahkan dari views.py agar uji kelayakan Teiid (experiments/f0/f0_8_teiid_alter_view.py)
-memakai fungsi yang persis sama dengan Knowledge.
+Kept apart from views.py so that the Teiid feasibility experiment
+(archive/experiments/f0/f0_8_teiid_alter_view.py) uses exactly the same functions as Knowledge.
 """
 import re
 
@@ -14,17 +14,17 @@ class RewriteError(Exception):
     pass
 
 
-# ── penulisan ulang teks definisi ──────────────────────────────────────────────
+# ── rewriting of the definition text ───────────────────────────────────────────
 def _split_top_level(text: str, start: int) -> tuple[list[tuple[int, int]], int]:
-    """Membagi daftar proyeksi pada koma tingkat atas, berhenti di FROM tingkat atas.
+    """Split the projection list at top-level commas, stopping at the top-level FROM.
 
-    Mengembalikan rentang setiap butir dan posisi awal kata FROM."""
+    Returns the span of every item and the start position of the word FROM."""
     depth, quote, items, begin, i = 0, None, [], start, start
     while i < len(text):
         ch = text[i]
         if quote:
             if ch == quote:
-                if i + 1 < len(text) and text[i + 1] == quote:       # tanda kutip ganda
+                if i + 1 < len(text) and text[i + 1] == quote:       # doubled quote
                     i += 2
                     continue
                 quote = None
@@ -42,7 +42,7 @@ def _split_top_level(text: str, start: int) -> tuple[list[tuple[int, int]], int]
             items.append((begin, i))
             return items, i
         i += 1
-    raise RewriteError('FROM tingkat atas tidak ditemukan')
+    raise RewriteError('no top-level FROM found')
 
 
 def _item_name(item_sql: str) -> str | None:
@@ -57,16 +57,16 @@ def _item_name(item_sql: str) -> str | None:
 
 
 def remove_projection(body: str, names: set[str]) -> str:
-    """Definisi view tanpa butir proyeksi bernama `names` (perbandingan tanpa peka huruf)."""
+    """The view definition without the projection items named `names` (case-insensitive)."""
     try:
         tree = sqlglot.parse_one(body)
     except Exception as exc:                            # noqa: BLE001
-        raise RewriteError(f'definisi view tidak dapat diurai: {exc}') from exc
+        raise RewriteError(f'the view definition cannot be parsed: {exc}') from exc
     if not isinstance(tree, exp.Select):
-        raise RewriteError('definisi view bukan SELECT tunggal (UNION/WITH tidak ditulis ulang)')
+        raise RewriteError('the view definition is not a single SELECT (UNION/WITH are not rewritten)')
     match = re.match(r'\s*SELECT\s+(?:DISTINCT\s+)?', body, re.IGNORECASE)
     if not match:
-        raise RewriteError('definisi view tidak diawali SELECT')
+        raise RewriteError('the view definition does not start with SELECT')
     items, from_pos = _split_top_level(body, match.end())
     wanted = {n.lower() for n in names}
     kept, removed = [], set()
@@ -74,22 +74,23 @@ def remove_projection(body: str, names: set[str]) -> str:
         text = body[begin:end].strip()
         name = _item_name(text)
         if name is None:
-            raise RewriteError(f'butir proyeksi tidak dapat diurai: {text!r}')
+            raise RewriteError(f'projection item cannot be parsed: {text!r}')
         if name.lower() in wanted:
             removed.add(name.lower())
         else:
             kept.append(text)
     if removed != wanted:
-        raise RewriteError(f'butir proyeksi tidak ditemukan: {sorted(wanted - removed)}')
+        raise RewriteError(f'projection items not found: {sorted(wanted - removed)}')
     if not kept:
-        raise RewriteError('view akan kehilangan seluruh kolomnya')
+        raise RewriteError('the view would lose all of its columns')
     return f'{body[:match.end()]}{", ".join(kept)} {body[from_pos:]}'
 
 
 def inline_columns(vdb_xml: str | None, model: str, view: str) -> bool:
-    """Apakah view dideklarasikan dengan daftar kolom inline: CREATE VIEW v (a, b) AS ..."""
+    """Whether the view is declared with an inline column list: CREATE VIEW v (a, b) AS ..."""
     if not vdb_xml:
         return False
-    nama = r'(?:"?{m}"?\s*\.\s*)?"?{v}"?'.format(m=re.escape(model), v=re.escape(view))
-    pola = re.compile(r'CREATE\s+(?:VIRTUAL\s+)?VIEW\s+' + nama + r'\s*\(', re.IGNORECASE)
-    return bool(pola.search(vdb_xml))
+    name = r'(?:"?{m}"?\s*\.\s*)?"?{v}"?'.format(m=re.escape(model), v=re.escape(view))
+    pattern = re.compile(r'CREATE\s+(?:VIRTUAL\s+)?VIEW\s+' + name + r'\s*\(', re.IGNORECASE)
+    return bool(pattern.search(vdb_xml))
+

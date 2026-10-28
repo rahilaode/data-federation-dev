@@ -1,13 +1,13 @@
 """
-Penulisan artefak OBDA secara atomik, beserta cadangan dan pemulihannya.
+Atomic writing of the OBDA artifacts, with backups and restore.
 
-Prinsip:
-  * penulisan atomik (berkas sementara lalu `os.replace`), sehingga Ontop tidak pernah
-    membaca berkas setengah tertulis;
-  * setiap penulisan menyimpan cadangan isi LAMA, sehingga pemulihan selalu mungkin
-    (dipakai Executor saat verifikasi gagal, ADR-0004 langkah 6);
-  * penulisan dapat dikunci pada sidik jari isi saat ini (`expected_sha256`), sehingga
-    perubahan yang dilakukan pihak lain tidak tertimpa diam-diam.
+Principles:
+  * atomic writes (a temporary file, then `os.replace`), so Ontop never reads a half-written
+    file;
+  * every write keeps a backup of the OLD content, so a restore is always possible (used by
+    the Executor when verification fails, ADR-0004 step 6);
+  * a write can be bound to the fingerprint of the current content (`expected_sha256`), so a
+    change made by someone else is not overwritten silently.
 """
 import hashlib
 import os
@@ -24,7 +24,7 @@ NAME_PATTERN = re.compile(r'^(?P<kind>[a-z0-9_]+)-(?P<stamp>\d{8}T\d{6}\d{6})-(?
 
 
 class Conflict(Exception):
-    """Isi berkas saat ini berbeda dari yang diharapkan pemanggil."""
+    """The current content of the file differs from what the caller expects."""
 
 
 @dataclass
@@ -62,30 +62,30 @@ def list_backups(cfg: AgentConfig, kind: str | None = None) -> list[BackupInfo]:
 
 def write(cfg: AgentConfig, kind: str, content: str,
           expected_sha256: str | None = None) -> tuple[str, str | None]:
-    """Menulis artefak; mengembalikan (sha256 baru, backup_id isi lama)."""
+    """Writes an artifact; returns (new sha256, backup_id of the old content)."""
     path = cfg.path_of(kind)
     backup_id = None
     if path.is_file():
         current = path.read_bytes()
         current_sha = _digest(current)
         if expected_sha256 and expected_sha256 != current_sha:
-            raise Conflict(f'isi {kind} sudah berubah (sha256 {current_sha[:12]}, '
-                           f'diharapkan {expected_sha256[:12]})')
+            raise Conflict(f'content of {kind} has changed (sha256 {current_sha[:12]}, '
+                           f'expected {expected_sha256[:12]})')
         stamp = datetime.now(timezone.utc).strftime(STAMP)
         backup_id = f'{kind}-{stamp}-{current_sha[:12]}{path.suffix}'
         (backups_dir(cfg) / backup_id).write_bytes(current)
     elif expected_sha256:
-        raise Conflict(f'{kind} belum ada, tetapi pemanggil mengharapkan isi tertentu')
+        raise Conflict(f'{kind} does not exist yet, but the caller expects some content')
 
     data = content.encode('utf-8')
     temporary = path.with_name(f'.{path.name}.ascam-tmp')
     temporary.write_bytes(data)
-    os.replace(temporary, path)             # atomik pada filesystem yang sama
+    os.replace(temporary, path)             # atomic on the same filesystem
     return _digest(data), backup_id
 
 
 def restore(cfg: AgentConfig, backup_id: str) -> tuple[str, str]:
-    """Mengembalikan artefak dari cadangan; mengembalikan (jenis artefak, sha256 baru)."""
+    """Restores an artifact from a backup; returns (artifact kind, new sha256)."""
     candidate = (backups_dir(cfg) / backup_id).resolve()
     if candidate.parent != backups_dir(cfg).resolve() or not candidate.is_file():
         raise FileNotFoundError(backup_id)
@@ -100,7 +100,7 @@ def restore(cfg: AgentConfig, backup_id: str) -> tuple[str, str]:
 
 
 def prune(cfg: AgentConfig, keep: int = 20) -> int:
-    """Menyisakan `keep` cadangan terbaru per jenis artefak."""
+    """Keeps the `keep` newest backups per artifact kind."""
     removed = 0
     for kind in cfg.names:
         for backup in list_backups(cfg, kind)[keep:]:

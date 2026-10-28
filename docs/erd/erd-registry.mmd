@@ -1,0 +1,77 @@
+erDiagram
+    registry_connection_check["registry.connection_check"] {
+        bigint id PK "not null"
+        bigint target_id FK "not null"
+        timestamptz checked_at "not null"
+        boolean ok "not null"
+        integer latency_ms
+        jsonb detail "not null"
+        text actor
+    }
+    registry_credential["registry.credential"] {
+        bigint id PK "not null"
+        bigint obdf_id FK,UK "not null"
+        text username "not null"
+        bytea secret_ciphertext "not null"
+        integer key_version "not null"
+        timestamptz created_at "not null"
+        timestamptz rotated_at
+        text name UK "not null"
+    }
+    registry_naming_policy["registry.naming_policy"] {
+        bigint obdf_id PK,FK "not null"
+        text property_iri_template "not null"
+        text on_collision "not null"
+        text label_language "not null"
+        timestamptz updated_at "not null"
+    }
+    registry_obdf_instance["registry.obdf_instance"] {
+        bigint id PK "not null"
+        text name UK "not null"
+        text description
+        timestamptz created_at "not null"
+    }
+    registry_setting["registry.setting"] {
+        bigint obdf_id PK,FK "not null"
+        text key PK "not null"
+        jsonb value "not null"
+        timestamptz updated_at "not null"
+    }
+    registry_source_system["registry.source_system"] {
+        bigint id PK "not null"
+        bigint obdf_id FK,UK "not null"
+        text logical_name UK "not null"
+        text dbms "not null"
+        text database_name "not null"
+        text kafka_topic
+        text identifier_case "not null"
+        text default_schema
+    }
+    registry_target["registry.target"] {
+        bigint id PK "not null"
+        bigint obdf_id FK,UK "not null"
+        text kind "not null"
+        text name UK "not null"
+        jsonb endpoint "not null"
+        bigint credential_id FK
+        boolean enabled "not null"
+        timestamptz created_at "not null"
+        timestamptz updated_at "not null"
+    }
+    registry_type_mapping["registry.type_mapping"] {
+        bigint id PK "not null"
+        bigint obdf_id FK,UK "not null"
+        text dbms UK "not null"
+        text native_type UK "not null"
+        text teiid_type "not null"
+        text xsd_datatype "not null"
+        boolean owl2ql_compatible "not null"
+    }
+    registry_target ||--o{ registry_connection_check : "target_id"
+    registry_obdf_instance ||--o{ registry_credential : "obdf_id"
+    registry_obdf_instance ||--o| registry_naming_policy : "obdf_id"
+    registry_obdf_instance ||--o{ registry_setting : "obdf_id"
+    registry_obdf_instance ||--o{ registry_source_system : "obdf_id"
+    registry_credential |o--o{ registry_target : "credential_id"
+    registry_obdf_instance ||--o{ registry_target : "obdf_id"
+    registry_obdf_instance ||--o{ registry_type_mapping : "obdf_id"

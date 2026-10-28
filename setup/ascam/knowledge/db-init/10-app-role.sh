@@ -1,6 +1,6 @@
 #!/bin/sh
-# Membuat role aplikasi ascam_app (hak DML saja; bukan pemilik skema).
-# Dijalankan sekali oleh image postgres saat volume data masih kosong.
+# Creates the application role ascam_app (DML only; not the schema owner).
+# Run once by the postgres image while the data volume is still empty.
 set -eu
 APP_PASSWORD=$(cat /run/secrets/knowledge_db_app_password)
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \

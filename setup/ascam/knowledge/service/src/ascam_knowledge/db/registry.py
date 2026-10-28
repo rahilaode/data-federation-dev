@@ -1,4 +1,5 @@
-"""Skema `registry`: OBDF yang dikelola, target, kredensial, sumber, dan kebijakan."""
+"""Schema `registry`: managed OBDFs, targets, credentials, sources, and policies."""
+
 from datetime import datetime
 
 from sqlalchemy import (BigInteger, Boolean, DateTime, ForeignKey, Index, Integer,
@@ -25,7 +26,7 @@ class Credential(Base):
     __table_args__ = (UniqueConstraint('obdf_id', 'name'), S)
     id: Mapped[int] = pk_id()
     obdf_id: Mapped[int] = mapped_column(ForeignKey('registry.obdf_instance.id', ondelete='CASCADE'), index=True)
-    name: Mapped[str] = mapped_column(Text, comment='nama rujukan pada konfigurasi dan UI')
+    name: Mapped[str] = mapped_column(Text, comment='reference name in the configuration and UI')
     username: Mapped[str] = mapped_column(Text)
     secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
     key_version: Mapped[int] = mapped_column(Integer, server_default='1')
@@ -59,13 +60,13 @@ class SourceSystem(Base):
                       one_of('identifier_case', ('lower', 'preserve', 'insensitive')), S)
     id: Mapped[int] = pk_id()
     obdf_id: Mapped[int] = mapped_column(ForeignKey('registry.obdf_instance.id', ondelete='CASCADE'), index=True)
-    logical_name: Mapped[str] = mapped_column(Text, comment='nilai field source pada event')
+    logical_name: Mapped[str] = mapped_column(Text, comment='value of the source field in events')
     dbms: Mapped[str] = mapped_column(Text)
     database_name: Mapped[str] = mapped_column(Text)
     kafka_topic: Mapped[str | None] = mapped_column(Text)
-    identifier_case: Mapped[str] = mapped_column(Text, comment='aturan normalisasi nama identifier')
+    identifier_case: Mapped[str] = mapped_column(Text, comment='normalisation rule for identifier names')
     default_schema: Mapped[str | None] = mapped_column(
-        Text, comment='skema bawaan koneksi sumber; dipakai bila tabel Teiid tanpa NAMEINSOURCE')
+        Text, comment='default schema of the source connection; used when a Teiid table has no NAMEINSOURCE')
 
 
 class Setting(Base):
@@ -113,5 +114,5 @@ class ConnectionCheck(Base):
     ok: Mapped[bool] = mapped_column(Boolean)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     detail: Mapped[dict] = mapped_column(JSONB, server_default='{}',
-                                         comment='summary, facts, error (tanpa rahasia)')
+                                         comment='summary, facts, error (no secrets)')
     actor: Mapped[str | None] = mapped_column(Text)

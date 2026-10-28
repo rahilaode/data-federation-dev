@@ -2,14 +2,14 @@ connect
 
 # Deploy JDBC Drivers
 #
-# Catatan MySQL: translator MySQL Teiid mengharapkan session ber-ANSI mode
-# (Teiid Reference Guide, JDBC translators > MySQL translator > Usage) dan
-# hanya meng-escape tanda kutip tunggal pada literal string
-# (SQLConversionVisitor.translateSQLType -> escapeString). Pada sql_mode
-# bawaan MySQL, backslash adalah karakter escape, sehingga literal '\\'
-# hasil unfolding IRI Ontop merusak SQL (error 1064). Karena itu setiap
-# koneksi pool di-set ke ANSI,NO_BACKSLASH_ESCAPES. Pengaturan ini hanya
-# berlaku pada sesi Teiid; konfigurasi global sumber tidak diubah.
+# MySQL note: the Teiid MySQL translator expects an ANSI-mode session
+# (Teiid Reference Guide, JDBC translators > MySQL translator > Usage) and
+# escapes only single quotes in string literals
+# (SQLConversionVisitor.translateSQLType -> escapeString). In the default
+# MySQL sql_mode the backslash is an escape character, so the literal '\\'
+# produced by Ontop IRI unfolding breaks the SQL (error 1064). Every pooled
+# connection is therefore set to ANSI,NO_BACKSLASH_ESCAPES. The setting only
+# applies to Teiid sessions; the global configuration of the source is not changed.
 deploy /opt/jboss/jdbc/mysql-connector-java-8.0.21.jar   
 /subsystem=datasources/data-source=mysql-ds:add(jndi-name=java:/mysql-dukcapil, enabled=true, use-java-context=true, driver-name=mysql-connector-java-8.0.21.jar, connection-url="jdbc:mysql://datasources-mysql:3306/dukcapil",user-name=mysql, password=mysql, new-connection-sql="set SESSION sql_mode = 'ANSI,NO_BACKSLASH_ESCAPES'")
 /subsystem=datasources/data-source=mysql-ds:enable
@@ -19,15 +19,15 @@ deploy /opt/jboss/jdbc/postgresql-42.2.14.jre7.jar
 /subsystem=datasources/data-source=pgsql-ds:enable
 
 # ------------------------------------------------------------------
-# VDB TIDAK lagi di-deploy saat build image.
-# VDB (government-vdb.xml) di-deploy lewat deployment scanner dari
-# folder standalone/deployments yang di-mount dari host, sehingga
-# ASCAM (effector fase Execute) dapat me-redeploy Σ'_S tanpa
-# me-restart kontainer Teiid.
+# The VDB is NO longer deployed when the image is built.
+# The VDB (government-vdb.xml) is deployed by the deployment scanner
+# from the standalone/deployments folder mounted from the host, so
+# ASCAM (the effector of the Execute phase) can redeploy Σ'_S without
+# restarting the Teiid container.
 #
-# Scanner dipindah ke MANUAL DEPLOY MODE untuk berkas XML:
-# redeploy hanya terjadi ketika marker <nama>.dodeploy dibuat,
-# sehingga urutan eksekusi dikendalikan sepenuhnya oleh Executor
-# (lihat README deployments WildFly Core, bagian DEPLOYMENT MODES).
+# The scanner is switched to MANUAL DEPLOY MODE for XML files:
+# a redeploy only happens when a <name>.dodeploy marker is created,
+# so the Executor fully controls the order of execution
+# (see the WildFly Core deployments README, section DEPLOYMENT MODES).
 # ------------------------------------------------------------------
 /subsystem=deployment-scanner/scanner=default:write-attribute(name=auto-deploy-xml, value=false)

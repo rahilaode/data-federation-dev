@@ -13,13 +13,14 @@ services:
       - ascam-networks
     volumes:
       - teiid-standalone-configuration:/opt/jboss/wildfly/standalone/configuration
-      # Konten deployment runtime (VDB versi hasil adaptasi yang di-deploy Executor lewat
-      # management API) disimpan WildFly di standalone/data. Tanpa volume ini, konfigurasi yang
-      # merujuk deployment tersebut bertahan tetapi kontennya hilang saat kontainer dibuat ulang.
+      # WildFly keeps runtime deployment content (the VDB versions that the Executor deploys
+      # through the management API after an adaptation) in standalone/data. Without this volume
+      # the configuration that refers to those deployments survives, but their content is lost
+      # when the container is recreated.
       - teiid-standalone-data:/opt/jboss/wildfly/standalone/data
       - teiid-domain-configuration:/opt/jboss/wildfly/domain/configuration
-      # Folder deployment dipakai bersama dengan ASCAM Executor.
-      # Berisi government-vdb.xml (Σ_S) beserta marker file scanner
+      # The deployment folder is shared with the ASCAM Executor.
+      # It holds government-vdb.xml (Σ_S) and the scanner marker files
       # (.dodeploy, .isdeploying, .deployed, .failed).
       - ./deployments:/opt/jboss/wildfly/standalone/deployments
 

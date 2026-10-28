@@ -1,4 +1,4 @@
-"""Menyimpan struktur ℳ dan 𝒯 hasil penguraian ke dalam satu versi spesifikasi."""
+"""Stores the parsed structures of ℳ and 𝒯 in one specification version."""
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -11,9 +11,9 @@ from . import sql_analysis
 
 @dataclass
 class SigmaIndex:
-    """Indeks Σ_S versi berjalan untuk menyelesaikan nama tabel dan kolom."""
-    tables: dict[str, int] = field(default_factory=dict)          # "model.tabel" -> id
-    columns: dict[str, int] = field(default_factory=dict)         # "model.tabel.kolom" -> id
+    """Index of Σ_S of the version being built, to resolve table and column names."""
+    tables: dict[str, int] = field(default_factory=dict)          # "model.table" -> id
+    columns: dict[str, int] = field(default_factory=dict)         # "model.table.column" -> id
     table_columns: dict[str, list[str]] = field(default_factory=dict)
 
     def table(self, reference: str) -> int | None:
@@ -41,7 +41,7 @@ def build_index(db: Session, version_id: int) -> SigmaIndex:
     for table_id, name, model_id in tables:
         key = f'{models[model_id]}.{name}'.lower()
         index.tables[key] = table_id
-        index.tables[name.lower()] = index.tables.get(name.lower(), table_id)   # tanpa nama model
+        index.tables[name.lower()] = index.tables.get(name.lower(), table_id)   # without the model name
         table_key_by_id[table_id] = key
         index.table_columns[key] = []
     for column_id, name, table_id in rows:
@@ -70,10 +70,10 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
         if tm.sql_query and analysis.parse_status == 'failed':
             issues.append({'code': 'sql_unparsed', 'severity': 'warning', 'subject_kind': 'triples_map',
                            'subject_ref': tm.iri,
-                           'message': 'kueri logical table tidak dapat diurai; perubahan kolom '
-                                      'pada tabel yang dirujuk diperlakukan konservatif'})
+                           'message': 'the logical-table query cannot be parsed; column changes '
+                                      'in the referenced tables are treated conservatively'})
 
-        # sumber logical table
+        # sources of the logical table
         alias_to_table: dict[str | None, tuple[str, int | None]] = {}
         references = ([{'table': tm.table_name, 'alias': None}] if tm.logical_table_kind == 'table'
                       else analysis.sources)
@@ -90,7 +90,7 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
             if table_id is None:
                 issues.append({'code': 'logical_source_unresolved', 'severity': 'warning',
                                'subject_kind': 'triples_map', 'subject_ref': tm.iri,
-                               'message': f'tabel {reference} pada logical table tidak ditemukan di Σ_S'})
+                               'message': f'table {reference} of the logical table not found in Σ_S'})
         if len(alias_to_table) == 1:
             alias_to_table[None] = next(iter(alias_to_table.values()))
 
@@ -98,7 +98,7 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
             key, table_id = alias_to_table.get(alias) or alias_to_table.get(None) or (None, None)
             return index.column(key, column) if key else None
 
-        # kolom logical table
+        # columns of the logical table
         logical_ids: dict[str, int] = {}
         projections = analysis.projections
         if tm.logical_table_kind == 'table':
@@ -115,7 +115,7 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
                 if not names:
                     issues.append({'code': 'logical_column_unresolved', 'severity': 'warning',
                                    'subject_kind': 'triples_map', 'subject_ref': tm.iri,
-                                   'message': 'SELECT * tidak dapat diperluas: tabel sumber tidak dikenal'})
+                                   'message': 'SELECT * cannot be expanded: unknown source table'})
             else:
                 expanded.append(projection)
         for projection in expanded:
@@ -152,7 +152,7 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
                 if logical_id is None:
                     issues.append({'code': 'logical_column_unresolved', 'severity': 'error',
                                    'subject_kind': 'term_map', 'subject_ref': f'{tm.iri} {term.value}',
-                                   'message': f'kolom {column} tidak ada pada logical table'})
+                                   'message': f'column {column} does not exist in the logical table'})
                     continue
                 db.add(spec.TermMapColumn(spec_version_id=version_id, term_map_id=term_row.id,
                                           logical_column_id=logical_id,
@@ -206,14 +206,14 @@ def store_ontology(db: Session, version_id: int, artifact_id: int, content: str,
             if not simple:
                 issues.append({'code': 'owl2ql_profile_violation', 'severity': 'warning',
                                'subject_kind': 'ont_entity', 'subject_ref': entity.iri,
-                               'message': 'domain berupa ekspresi kelas kompleks'})
+                               'message': 'domain is a complex class expression'})
         for range_iri, compatible in entity.ranges:
             db.add(spec.OntRange(spec_version_id=version_id, entity_id=row.id, range_iri=range_iri,
                                  owl2ql_compatible=compatible))
             if compatible is False:
                 issues.append({'code': 'owl2ql_profile_violation', 'severity': 'warning',
                                'subject_kind': 'ont_entity', 'subject_ref': entity.iri,
-                               'message': f'range {range_iri} di luar datatype OWL 2 QL'})
+                               'message': f'range {range_iri} is outside the OWL 2 QL datatypes'})
         for relation, other in entity.relations:
             db.add(spec.OntPropertyRelation(spec_version_id=version_id, entity_id=row.id,
                                             relation=relation, other_iri=other))

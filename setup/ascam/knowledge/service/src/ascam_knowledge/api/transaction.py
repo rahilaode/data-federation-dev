@@ -1,13 +1,13 @@
 """
-Batas transaksi per permintaan yang ter-commit SEBELUM respons dikirim.
+Per-request transaction boundary that commits BEFORE the response is sent.
 
-Penutup dependensi `yield` (tempat commit semula dilakukan) dijalankan FastAPI modern setelah
-respons diterima klien. Klien yang langsung memakai hasil sebuah penulisan, misalnya Executor
-yang memanggil /sync lalu /finish dengan versi yang baru dibuat, dapat mendahului commit itu:
-kunci asing dilanggar dan permintaan kedua ditolak (temuan evaluasi F6, 5 dari 60 run). Kelas
-rute ini melakukan commit setelah handler selesai tetapi sebelum respons dikembalikan, dan
-melakukan rollback bila handler atau commit gagal, sehingga galat integritas tetap sampai ke
-klien sebagai 409 melalui penangan galat aplikasi.
+The finaliser of a `yield` dependency (where the commit used to happen) runs in modern FastAPI
+after the client has received the response. A client that uses the result of a write at once,
+such as the Executor calling /sync and then /finish with the version just created, can overtake
+that commit: a foreign key is violated and the second request is rejected (finding of evaluation
+F6, 5 of 60 runs). This route class commits after the handler finishes but before the response
+is returned, and rolls back when the handler or the commit fails, so integrity errors still
+reach the client as 409 through the application's error handlers.
 """
 from collections.abc import Callable
 
@@ -15,8 +15,8 @@ from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from fastapi.concurrency import run_in_threadpool
 
-KUNCI_SESI = 'ascam_db'
-KUNCI_SELESAI = 'ascam_tx_selesai'
+SESSION_KEY = 'ascam_db'
+DONE_KEY = 'ascam_tx_done'
 
 
 class TransactionalRoute(APIRoute):
@@ -27,19 +27,19 @@ class TransactionalRoute(APIRoute):
             try:
                 response = await handler(request)
             except Exception:
-                await _akhiri(request, commit=False)
+                await _finish(request, commit=False)
                 raise
-            await _akhiri(request, commit=True)       # galat commit diteruskan ke penangan galat
+            await _finish(request, commit=True)       # commit errors go on to the error handlers
             return response
 
         return route_handler
 
 
-async def _akhiri(request: Request, commit: bool) -> None:
-    db = getattr(request.state, KUNCI_SESI, None)
-    if db is None or getattr(request.state, KUNCI_SELESAI, False):
+async def _finish(request: Request, commit: bool) -> None:
+    db = getattr(request.state, SESSION_KEY, None)
+    if db is None or getattr(request.state, DONE_KEY, False):
         return
-    setattr(request.state, KUNCI_SELESAI, True)
+    setattr(request.state, DONE_KEY, True)
     if not commit:
         await run_in_threadpool(db.rollback)
         return

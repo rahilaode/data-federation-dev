@@ -15,5 +15,5 @@ RUN useradd --create-home --uid 10001 ascam
 USER ascam
 
 EXPOSE 8000
-# Bawaan: Knowledge Service. Layanan migrasi memakai perintah `alembic upgrade head`.
+# Default: Knowledge Service. The migration service uses the command `alembic upgrade head`.
 CMD ["ascam-knowledge", "serve"]

@@ -1,48 +1,70 @@
 # ASCAM Executor
 
-Menerapkan rencana adaptasi yang berstatus `approved` ke OBDF. Keputusan dan rencananya
-dibuat Knowledge (ADR-0015, ADR-0016); Executor hanya menjalankannya.
+Applies adaptation plans with status `approved` to the OBDF. Decisions and plans are made by
+Knowledge (ADR-0015, ADR-0016, ADR-0024); the Executor only carries them out. It polls Knowledge
+every 5 s, refuses a plan whose base version is no longer active, and reports every step with its
+duration.
 
-Tahap ini (F4b) berisi **penyunting artefak** sebagai fungsi murni (ADR-0019):
+## Artifact editors
 
-| Modul | Fungsi |
+Pure functions, text in and text out (ADR-0019):
+
+| Module | Does |
 |---|---|
-| `artifacts/vdb.py` | Menambahkan `ALTER FOREIGN TABLE` ke metadata model dan menaikkan versi VDB |
-| `artifacts/ontology.py` | Menambahkan DatatypeProperty dan menandai property usang, secara append-only |
-| `artifacts/r2rml.py` | Menambahkan dan menghapus predicate-object map |
+| `artifacts/vdb.py` | Appends `ALTER FOREIGN TABLE` and `ALTER VIEW` statements to the model metadata and raises the VDB version |
+| `artifacts/ontology.py` | Adds datatype properties and deprecates properties, append-only, in a managed block |
+| `artifacts/r2rml.py` | Adds and removes predicate-object maps; rewrites the projection of a logical-table query |
 
-Sejak F4c tersedia pula mesin eksekusinya (ADR-0020):
+## Execution steps
 
-| Langkah | Isi |
+Blue-green strategy (default, ADR-0022):
+
+| Step | Does |
 |---|---|
-| `deploy_vdb` | Σ′_S di-deploy sebagai **versi VDB baru** di samping versi yang melayani |
-| `validate` | ℳ′ dan 𝒯′ ditulis lewat agen, lalu `ontop validate` dijalankan terhadap versi baru |
-| `switch` | Koneksi dipindahkan ke versi baru (`connection type ANY`) |
-| `reload_ontop` | Ontop dimuat ulang lewat agen |
-| `verify` | Jawaban OBDF diperiksa dengan sidik jari graf sesuai pola adaptasi |
-| `rollback` | Bila verifikasi gagal: koneksi dikembalikan, artefak dipulihkan, Ontop dimuat ulang |
+| `deploy_vdb` | Deploys Σ′_S as a **new VDB version** next to the version that serves |
+| `validate` | Writes ℳ′ and 𝒯′ into the standby slot through the agent and runs `ontop validate` against the new VDB version |
+| `start_ontop` | Starts the standby Ontop instance, pinned to the new VDB version |
+| `verify` | Checks the answers of the standby instance with graph fingerprints, according to the pattern |
+| `switch` | Switches the proxy to the standby instance, promotes the artifacts to `config/`, stops the old instance, and moves the Teiid connection type (`ANY` to the new version, `NONE` to the old) |
+| `sync` | Syncs Knowledge, so the new specification version is read from the running OBDF |
 
-## Menjalankan
+Any failure before `switch` discards the standby instance and the new VDB version; when it is the
+verification that fails, this is recorded as a `rollback` step. Users see no change. With `ASCAM_EXEC_OBDA_STRATEGY=restart` the older order of ADR-0020 is used: `deploy_vdb`,
+`validate`, `switch` (connection type), `reload_ontop` (single instance restarted in place),
+`verify`, and `rollback` when verification fails.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ASCAM_EXEC_KNOWLEDGE_URL` | `http://ascam-knowledge-service:8000` | Knowledge Service |
+| `ASCAM_EXEC_TOKEN_FILE`, `ASCAM_EXEC_TOKEN_CLIENT` | –, `executor` | Token file and client name for Knowledge |
+| `ASCAM_EXEC_OBDF` | `bansos` | Name of the OBDF |
+| `ASCAM_EXEC_TEIID_PASSWORD_FILE` | – | Teiid ManagementRealm password |
+| `ASCAM_EXEC_AGENT_TOKEN_FILE` | – | Token for the Ontop agent |
+| `ASCAM_EXEC_TEIID_JDBC_HOST`, `ASCAM_EXEC_TEIID_JDBC_PORT` | `teiid`, `31000` | Teiid address used in the validation JDBC URL |
+| `ASCAM_EXEC_POLL_SECONDS` | `5` | Polling interval |
+| `ASCAM_EXEC_ENABLED` | `true` | `false` starts the service without executing plans |
+| `ASCAM_EXEC_OBDA_STRATEGY` | `bluegreen` | `bluegreen` or `restart` |
+| `ASCAM_EXEC_VIEW_STATEMENT` | `alter` | `alter` (`ALTER VIEW`) or `recreate` (`DROP VIEW` + `CREATE VIEW`), ADR-0023 |
+
+Addresses of the OBDF components come from Knowledge; passwords and tokens come from the
+Executor's own Docker secrets, because Knowledge never returns secrets.
+
+## Running
 
 ```bash
-docker compose -f setup/ascam/executor/docker-compose.yaml up -d --build
+docker-compose -f setup/ascam/executor/docker-compose.yaml up -d --build
 curl -s http://127.0.0.1:18300/health
+curl -s -X POST http://127.0.0.1:18300/control/pause     # stop picking up plans
+curl -s -X POST http://127.0.0.1:18300/control/resume
 ```
 
-Setel `ASCAM_EXEC_ENABLED=false` untuk menjalankan layanan tanpa mengeksekusi rencana.
+Pausing does not interrupt an execution that is already running.
 
-## Menguji
+## Tests
 
 ```bash
 docker run --rm -v "$PWD/setup/ascam/executor/service:/src:ro" python:3.12-slim sh -c \
   'cp -r /src /w && cd /w && pip install -q ".[test]" && python -m pytest -q'
 ```
-
-## Pratinjau suntingan terhadap artefak nyata
-
-```bash
-docker run --rm -v "$PWD:/repo:ro" python:3.12-slim sh -c \
-  'pip install -q "rdflib>=7,<8" && python /repo/experiments/f4/preview_edits.py'
-```
-
-Skrip itu tidak menulis apa pun; ia hanya menampilkan diff.

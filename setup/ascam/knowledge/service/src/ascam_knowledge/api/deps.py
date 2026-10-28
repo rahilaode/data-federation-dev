@@ -4,21 +4,21 @@ from collections.abc import Iterator
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from .transaction import KUNCI_SELESAI, KUNCI_SESI
+from .transaction import DONE_KEY, SESSION_KEY
 
 log = logging.getLogger('ascam.knowledge')
 
 
 def get_db(request: Request) -> Iterator[Session]:
-    """Satu transaksi per permintaan. Commit dan rollback dilakukan TransactionalRoute sebelum
-    respons dikirim; penutup ini hanya menutup sesi. Bila sebuah rute tidak memakai
-    TransactionalRoute, perubahan tetap disimpan di sini sebagai cadangan, disertai peringatan."""
+    """One transaction per request. TransactionalRoute commits or rolls back before the response
+    is sent; this finaliser only closes the session. If a route does not use
+    TransactionalRoute, the changes are still committed here as a fallback, with a warning."""
     db = request.app.state.session_factory()
-    setattr(request.state, KUNCI_SESI, db)
+    setattr(request.state, SESSION_KEY, db)
     try:
         yield db
-        if not getattr(request.state, KUNCI_SELESAI, False):
-            log.warning('rute %s tidak memakai TransactionalRoute; commit setelah respons',
+        if not getattr(request.state, DONE_KEY, False):
+            log.warning('route %s does not use TransactionalRoute; committing after the response',
                         request.url.path)
             db.commit()
     except Exception:

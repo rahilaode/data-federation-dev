@@ -1,4 +1,4 @@
-"""Skema `ops`: jejak MAPE-K dan operasi (append-only; baris tidak dihapus)."""
+"""Schema `ops`: MAPE-K and operations trail (append-only; rows are never deleted)."""
 import uuid
 from datetime import datetime
 
@@ -38,15 +38,15 @@ class SchemaEvent(Base):
     source_system_id: Mapped[int | None] = mapped_column(
         ForeignKey('registry.source_system.id', ondelete='RESTRICT'), index=True)
     raw_message: Mapped[dict] = mapped_column(JSONB)
-    structured: Mapped[dict | None] = mapped_column(JSONB, comment='event terformalisasi')
+    structured: Mapped[dict | None] = mapped_column(JSONB, comment='formalised event')
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     received_at: Mapped[datetime] = created_at()
     status: Mapped[str] = mapped_column(Text, server_default='received')
     ignore_reason: Mapped[str | None] = mapped_column(Text)
 
 
-# notified: keputusan `notify`, tidak ada yang dieksekusi (ADR-0024)
-# revised: rencana ADD yang digantikan revisi administrator saat persetujuan (ADR-0024)
+# notified: decision `notify`, nothing is executed (ADR-0024)
+# revised: ADD plan replaced by the administrator's revision on approval (ADR-0024)
 PLAN_STATUS = ('pending_approval', 'approved', 'rejected', 'superseded', 'executed', 'failed',
                'notified', 'revised')
 PLAN_DECISION = ('auto', 'hitl', 'notify')
@@ -69,7 +69,7 @@ class AdaptationPlan(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revision_of: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey('ops.adaptation_plan.id', ondelete='RESTRICT'),
-        comment='rencana ADD yang direvisi administrator saat persetujuan')
+        comment='ADD plan revised by the administrator on approval')
 
 
 class PlanAction(Base):
@@ -92,13 +92,14 @@ class Execution(Base):
     candidate_spec_version_id: Mapped[int | None] = mapped_column(
         ForeignKey('spec.spec_version.id', ondelete='RESTRICT'))
     status: Mapped[str] = mapped_column(Text, server_default='running')
-    timings: Mapped[dict] = mapped_column(JSONB, server_default='{}', comment='dekomposisi Δt_adapt')
+    timings: Mapped[dict] = mapped_column(JSONB, server_default='{}', comment='decomposition of Δt_adapt')
     failure: Mapped[dict | None] = mapped_column(JSONB)
     started_at: Mapped[datetime] = created_at()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-# start_ontop: instance Ontop siaga dinyalakan pada strategi blue-green (ADR-0022)
+# start_ontop: the standby Ontop instance is started in the blue-green strategy (ADR-0022)
+
 STEP_NAMES = ('deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify',
               'rollback', 'sync')
 
@@ -128,7 +129,7 @@ class Validation(Base):
     spec_version_id: Mapped[int] = mapped_column(ForeignKey('spec.spec_version.id', ondelete='RESTRICT'), index=True)
     validator: Mapped[str] = mapped_column(Text)
     passed: Mapped[bool] = mapped_column(Boolean)
-    details: Mapped[dict] = mapped_column(JSONB, server_default='{}', comment='termasuk validity-errors Teiid')
+    details: Mapped[dict] = mapped_column(JSONB, server_default='{}', comment='includes Teiid validity-errors')
     created_at: Mapped[datetime] = created_at()
 
 

@@ -1,10 +1,10 @@
 """
-Memuat ulang endpoint Ontop.
+Reloads the Ontop endpoint.
 
-Ontop membaca ℳ dan 𝒯 saat inisialisasi dan tidak memiliki hot-reload untuk produksi
-(ADR-0001), sehingga kontainer di-restart. Konfigurasi hasil ADR-0001 (init sebagai PID 1 dan
-entrypoint yang meng-`exec` Java) membuat penghentian berlangsung di bawah satu detik.
-Kesiapan diukur dari endpoint SPARQL yang menjawab, bukan dari status kontainer.
+Ontop reads ℳ and 𝒯 at initialisation and has no hot reload for production (ADR-0001), so the
+container is restarted. The configuration from ADR-0001 (init as PID 1 and an entrypoint that
+`exec`s Java) makes the shutdown take less than a second. Readiness is measured by the SPARQL
+endpoint answering, not by the container status.
 """
 import time
 from dataclasses import dataclass
@@ -26,7 +26,7 @@ class ReloadResult:
 def reload_ontop(cfg: AgentConfig, docker_client=None, http: httpx.Client | None = None,
                  stop_timeout: int = 10, ready_timeout: float = 120.0,
                  sleep=time.sleep, container_name: str | None = None) -> ReloadResult:
-    # Dengan blue-green (ADR-0022) yang di-restart adalah instance aktif, bukan proxy.
+    # With blue-green (ADR-0022) the active instance is restarted, not the proxy.
     container_name = container_name or cfg.ontop_container
     start = time.perf_counter()
     try:
@@ -53,7 +53,7 @@ def reload_ontop(cfg: AgentConfig, docker_client=None, http: httpx.Client | None
                     return ReloadResult(True, int((stopped - start) * 1000),
                                         int((now - stopped) * 1000), int((now - start) * 1000))
                 error = f'HTTP {response.status_code}'
-            except Exception as exc:                # noqa: BLE001 — endpoint belum siap
+            except Exception as exc:                # noqa: BLE001 — the endpoint is not ready yet
                 error = f'{type(exc).__name__}'
             sleep(0.5)
     finally:
@@ -61,4 +61,4 @@ def reload_ontop(cfg: AgentConfig, docker_client=None, http: httpx.Client | None
             client.close()
     now = time.perf_counter()
     return ReloadResult(False, int((stopped - start) * 1000), int((now - stopped) * 1000),
-                        int((now - start) * 1000), f'endpoint tidak siap: {error}')
+                        int((now - start) * 1000), f'endpoint not ready: {error}')

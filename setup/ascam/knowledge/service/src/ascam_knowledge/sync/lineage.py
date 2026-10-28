@@ -1,18 +1,18 @@
 """
-Membangun lineage kolom (`spec.column_usage`): jalur dari kolom foreign table sampai ke
-predikat pada ℳ, beserta perannya.
+Builds the column lineage (`spec.column_usage`): paths from a foreign-table column to the
+predicates in ℳ, with their roles.
 
-Jalur dapat melewati view (bertingkat). Setiap tepi diberi jenis, dan jalur diberi
-`weakest_link`, yaitu tepi terlemah yang dilalui; satu tepi `expression` atau `predicate`
-membuat seluruh jalur tidak dapat disesuaikan otomatis saat DROP (matriks D11, bukti F0.7).
+A path can pass through (nested) views. Every edge has a kind, and every path has a
+`weakest_link`, the weakest edge it passes; one `expression` or `predicate` edge makes the
+whole path unsuitable for automatic adjustment on DROP (matrix D11, experiment F0.7).
 
-Peran (`role`):
-  literal_value     nilai literal sebuah DatatypeProperty
-  iri_template      pembentuk IRI subjek, objek, atau graph
-  join_key          kolom pada rr:joinCondition
-  sql_predicate     kolom di WHERE/JOIN/klausa lain, termasuk milik view yang dibaca mapping
-  dynamic_predicate predikat yang berasal dari kolom (tidak diketahui secara statis)
-  projection_only   kolom logical table yang tidak dipakai term map mana pun
+Roles (`role`):
+  literal_value     literal value of a DatatypeProperty
+  iri_template      builds the IRI of a subject, object, or graph
+  join_key          column in rr:joinCondition
+  sql_predicate     column in WHERE/JOIN/another clause, including those of a view read by the mapping
+  dynamic_predicate predicate taken from a column (not known statically)
+  projection_only   logical-table column that no term map uses
 """
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ def _weakest(*kinds: str) -> str:
 
 
 class _Resolver:
-    """Menelusuri kolom (mungkin kolom view) sampai ke kolom foreign table."""
+    """Follows a column (possibly a view column) down to the foreign-table column."""
 
     def __init__(self, db: Session, version_id: int):
         self.table_kind: dict[int, str] = {}
@@ -42,8 +42,8 @@ class _Resolver:
             self.column_name[column_id] = name
             self.table_kind[table_id] = kind
 
-        self.edges: dict[int, list[tuple[int, str]]] = {}          # kolom view -> (kolom sumber, jenis)
-        self.view_predicates: dict[int, list[int]] = {}            # tabel view -> kolom yang dipakai WHERE/JOIN
+        self.edges: dict[int, list[tuple[int, str]]] = {}          # view column -> (source column, kind)
+        self.view_predicates: dict[int, list[int]] = {}            # view table -> columns used in WHERE/JOIN
         expression_kind = dict(db.execute(
             select(spec.TeiidViewColumn.column_id, spec.TeiidViewColumn.expression_kind)
             .where(spec.TeiidViewColumn.spec_version_id == version_id)).all())
@@ -59,7 +59,7 @@ class _Resolver:
 
     def to_foreign(self, column_id: int, seen: frozenset[int] = frozenset()  # noqa: B006
                    ) -> list[tuple[int, list[dict], str]]:
-        """-> [(id kolom foreign, jalur, tepi terlemah)]"""
+        """-> [(foreign column id, path, weakest edge)]"""
         table_id = self.column_table.get(column_id)
         if table_id is None or column_id in seen:
             return []
@@ -86,13 +86,13 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
         select(spec.LogicalColumn.id, spec.LogicalColumn.expression_kind)
         .where(spec.LogicalColumn.spec_version_id == version_id)).all())
 
-    logical_sources = {}                                    # logical column -> [kolom Teiid]
+    logical_sources = {}                                    # logical column -> [Teiid columns]
     for logical_id, column_id in db.execute(
             select(spec.LogicalColumnSource.logical_column_id, spec.LogicalColumnSource.teiid_column_id)
             .where(spec.LogicalColumnSource.spec_version_id == version_id)).all():
         logical_sources.setdefault(logical_id, []).append(column_id)
 
-    predicate_of_pom: dict[int, tuple[str | None, bool]] = {}   # pom -> (IRI predikat, dinamis?)
+    predicate_of_pom: dict[int, tuple[str | None, bool]] = {}   # pom -> (predicate IRI, dynamic?)
     for pom_id, value_kind, value in db.execute(
             select(spec.TermMap.pom_id, spec.TermMap.value_kind, spec.TermMap.value)
             .where(spec.TermMap.spec_version_id == version_id,
@@ -116,7 +116,7 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
                                 path=path, weakest_link=weakest))
         rows += 1
 
-    # 1. kolom yang dipakai term map
+    # 1. columns used by term maps
     for term_map, logical_id in db.execute(
             select(spec.TermMap, spec.TermMapColumn.logical_column_id)
             .join(spec.TermMapColumn, spec.TermMapColumn.term_map_id == spec.TermMap.id)
@@ -135,12 +135,12 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
             role = 'iri_template'
         for column_id in logical_sources.get(logical_id, []):
             for foreign, path, weakest in resolver.to_foreign(column_id):
-                # sifat kolom logical table (ekspresi, SELECT *) ikut melemahkan jalur
+                # the nature of the logical-table column (expression, SELECT *) weakens the path too
                 add(foreign, term_map.triples_map_id, term_map.id, role,
                     predicate_iri if term_map.position == 'object' else None, path,
                     _weakest(weakest, logical_kind.get(logical_id, 'passthrough')))
 
-    # 2. kolom pada join condition
+    # 2. columns in join conditions
     for join, triples_map_id in db.execute(
             select(spec.JoinCondition, spec.TermMap.triples_map_id)
             .join(spec.TermMap, spec.TermMap.id == spec.JoinCondition.term_map_id)
@@ -156,7 +156,7 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
                     add(foreign, triples_map_id, None, 'join_key', None, path,
                         _weakest(weakest, logical_kind.get(logical_id, 'passthrough')))
 
-    # 3. kolom pada klausa SQL logical table
+    # 3. columns in SQL clauses of the logical table
     for triples_map_id, column_id in db.execute(
             select(spec.SqlReference.triples_map_id, spec.SqlReference.teiid_column_id)
             .where(spec.SqlReference.spec_version_id == version_id)).all():
@@ -164,7 +164,7 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
             add(foreign, triples_map_id, None, 'sql_predicate', None, path,
                 _weakest(weakest, 'predicate'))
 
-    # 4. kolom yang dipakai view (WHERE/JOIN) yang dibaca mapping
+    # 4. columns used by a view (WHERE/JOIN) that the mapping reads
     for triples_map_id, table_id in db.execute(
             select(spec.LogicalSource.triples_map_id, spec.LogicalSource.teiid_table_id)
             .where(spec.LogicalSource.spec_version_id == version_id,
@@ -174,7 +174,7 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
                 add(foreign, triples_map_id, None, 'sql_predicate', None, path,
                     _weakest(weakest, 'predicate'))
 
-    # 5. kolom logical table yang hanya diproyeksikan
+    # 5. logical-table columns that are only projected
     for logical_id, triples_map_id in db.execute(
             select(spec.LogicalColumn.id, spec.LogicalColumn.triples_map_id)
             .where(spec.LogicalColumn.spec_version_id == version_id)).all():
@@ -191,7 +191,7 @@ def build(db: Session, version_id: int, issues: list[dict]) -> dict[str, int]:
 
 
 def _check_vocabulary(db: Session, version_id: int, entities: dict, issues: list[dict]) -> None:
-    """Pemeriksaan yang tidak dilakukan `ontop validate` (temuan F0.5)."""
+    """Checks that `ontop validate` does not perform (finding of F0.5)."""
     used_predicates = set()
     for predicate_iri, role in db.execute(
             select(spec.ColumnUsage.predicate_iri, spec.ColumnUsage.role)
@@ -202,17 +202,17 @@ def _check_vocabulary(db: Session, version_id: int, entities: dict, issues: list
         if not candidates:
             issues.append({'code': 'predicate_undeclared', 'severity': 'error',
                            'subject_kind': 'predicate', 'subject_ref': predicate_iri,
-                           'message': 'predikat pada mapping tidak dideklarasikan di ontologi'})
+                           'message': 'predicate in the mapping is not declared in the ontology'})
             continue
         kinds = {c['kind'] for c in candidates}
         if role == 'literal_value' and 'datatype_property' not in kinds:
             issues.append({'code': 'predicate_kind_mismatch', 'severity': 'error',
                            'subject_kind': 'predicate', 'subject_ref': predicate_iri,
-                           'message': f'objek literal memakai predikat berjenis {sorted(kinds)}'})
+                           'message': f'literal object uses a predicate of kind {sorted(kinds)}'})
         if all(c['deprecated'] for c in candidates):
             issues.append({'code': 'predicate_deprecated_in_use', 'severity': 'warning',
                            'subject_kind': 'predicate', 'subject_ref': predicate_iri,
-                           'message': 'predikat berstatus deprecated tetapi masih dipakai mapping'})
+                           'message': 'predicate is deprecated but still used by the mapping'})
 
     for iri, candidates in entities.items():
         if iri in used_predicates:
@@ -220,4 +220,4 @@ def _check_vocabulary(db: Session, version_id: int, entities: dict, issues: list
         if any(c['kind'] == 'datatype_property' and not c['deprecated'] for c in candidates):
             issues.append({'code': 'unused_property', 'severity': 'info',
                            'subject_kind': 'predicate', 'subject_ref': iri,
-                           'message': 'DatatypeProperty tidak dipakai mapping mana pun'})
+                           'message': 'DatatypeProperty is not used by any mapping'})

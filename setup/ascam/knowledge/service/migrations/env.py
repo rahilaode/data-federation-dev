@@ -1,4 +1,4 @@
-"""Lingkungan Alembic untuk Knowledge ASCAM."""
+"""Alembic environment of the ASCAM Knowledge Base."""
 from logging.config import fileConfig
 
 from alembic import context

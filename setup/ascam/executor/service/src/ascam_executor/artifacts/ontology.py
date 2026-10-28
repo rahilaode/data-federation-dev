@@ -1,18 +1,17 @@
 """
-Penyuntingan ontologi (𝒯) secara append-only.
+Append-only editing of the ontology (𝒯).
 
-Alasan (ADR-0010, invarian kepemilikan P6): ASCAM hanya menambahkan triple, dan hanya
-menghapus yang ia tambahkan sendiri. Dengan menulis blok bertanda di akhir berkas, komentar
-dan tata letak bagian yang ditulis manusia tetap utuh — sifat yang sudah terbukti pada
-iterasi pertama.
+Rationale (ADR-0010, ownership invariant P6): ASCAM only adds triples, and only removes those
+it added itself. By writing marked blocks at the end of the file, the comments and layout of
+the parts written by people stay intact, a property already shown in the first iteration.
 
-Property baru ditulis dengan kosakata umum: `rdfs:label`, `rdfs:comment`, `rdfs:domain`,
-`rdfs:range`, `dcterms:created`, dan `skos:changeNote`. Deprecation memakai `owl:deprecated`
-(OWL 2), bukan penghapusan, sehingga kueri lama tidak langsung rusak.
+New properties are written with common vocabulary: `rdfs:label`, `rdfs:comment`, `rdfs:domain`,
+`rdfs:range`, `dcterms:created`, and `skos:changeNote`. Deprecation uses `owl:deprecated`
+(OWL 2) instead of removal, so that existing queries do not break at once.
 """
 from datetime import datetime, timezone
 
-from .turtle_text import PENANDA_BLOK, append_block, ensure_prefixes, prefix_map, shorten
+from .turtle_text import BLOCK_MARKER, append_block, ensure_prefixes, prefix_map, shorten
 
 PREFIXES = {
     'owl': 'http://www.w3.org/2002/07/owl#',
@@ -21,91 +20,87 @@ PREFIXES = {
     'dcterms': 'http://purl.org/dc/terms/',
     'skos': 'http://www.w3.org/2004/02/skos/core#',
 }
-PENANDA = PENANDA_BLOK
+MARKER = BLOCK_MARKER
 
 
 class OntologyError(Exception):
     pass
 
 
-
-
-
-
 def is_declared(text: str, iri: str) -> bool:
     prefixes = prefix_map(text)
-    pendek = shorten(iri, prefixes)
-    for baris in text.splitlines():
-        potongan = baris.strip()
-        if potongan.startswith((pendek + ' ', pendek + '\t')) and 'owl:DatatypeProperty' in potongan:
+    short = shorten(iri, prefixes)
+    for lines in text.splitlines():
+        stripped = lines.strip()
+        if stripped.startswith((short + ' ', short + '\t')) and 'owl:DatatypeProperty' in stripped:
             return True
     return False
 
 
 def add_datatype_property(text: str, iri: str, *, domain: str | None, range_iri: str,
-                          label: str, komentar: str, waktu: datetime | None = None,
-                          catatan_perubahan: str | None = None) -> str:
-    """Menambahkan DatatypeProperty baru (pola P-001); idempoten bila sudah dideklarasikan."""
+                          label: str, comment: str, when: datetime | None = None,
+                          change_note: str | None = None) -> str:
+    """Adds a new DatatypeProperty (pattern P-001); idempotent if it is already declared."""
     if is_declared(text, iri):
         return text
-    waktu = waktu or datetime.now(timezone.utc)
-    hasil = ensure_prefixes(text, PREFIXES)
-    prefixes = prefix_map(hasil)
-    baris = [f'\n{shorten(iri, prefixes)} a owl:DatatypeProperty ;']
+    when = when or datetime.now(timezone.utc)
+    result = ensure_prefixes(text, PREFIXES)
+    prefixes = prefix_map(result)
+    lines = [f'\n{shorten(iri, prefixes)} a owl:DatatypeProperty ;']
     if domain:
-        baris.append(f'    rdfs:domain {shorten(domain, prefixes)} ;')
-    baris.append(f'    rdfs:range {shorten(range_iri, prefixes)} ;')
-    baris.append(f'    rdfs:label "{label}" ;')
-    baris.append(f'    rdfs:comment "{komentar}" ;')
-    baris.append(f'    dcterms:created "{waktu.isoformat()}"^^xsd:dateTime ;')
-    baris.append(f'    skos:changeNote "{catatan_perubahan or komentar}" .')
-    return append_block(hasil, f'property {iri}', '\n'.join(baris))
+        lines.append(f'    rdfs:domain {shorten(domain, prefixes)} ;')
+    lines.append(f'    rdfs:range {shorten(range_iri, prefixes)} ;')
+    lines.append(f'    rdfs:label "{label}" ;')
+    lines.append(f'    rdfs:comment "{comment}" ;')
+    lines.append(f'    dcterms:created "{when.isoformat()}"^^xsd:dateTime ;')
+    lines.append(f'    skos:changeNote "{change_note or comment}" .')
+    return append_block(result, f'property {iri}', '\n'.join(lines))
 
 
-def deprecate_property(text: str, iri: str, *, alasan: str,
-                       waktu: datetime | None = None) -> str:
-    """Menandai property sebagai deprecated (pola P-002), tanpa menghapus deklarasinya."""
-    waktu = waktu or datetime.now(timezone.utc)
-    hasil = ensure_prefixes(text, PREFIXES)
-    prefixes = prefix_map(hasil)
-    pendek = shorten(iri, prefixes)
-    blok = (f'\n{pendek} owl:deprecated true ;\n'
-            f'    dcterms:modified "{waktu.isoformat()}"^^xsd:dateTime ;\n'
-            f'    skos:changeNote "{alasan}" .\n')
-    return append_block(hasil, f'deprecate {iri}', blok)
+def deprecate_property(text: str, iri: str, *, reason: str,
+                       when: datetime | None = None) -> str:
+    """Marks a property as deprecated (pattern P-002) without removing its declaration."""
+    when = when or datetime.now(timezone.utc)
+    result = ensure_prefixes(text, PREFIXES)
+    prefixes = prefix_map(result)
+    short = shorten(iri, prefixes)
+    block = (f'\n{short} owl:deprecated true ;\n'
+            f'    dcterms:modified "{when.isoformat()}"^^xsd:dateTime ;\n'
+            f'    skos:changeNote "{reason}" .\n')
+    return append_block(result, f'deprecate {iri}', block)
 
 
 def is_deprecated(text: str, iri: str) -> bool:
     prefixes = prefix_map(text)
-    pendek = shorten(iri, prefixes)
-    for baris in text.splitlines():
-        potongan = baris.strip()
-        if potongan.startswith(pendek) and 'owl:deprecated' in potongan and 'true' in potongan:
+    short = shorten(iri, prefixes)
+    for lines in text.splitlines():
+        stripped = lines.strip()
+        if stripped.startswith(short) and 'owl:deprecated' in stripped and 'true' in stripped:
             return True
     return False
 
 
-def apply_actions(text: str, actions: list[dict], waktu: datetime | None = None) -> str:
-    hasil = text
+def apply_actions(text: str, actions: list[dict], when: datetime | None = None) -> str:
+    result = text
     for action in actions:
         operation = action['operation']
         if operation == 'add_datatype_property':
             domain = (action.get('domain') or [None])[0]
-            kolom = action.get('column')
-            hasil = add_datatype_property(
-                hasil, action['iri'], domain=domain,
+            column = action.get('column')
+            result = add_datatype_property(
+                result, action['iri'], domain=domain,
                 range_iri=action.get('range_iri') or f"{PREFIXES['xsd']}string",
-                label=action.get('label') or kolom or action['iri'].rsplit('/', 1)[-1],
-                komentar=action.get('comment')
-                or f'Ditambahkan otomatis ASCAM untuk kolom sumber {kolom}.',
-                waktu=waktu)
+                label=action.get('label') or column or action['iri'].rsplit('/', 1)[-1],
+                comment=action.get('comment')
+                or f'Added automatically by ASCAM for source column {column}.',
+                when=when)
         elif operation == 'deprecate_property':
-            hasil = deprecate_property(hasil, action['predicate_iri'],
-                                       alasan=action.get('alasan')
-                                       or 'Kolom sumber dihapus; property ditandai usang oleh ASCAM.',
-                                       waktu=waktu)
+            result = deprecate_property(result, action['predicate_iri'],
+                                       reason=action.get('reason')
+                                       or 'The source column was dropped; property deprecated by ASCAM.',
+                                       when=when)
         elif operation == 'keep_property':
-            continue                                    # tidak ada perubahan pada 𝒯
+            continue                                    # no change to 𝒯
         else:
-            raise OntologyError(f'tindakan ontologi {operation} tidak dikenal')
-    return hasil
+            raise OntologyError(f'unknown ontology action {operation}')
+    return result

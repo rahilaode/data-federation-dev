@@ -1,10 +1,10 @@
 """
-Penguraian 𝒯 (ontologi OWL dalam Turtle) menjadi entitas dan aksioma yang dibutuhkan ASCAM.
+Parsing of 𝒯 (an OWL ontology in Turtle) into the entities and axioms that ASCAM needs.
 
-Yang dicatat: IRI dan versi ontologi, `owl:imports`, entitas (kelas, datatype property, object
-property, annotation property; punning diperbolehkan), domain (termasuk bentuk kompleks seperti
-`owl:unionOf`), range beserta penanda kompatibilitas OWL 2 QL, relasi antarproperty, dan
-anotasi (label, komentar, deprecation, catatan perubahan).
+Recorded: ontology IRI and version, `owl:imports`, entities (classes, datatype properties,
+object properties, annotation properties; punning is allowed), domains (including complex
+forms such as `owl:unionOf`), ranges with an OWL 2 QL compatibility flag, relations between
+properties, and annotations (label, comment, deprecation, change note).
 """
 from dataclasses import dataclass, field
 
@@ -38,9 +38,9 @@ class EntitySpec:
     kind: str
     deprecated: bool = False
     functional: bool = False
-    domains: list[tuple[str, bool]] = field(default_factory=list)      # (ekspresi kelas, sederhana)
-    ranges: list[tuple[str, bool | None]] = field(default_factory=list)  # (IRI, kompatibel OWL 2 QL)
-    relations: list[tuple[str, str]] = field(default_factory=list)      # (relasi, IRI lain)
+    domains: list[tuple[str, bool]] = field(default_factory=list)      # (class expression, simple)
+    ranges: list[tuple[str, bool | None]] = field(default_factory=list)  # (IRI, OWL 2 QL compatible)
+    relations: list[tuple[str, str]] = field(default_factory=list)      # (relation, other IRI)
     annotations: list[dict] = field(default_factory=list)
 
 
@@ -56,7 +56,7 @@ class OntologySpec:
 def _class_expression(graph: Graph, node) -> tuple[str, bool]:
     if isinstance(node, URIRef):
         return str(node), True
-    # bentuk kompleks (mis. owl:unionOf) disimpan apa adanya dalam notasi N3
+    # complex forms (e.g. owl:unionOf) are stored as they are, in N3 notation
     return node.n3(graph.namespace_manager), False
 
 
@@ -86,8 +86,8 @@ def parse(content: str) -> OntologySpec:
             entity.domains.append(_class_expression(graph, domain))
         for range_ in graph.objects(node, RDFS.range):
             iri = str(range_)
-            # Kompatibilitas OWL 2 QL hanya bermakna untuk range datatype; range object property
-            # berupa kelas, sehingga ditandai tidak berlaku (None).
+            # OWL 2 QL compatibility is meaningful only for datatype ranges; the range of an
+            # object property is a class, so it is marked as not applicable (None).
             compatible = (owl_helper.owl2ql_compatible(iri)
                           if entity.kind == 'datatype_property' and isinstance(range_, URIRef) else None)
             entity.ranges.append((iri, compatible))

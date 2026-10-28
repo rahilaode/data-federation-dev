@@ -1,41 +1,42 @@
-# Konsol administrator ASCAM
+# ASCAM console
 
-Antarmuka web untuk memantau siklus adaptasi dan **memutuskan usulan perubahan** yang tidak
-dijalankan otomatis, terutama penambahan kolom (ADR-0021).
+A web interface to watch the adaptation loop and to **decide on proposals** that are not run
+automatically: adding a column (ADR-0021, ADR-0024).
 
-| Halaman | Isi |
+| Page | Shows |
 |---|---|
-| Ringkasan | Keadaan siklus MAPE-K, kesehatan komponen, perubahan dan eksekusi terakhir |
-| Persetujuan | Usulan yang menunggu keputusan: apa yang berubah di sumber, apa yang akan dilakukan pada VDB, mapping, dan ontologi, serta alasannya |
-| Perubahan skema | Setiap DDL yang ditangkap monitor beserta hasil analisisnya |
-| Rencana dan eksekusi | Rencana, keputusan, dan langkah penerapan beserta durasinya |
-| Versi spesifikasi | Riwayat versi dan perbandingan artefak antarversi |
-| Analisis dampak | Simulasi perubahan skema tanpa mengubah apa pun |
-| Konfigurasi | Sumber, komponen OBDF (dengan pemeriksaan koneksi), dan kebijakan penambahan kolom |
-| Jejak audit | Seluruh tindakan beserta pelakunya |
+| Overview | State of the MAPE-K loop, component health, latest changes and executions |
+| Approvals | Proposals waiting for a decision: what changed at the source, what will be done to the VDB, the mapping, and the ontology, and why; the property name and domain can be revised |
+| Notifications | Changes ASCAM did not adapt, with the affected elements and a link to their lineage |
+| Schema changes | Every DDL captured by the monitors, with its analysis |
+| Plans and executions | Plans, decisions, and execution steps with their durations |
+| Specification versions | Version history and a diff of the artifacts between versions |
+| Column lineage | Source column → foreign table → view → TriplesMap → property, with every path through a node highlighted |
+| Impact analysis | A what-if analysis of a schema change; nothing is changed |
+| Configuration | Sources, OBDF components (with connection checks), and policies |
+| Audit trail | Every action with its actor |
 
-## Menjalankan
+## Running
 
 ```bash
-setup/ascam/knowledge/scripts/init-secrets.sh      # membuat kata sandi dan kunci sesi konsol
-docker compose -f setup/ascam/ui/docker-compose.yaml up -d --build
+setup/ascam/knowledge/scripts/init-secrets.sh      # creates the console password and session key
+docker-compose -f setup/ascam/ui/docker-compose.yaml up -d --build
 ```
 
-Buka <http://127.0.0.1:18400>, masuk sebagai `admin` dengan kata sandi di
+Open <http://127.0.0.1:18400> and log in as `admin` with the password in
 `setup/ascam/knowledge/secrets/ui_admin_password`.
 
-## Keamanan
+## Security
 
-- Peramban tidak pernah menerima token layanan; konsol meneruskan permintaan ke Knowledge
-  lewat daftar izin (pembacaan, keputusan rencana, notifikasi, pemeriksaan koneksi, sync,
-  analisis dampak, kebijakan adaptasi).
-- Sesi disimpan pada cookie `HttpOnly`, `SameSite=Strict`, bertanda tangan.
-- Permintaan yang mengubah keadaan wajib membawa header `X-ASCAM-UI`.
-- Nama administrator diteruskan ke Knowledge, sehingga jejak audit mencatat siapa yang
-  menyetujui atau menolak.
-- Port hanya terikat ke `127.0.0.1`.
+- The browser never receives a service token. The console forwards requests to Knowledge
+  through an allow list (reads, plan decisions, notifications, connection checks, sync, impact
+  analysis, adaptation policy, lineage).
+- The session is a signed cookie with `HttpOnly` and `SameSite=Strict`.
+- Requests that change state must carry the header `X-ASCAM-UI`.
+- The administrator's name is passed to Knowledge, so the audit trail records who approved or
+  rejected.
 
-## Menguji
+## Tests
 
 ```bash
 docker run --rm -v "$PWD/setup/ascam/ui/service:/src:ro" python:3.12-slim sh -c \

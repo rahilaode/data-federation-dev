@@ -1,4 +1,4 @@
-"""Analisis dampak dan keputusan D11 terhadap spesifikasi hasil sync."""
+"""Impact analysis and decisions D11 over the specification produced by a sync."""
 import uuid
 
 import pytest
@@ -33,7 +33,7 @@ def test_rename_is_automatic_via_name_in_source(api, obdf):
     out = impact(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
                  column='tgl_lahir_ktp', new_column='tgl_lahir_baru')
     assert out['decision'] == 'auto' and out['pattern'] == 'P-003'
-    assert out['targets'][0]['column'] == 'tanggal_lahir'         # nama Teiid tidak berubah
+    assert out['targets'][0]['column'] == 'tanggal_lahir'         # the Teiid name does not change
     assert out['actions'] == [{'artifact': 'vdb', 'operation': 'set_name_in_source',
                                'model': 'dukcapil', 'table': 'master_penduduk',
                                'column': 'tanggal_lahir', 'name_in_source': 'tgl_lahir_baru'}]
@@ -42,7 +42,7 @@ def test_rename_is_automatic_via_name_in_source(api, obdf):
 def test_rename_into_existing_source_name_is_notified(api, obdf):
     out = impact(api, obdf, operation='rename', source='dukcapil', table='master_penduduk',
                  column='tgl_lahir_ktp', new_column='nik')
-    assert out['decision'] == 'notify' and any('sudah dipakai' in r for r in out['reasons'])
+    assert out['decision'] == 'notify' and any('already used' in r for r in out['reasons'])
     assert out['actions'] == []
 
 
@@ -58,27 +58,27 @@ def test_drop_literal_value_is_automatic_and_deprecates_unused_predicate(api, ob
 
 
 def test_drop_shared_predicate_keeps_property(api, obdf):
-    """bansos:nik dipakai dua TriplesMap; property tidak boleh di-deprecate. DROP nik sendiri
-    berujung notifikasi (template IRI), sehingga pemeriksaan predikat bersama diuji langsung."""
+    """bansos:nik is used by two TriplesMaps; the property must not be deprecated. Dropping nik itself
+    leads to a notification (IRI template), so the shared-predicate check is tested directly."""
     out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
                  table='penerima_manfaat', column='nik')
     assert out['decision'] == 'notify' and out['actions'] == []
     assert any(p.endswith('/nik') for p in out['affected']['predicates'])
-    kolom = {t['column_id'] for t in out['targets']}
+    column_ids = {t['column_id'] for t in out['targets']}
     with api.factory() as db:
         assert impact_service._predicate_shared(db, out['spec_version_id'],
-                                                'http://bansos.go.id/ontology/nik', kolom)
+                                                'http://bansos.go.id/ontology/nik', column_ids)
 
 
 def test_drop_primary_key_or_iri_template_is_notified(api, obdf):
     out = impact(api, obdf, operation='drop', source='dukcapil', table='master_penduduk', column='nik')
     assert out['decision'] == 'notify' and out['actions'] == []
-    assert any('kunci primer' in r for r in out['reasons'])
+    assert any('primary key' in r for r in out['reasons'])
     assert any('iri_template' in r for r in out['reasons'])
 
 
 def test_drop_column_used_by_view_predicate_is_notified(api, obdf):
-    """tanggal_lahir hanya dipakai WHERE di dalam view yang dibaca MapView (bukti F0.7)."""
+    """tanggal_lahir is used only in WHERE inside the view read by MapView (experiment F0.7)."""
     out = impact(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
                  column='tgl_lahir_ktp')
     assert out['decision'] == 'notify'
@@ -86,7 +86,7 @@ def test_drop_column_used_by_view_predicate_is_notified(api, obdf):
 
 
 def test_drop_column_reached_through_expression_needs_hitl(api, obdf):
-    """nik_upper adalah ekspresi atas nik; jalurnya ditandai expression."""
+    """nik_upper is an expression over nik; its path is marked expression."""
     with api.factory() as db:
         rows = db.execute(select(spec.ColumnUsage.weakest_link)
                           .where(spec.ColumnUsage.role == 'literal_value')).scalars().all()
@@ -100,11 +100,11 @@ def test_add_always_needs_approval_with_generated_proposal(api, obdf):
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat_lengkap', column_type='varchar(200)')
     assert out['decision'] == 'hitl' and out['pattern'] == 'P-001'
-    assert any('keputusan pemodelan' in r for r in out['reasons'])
-    usulan = out['add_options']
-    assert usulan['proposed_iri'] == 'http://bansos.go.id/ontology/alamatLengkap'
-    assert usulan['proposed_domain'] == 'http://bansos.go.id/ontology/PenerimaBansos'
-    assert usulan['classes'] == ['http://bansos.go.id/ontology/PenerimaBansos']
+    assert any('modelling decision' in r for r in out['reasons'])
+    proposal = out['add_options']
+    assert proposal['proposed_iri'] == 'http://bansos.go.id/ontology/alamatLengkap'
+    assert proposal['proposed_domain'] == 'http://bansos.go.id/ontology/PenerimaBansos'
+    assert proposal['classes'] == ['http://bansos.go.id/ontology/PenerimaBansos']
     ontology = [a for a in out['actions'] if a['artifact'] == 'ontology'][0]
     assert ontology['iri'] == 'http://bansos.go.id/ontology/alamatLengkap'
     assert ontology['domain'] == ['http://bansos.go.id/ontology/PenerimaBansos']
@@ -112,7 +112,7 @@ def test_add_always_needs_approval_with_generated_proposal(api, obdf):
 
 
 def test_add_ignores_old_auto_policy(api, obdf):
-    """ADR-0024: kebijakan adaptation.add_column tidak lagi dapat membuat ADD otomatis."""
+    """ADR-0024: the policy adaptation.add_column can no longer make ADD automatic."""
     api.put(f'/api/v1/obdf/{obdf}/settings/adaptation.add_column', json={'value': {'mode': 'auto'}})
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
@@ -120,12 +120,12 @@ def test_add_ignores_old_auto_policy(api, obdf):
 
 
 def test_hitl_add_plan_is_complete(api, obdf):
-    """Regresi: kebijakan HITL memotong analisis sehingga rencana hanya berisi tindakan VDB;
-    setelah disetujui, property dan pemetaan tidak pernah dibuat."""
+    """Regression: the HITL policy cut the analysis short, so the plan held only VDB actions;
+    after approval, the property and the mapping were never created."""
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
-    lapisan = {(a['artifact'], a['operation']) for a in out['actions']}
-    assert lapisan >= {('vdb', 'add_column'), ('ontology', 'add_datatype_property'),
+    layer_ops = {(a['artifact'], a['operation']) for a in out['actions']}
+    assert layer_ops >= {('vdb', 'add_column'), ('ontology', 'add_datatype_property'),
                        ('r2rml', 'add_predicate_object_map')}
     assert out['decision'] == 'hitl' and out['pattern'] == 'P-001'
 
@@ -133,12 +133,12 @@ def test_hitl_add_plan_is_complete(api, obdf):
 def test_add_existing_column_name_needs_hitl(api, obdf):
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='nik', column_type='varchar(16)')
-    assert out['decision'] == 'hitl' and any('sudah ada' in r for r in out['reasons'])
+    assert out['decision'] == 'hitl' and any('already exists' in r for r in out['reasons'])
 
 
 def test_add_with_conflicting_property_domain(api, obdf):
-    """bansos:nik berdomain Penduduk; memakainya untuk PenerimaBansos akan menyesatkan inferensi."""
-    # kebijakan: tambahkan kualifikasi kelas pada IRI
+    """bansos:nik has domain Penduduk; reusing it for PenerimaBansos would mislead inference."""
+    # policy: qualify the IRI with the class
     api.put(f'/api/v1/obdf/{obdf}/naming-policy',
             json={'property_iri_template': '{namespace}nik', 'on_collision': 'qualify_with_class',
                   'namespace': 'http://bansos.go.id/ontology/'})
@@ -146,71 +146,71 @@ def test_add_with_conflicting_property_domain(api, obdf):
                  table='penerima_manfaat', column='nik_baru', column_type='varchar(16)')
     assert out['decision'] == 'hitl'
     iri = [a for a in out['actions'] if a['artifact'] == 'ontology'][0]['iri']
-    assert iri.endswith('_PenerimaBansos') and any('domain berbeda' in r for r in out['reasons'])
+    assert iri.endswith('_PenerimaBansos') and any('different domain' in r for r in out['reasons'])
 
-    # kebijakan: serahkan ke administrator
+    # policy: leave it to the administrator
     api.put(f'/api/v1/obdf/{obdf}/naming-policy',
             json={'property_iri_template': '{namespace}nik', 'on_collision': 'hitl',
                   'namespace': 'http://bansos.go.id/ontology/'})
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='nik_baru', column_type='varchar(16)')
-    assert out['decision'] == 'hitl' and any('domain berbeda' in r for r in out['reasons'])
-    assert out['add_options']['proposed_iri'] is None          # administrator harus memberi nama
+    assert out['decision'] == 'hitl' and any('different domain' in r for r in out['reasons'])
+    assert out['add_options']['proposed_iri'] is None          # the administrator must give a name
     assert [a['artifact'] for a in out['actions']] == ['vdb']
 
 
-# ── kasus yang diabaikan ────────────────────────────────────────────────────────
-@pytest.mark.parametrize('body, alasan', [
-    ({'operation': 'drop', 'source': 'tidak-ada', 'table': 'x', 'column': 'y'}, 'tidak terdaftar'),
-    ({'operation': 'drop', 'source': 'dukcapil', 'table': 'tabel_lain', 'column': 'y'},
-     'tidak ditemukan'),
-    ({'operation': 'add', 'source': 'dukcapil', 'table': 'tabel_lain', 'column': 'y'},
-     'tidak difederasikan'),
+# ── ignored cases ───────────────────────────────────────────────────────────────
+@pytest.mark.parametrize('body, fragment', [
+    ({'operation': 'drop', 'source': 'does-not-exist', 'table': 'x', 'column': 'y'}, 'is not registered'),
+    ({'operation': 'drop', 'source': 'dukcapil', 'table': 'other_table', 'column': 'y'},
+     'not found'),
+    ({'operation': 'add', 'source': 'dukcapil', 'table': 'other_table', 'column': 'y'},
+     'is not federated'),
 ])
-def test_unknown_objects_are_ignored(api, obdf, body, alasan):
+def test_unknown_objects_are_ignored(api, obdf, body, fragment):
     out = impact(api, obdf, **body)
-    assert out['decision'] == 'ignored' and alasan in ' '.join(out['reasons'])
+    assert out['decision'] == 'ignored' and fragment in ' '.join(out['reasons'])
 
 
 def test_unparsable_sql_forces_notification(api, obdf):
-    """SQL logical table yang tidak dapat diurai membuat seluruh keputusan DROP konservatif."""
-    broken = fx.MAPPING_TTL.replace('SELECT * FROM kemensos.penerima_manfaat', 'BUKAN SQL ###')
+    """A logical-table SQL that cannot be parsed makes every DROP decision conservative."""
+    broken = fx.MAPPING_TTL.replace('SELECT * FROM kemensos.penerima_manfaat', 'NOT SQL ###')
     set_clients(api, agent=fx.FakeAgent(mapping=broken))
     assert api.post(f'/api/v1/obdf/{obdf}/sync').json()['changed']
     out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
                  table='penerima_manfaat', column='status_ekonomi')
-    assert out['decision'] == 'notify' and any('tidak dapat diurai' in r for r in out['reasons'])
+    assert out['decision'] == 'notify' and any('cannot be parsed' in r for r in out['reasons'])
 
 
-# ── pemilihan TriplesMap untuk kolom baru (regresi F4c) ─────────────────────────
+# ── choice of TriplesMap for a new column (regression F4c) ──────────────────────
 def test_add_targets_only_triples_maps_that_expose_new_columns(api, obdf):
-    """Regresi: pemetaan sempat ditempelkan ke TriplesMap dengan SELECT eksplisit,
-    sehingga `ontop validate` menolak artefak."""
+    """Regression: the mapping was once attached to a TriplesMap with an explicit SELECT,
+    so `ontop validate` rejected the artifacts."""
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
     assert out['decision'] == 'hitl'
-    sasaran = {a['triples_map_iri'].rsplit('#', 1)[-1] for a in out['actions']
+    targets = {a['triples_map_iri'].rsplit('#', 1)[-1] for a in out['actions']
                if a['artifact'] == 'r2rml'}
-    assert sasaran == {'MapPenerima', 'MapRingkas'}       # rr:tableName dan SELECT *
-    assert 'MapLinkPenerima' not in sasaran               # SELECT dengan daftar kolom eksplisit
+    assert targets == {'MapPenerima', 'MapRingkas'}       # rr:tableName and SELECT *
+    assert 'MapLinkPenerima' not in targets               # SELECT with an explicit column list
 
 
 def test_add_is_hitl_when_exposing_maps_assign_several_classes(api, obdf):
-    """Domain property baru tidak dapat diturunkan dari DDL bila TriplesMap yang mengekspos
-    tabel memberi kelas berbeda; sebelumnya kelas pertama menurut abjad dipakai diam-diam."""
-    ganda = fx.MAPPING_TTL.replace(
+    """The domain of a new property cannot be derived from the DDL when the TriplesMaps that expose
+    the table give different classes; the alphabetically first class used to be taken silently."""
+    two_classes = fx.MAPPING_TTL.replace(
         'rr:subjectMap [ rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}" ]',
         'rr:subjectMap [ rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}" ;'
         ' rr:class bansos:Ringkasan ]')
-    assert ganda != fx.MAPPING_TTL
-    set_clients(api, agent=fx.FakeAgent(mapping=ganda))
+    assert two_classes != fx.MAPPING_TTL
+    set_clients(api, agent=fx.FakeAgent(mapping=two_classes))
     assert api.post(f'/api/v1/obdf/{obdf}/sync').json()['changed']
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
     assert out['decision'] == 'hitl'
-    assert any('lebih dari satu kelas' in r for r in out['reasons'])
-    lapisan = {(a['artifact'], a['operation']) for a in out['actions']}
-    assert ('ontology', 'add_datatype_property') in lapisan      # rencana tetap lengkap
+    assert any('more than one class' in r for r in out['reasons'])
+    layer_ops = {(a['artifact'], a['operation']) for a in out['actions']}
+    assert ('ontology', 'add_datatype_property') in layer_ops      # the plan stays complete
 
 
 def test_add_is_hitl_when_no_mapping_exposes_new_columns(api, obdf):
@@ -224,11 +224,11 @@ def test_add_is_hitl_when_no_mapping_exposes_new_columns(api, obdf):
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
     assert out['decision'] == 'hitl'
-    assert any('daftar kolom eksplisit' in r for r in out['reasons'])
+    assert any('explicit column lists' in r for r in out['reasons'])
 
 
 def test_add_refuses_iri_already_used_as_object_property(api, obdf):
-    """Nama yang dipakai object property tidak boleh jadi data property (punning)."""
+    """A name used by an object property must not become a data property (punning)."""
     api.put(f'/api/v1/obdf/{obdf}/naming-policy',
             json={'property_iri_template': '{namespace}memilikDataKependudukan',
                   'on_collision': 'hitl', 'namespace': 'http://bansos.go.id/ontology/'})
@@ -250,21 +250,21 @@ def test_add_refuses_iri_already_used_as_object_property(api, obdf):
 def test_drop_action_names_the_triples_map(api, obdf):
     out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
                  table='penerima_manfaat', column='status_ekonomi')
-    hapus = [a for a in out['actions'] if a['operation'] == 'remove_predicate_object_map']
-    assert hapus and all(a['triples_map_iri'].rsplit('#', 1)[-1] in ('MapPenerima', 'MapRingkas')
-                         for a in hapus)
+    removals = [a for a in out['actions'] if a['operation'] == 'remove_predicate_object_map']
+    assert removals and all(a['triples_map_iri'].rsplit('#', 1)[-1] in ('MapPenerima', 'MapRingkas')
+                         for a in removals)
 
 
 def test_drop_rewrites_explicit_logical_table(api, obdf):
-    """Regresi A002: kolom yang disebut eksplisit pada rr:sqlQuery harus ikut dikeluarkan.
-    DROP kolom ini sendiri berujung notifikasi (dipakai WHERE), sehingga penelusuran proyeksi
-    eksplisit diuji langsung."""
+    """Regression A002: a column named explicitly in rr:sqlQuery must be removed from it as well.
+    Dropping this column itself leads to a notification (used in WHERE), so the tracing of
+    explicit projections is tested directly."""
     out = impact(api, obdf, operation='drop', source='dukcapil', table='master_penduduk',
                  column='tgl_lahir_ktp')
-    kolom = out['targets'][0]['column_id']
+    column_id = out['targets'][0]['column_id']
     with api.factory() as db:
-        proyeksi = impact_service._explicit_projections(db, out['spec_version_id'], kolom)
-    assert [(iri.rsplit('#', 1)[-1], nama) for iri, nama, _ in proyeksi] == [
+        projections = impact_service._explicit_projections(db, out['spec_version_id'], column_id)
+    assert [(iri.rsplit('#', 1)[-1], logical_name) for iri, logical_name, _ in projections] == [
         ('MapPenduduk', 'tanggal_lahir')]
 
 

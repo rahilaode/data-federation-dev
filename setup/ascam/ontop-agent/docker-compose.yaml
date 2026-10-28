@@ -1,6 +1,6 @@
-# Agen ASCAM pada host Ontop (docs/adr/0011-ontop-agent.md).
-# Token dibuat oleh setup/ascam/knowledge/scripts/init-secrets.sh (satu tempat penyimpanan
-# rahasia untuk lingkungan laboratorium ini).
+# ASCAM agent on the Ontop host (docs/design-decisions.md, ADR-0011).
+# The token is created by setup/ascam/knowledge/scripts/init-secrets.sh (one place for the
+# secrets of this laboratory environment).
 services:
   ontop-agent:
     build: {context: ./service}
@@ -12,8 +12,8 @@ services:
       ASCAM_AGENT_ONTOP_CONTAINER: vkg-system-ontop-teiid
       ASCAM_AGENT_ONTOP_IMAGE: ontop/ontop-endpoint:4.1.1
       ASCAM_AGENT_API_TOKENS_FILE: /run/secrets/ontop_agent_api_tokens
-      # Blue-green lapisan OBDA (ADR-0022). ASCAM_AGENT_ONTOP_CONTAINER di atas kini menunjuk
-      # proxy; validasi dan penyalaan memakai instance <prefix>-blue / <prefix>-green.
+      # Blue-green OBDA layer (ADR-0022). ASCAM_AGENT_ONTOP_CONTAINER above now points to the
+      # proxy; validation and start-up use the instances <prefix>-blue / <prefix>-green.
       ASCAM_AGENT_SLOTS_DIR: /vkg/slots
       ASCAM_AGENT_PROXY_RUNTIME_DIR: /vkg/proxy/runtime
       ASCAM_AGENT_PROXY_CONTAINER: vkg-system-ontop-teiid
@@ -21,12 +21,12 @@ services:
       ASCAM_AGENT_NETWORK: ascam-networks
     secrets: [ontop_agent_api_tokens]
     volumes:
-      # Artefak OBDA milik host Ontop. Baca-tulis sejak F4a: agen menulis ℳ dan 𝒯 secara
-      # atomik dan menyimpan cadangan di ../../vkg-system/config/ascam-backups (ADR-0018).
-      # Direktori lapisan OBDA: config/ (artefak kanonik = instance aktif), slots/ (artefak per
-      # instance), dan proxy/runtime/ (upstream nginx).
+      # OBDA artifacts of the Ontop host. Read-write since F4a: the agent writes ℳ and 𝒯
+      # atomically and keeps backups in ../../vkg-system/config/ascam-backups (ADR-0018).
+      # Directories of the OBDA layer: config/ (canonical artifacts = active instance), slots/
+      # (artifacts per instance), and proxy/runtime/ (nginx upstream).
       - ../../vkg-system:/vkg
-      # Diperlukan untuk menjalankan CLI Ontop sekali jalan dan (F4) memuat ulang Ontop.
+      # Needed to run the Ontop CLI once and (F4) to reload Ontop.
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - '127.0.0.1:18100:8000'

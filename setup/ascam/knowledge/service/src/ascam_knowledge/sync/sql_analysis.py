@@ -1,10 +1,10 @@
 """
-Analisis kueri SQL pada logical table R2RML (`rr:sqlQuery`) dengan sqlglot.
+Analysis of the SQL queries of R2RML logical tables (`rr:sqlQuery`) with sqlglot.
 
-Menghasilkan: tabel yang dibaca beserta aliasnya, kolom yang diproyeksikan (pass-through atau
-ekspresi) beserta kolom sumbernya, pemakaian `SELECT *`, dan kolom yang dirujuk di klausa lain
-(WHERE, JOIN, GROUP BY, HAVING, ORDER BY, subkueri). SQL yang gagal diurai ditandai `failed`
-sehingga perubahan pada tabel yang dirujuk diperlakukan konservatif (matriks D11).
+Produces: the tables read with their aliases, the projected columns (pass-through or
+expression) with their source columns, the use of `SELECT *`, and the columns referred to in
+other clauses (WHERE, JOIN, GROUP BY, HAVING, ORDER BY, subqueries). SQL that cannot be parsed
+is marked `failed`, so that changes to the referenced tables are treated conservatively (matrix D11).
 """
 from dataclasses import dataclass, field
 
@@ -18,7 +18,7 @@ CLAUSES = {'where': 'where', 'group': 'group_by', 'having': 'having', 'order': '
 class Projection:
     name: str
     kind: str                                   # passthrough | expression | star
-    sources: list[tuple[str | None, str]] = field(default_factory=list)   # (alias tabel, kolom)
+    sources: list[tuple[str | None, str]] = field(default_factory=list)   # (table alias, column)
     expression_sql: str | None = None
 
 
@@ -40,7 +40,7 @@ def analyze(sql: str) -> SqlAnalysis:
         tree = sqlglot.parse_one(sql)
         select = tree if isinstance(tree, exp.Select) else tree.find(exp.Select)
         if select is None:
-            raise ValueError('bukan SELECT')
+            raise ValueError('not a SELECT')
     except Exception:                                        # noqa: BLE001
         return SqlAnalysis(parse_status='failed')
 

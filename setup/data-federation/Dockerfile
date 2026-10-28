@@ -9,12 +9,12 @@ ENV TEIID_VERSION 16.0.0
 #COPY teiid-wildfly-$TEIID_VERSION-dist.zip $JBOSS_HOME 
 
 # Download and unzip Teiid server
-# oss.sonatype.org (OSSRH) sudah ditutup sejak 30 Juni 2025, sehingga
-# distribusi Teiid diambil dari Maven Central. Artefak yang sama
-# (org.teiid.wildfly:teiid-wildfly:<versi>:dist@zip).
-#   -f : gagal bila HTTP error (tidak menyimpan halaman error sebagai .zip)
-#   -L : ikuti redirect
-# Integritas berkas diperiksa dengan checksum .sha1 dari Maven Central.
+# oss.sonatype.org (OSSRH) was shut down on 30 June 2025, so the Teiid
+# distribution comes from Maven Central. It is the same artifact
+# (org.teiid.wildfly:teiid-wildfly:<version>:dist@zip).
+#   -f : fail on an HTTP error (do not save an error page as the .zip)
+#   -L : follow redirects
+# File integrity is checked against the .sha1 checksum from Maven Central.
 ARG MAVEN_REPO=https://repo1.maven.org/maven2
 RUN cd $JBOSS_HOME \
     && TEIID_ZIP=teiid-wildfly-$TEIID_VERSION-dist.zip \
@@ -74,9 +74,9 @@ WORKDIR ${JBOSS_HOME}
 #### CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
 
 COPY jdbc /opt/jboss/jdbc
-# Hanya skrip setup (driver JDBC, datasource, konfigurasi scanner) yang
-# dimasukkan ke image. VDB tidak di-bake ke image; VDB di-mount saat runtime
-# ke standalone/deployments (lihat docker-compose.yaml).
+# Only the setup script (JDBC drivers, datasources, scanner configuration) goes
+# into the image. The VDB is not baked into the image; it is mounted at runtime
+# into standalone/deployments (see docker-compose.yaml).
 COPY virtual-db-config/setup.cli /opt/jboss/data-federation/setup.cli
 
 RUN /bin/sh -c "${JBOSS_HOME}/bin/standalone.sh -c standalone-teiid.xml -b 0.0.0.0 -bmanagement 0.0.0.0 &" && \

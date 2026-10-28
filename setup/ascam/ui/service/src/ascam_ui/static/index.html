@@ -1,67 +1,67 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Konsol ASCAM</title>
+  <title>ASCAM Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="masuk" id="layar-masuk" hidden>
-    <form id="formulir-masuk" autocomplete="on">
+  <main class="login" id="login-screen" hidden>
+    <form id="login-form" autocomplete="on">
       <h1>ASCAM</h1>
-      <p class="redup">Masuk untuk memantau adaptasi federasi data dan memutuskan usulan perubahan.</p>
-      <div class="baris">
-        <label for="nama-pengguna">Nama pengguna</label>
-        <input id="nama-pengguna" name="username" autocomplete="username" required>
+      <p class="muted">Log in to monitor the adaptation of the data federation and decide on proposed changes.</p>
+      <div class="row">
+        <label for="username">User name</label>
+        <input id="username" name="username" autocomplete="username" required>
       </div>
-      <div class="baris">
-        <label for="kata-sandi">Kata sandi</label>
-        <input id="kata-sandi" name="password" type="password" autocomplete="current-password" required>
+      <div class="row">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
       </div>
-      <button class="utama-aksi" type="submit">Masuk</button>
-      <p class="pesan" id="pesan-masuk" role="alert"></p>
+      <button class="primary" type="submit">Log in</button>
+      <p class="message" id="login-message" role="alert"></p>
     </form>
   </main>
 
-  <div class="kerangka" id="konsol" hidden>
-    <nav class="navigasi" aria-label="Navigasi utama">
-      <div class="merek">
+  <div class="shell" id="console" hidden>
+    <nav class="nav" aria-label="Main navigation">
+      <div class="brand">
         <strong>ASCAM</strong>
-        <span>Konsol administrator</span>
+        <span>Administrator console</span>
       </div>
-      <a href="#/ringkasan" data-rute="ringkasan">Ringkasan</a>
-      <a href="#/persetujuan" data-rute="persetujuan">Persetujuan <span class="jumlah" id="jumlah-menunggu" hidden>0</span></a>
-      <a href="#/notifikasi" data-rute="notifikasi">Notifikasi <span class="jumlah peringatan" id="jumlah-notifikasi" hidden>0</span></a>
-      <a href="#/perubahan" data-rute="perubahan">Perubahan skema</a>
-      <a href="#/adaptasi" data-rute="adaptasi">Rencana dan eksekusi</a>
-      <a href="#/versi" data-rute="versi">Versi spesifikasi</a>
-      <a href="#/lineage" data-rute="lineage">Lineage kolom</a>
-      <a href="#/dampak" data-rute="dampak">Analisis dampak</a>
-      <a href="#/konfigurasi" data-rute="konfigurasi">Konfigurasi</a>
-      <a href="#/audit" data-rute="audit">Jejak audit</a>
-      <div class="bawah">
-        <div>Masuk sebagai <strong id="nama-admin"></strong></div>
-        <button class="kecil" id="tombol-keluar" type="button">Keluar</button>
+      <a href="#/overview" data-route="overview">Overview</a>
+      <a href="#/approvals" data-route="approvals">Approvals <span class="count" id="pending-count" hidden>0</span></a>
+      <a href="#/notifications" data-route="notifications">Notifications <span class="count warning" id="notification-count" hidden>0</span></a>
+      <a href="#/changes" data-route="changes">Schema changes</a>
+      <a href="#/plans" data-route="plans">Plans and executions</a>
+      <a href="#/versions" data-route="versions">Specification versions</a>
+      <a href="#/lineage" data-route="lineage">Column lineage</a>
+      <a href="#/impact" data-route="impact">Impact analysis</a>
+      <a href="#/configuration" data-route="configuration">Configuration</a>
+      <a href="#/audit" data-route="audit">Audit trail</a>
+      <div class="bottom">
+        <div>Logged in as <strong id="admin-name"></strong></div>
+        <button class="small" id="logout-button" type="button">Log out</button>
       </div>
     </nav>
-    <div class="utama">
-      <header class="bilah-atas">
-        <span class="obdf" id="nama-obdf">OBDF</span>
-        <span class="versi" id="versi-aktif">Memuat versi aktif</span>
-        <div class="kanan">
-          <span class="kecil" id="status-executor">Executor</span>
-          <button class="kecil" id="tombol-executor" type="button" hidden></button>
+    <div class="main">
+      <header class="topbar">
+        <span class="obdf" id="obdf-name">OBDF</span>
+        <span class="version" id="active-version">Loading the active version</span>
+        <div class="right">
+          <span class="small" id="executor-status">Executor</span>
+          <button class="small" id="executor-button" type="button" hidden></button>
         </div>
       </header>
-      <section class="isi" id="isi" aria-live="polite"></section>
+      <section class="content" id="content" aria-live="polite"></section>
     </div>
   </div>
 
-  <div class="kabar" id="kabar" role="status" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

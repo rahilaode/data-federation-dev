@@ -9,12 +9,13 @@ import yaml
 def main() -> None:
     parser = argparse.ArgumentParser(prog='ascam-knowledge')
     sub = parser.add_subparsers(dest='cmd', required=True)
-    serve = sub.add_parser('serve', help='menjalankan Knowledge Service')
+    serve = sub.add_parser('serve', help='run the Knowledge Service')
     serve.add_argument('--host', default=os.getenv('ASCAM_KNOWLEDGE_HOST', '0.0.0.0'))
     serve.add_argument('--port', type=int, default=int(os.getenv('ASCAM_KNOWLEDGE_PORT', '8000')))
-    apply = sub.add_parser('apply-config', help='menerapkan konfigurasi deklaratif')
+    apply = sub.add_parser('apply-config', help='apply the declarative configuration')
     apply.add_argument('file')
-    sub.add_parser('generate-key', help='membuat kunci enkripsi Fernet baru')
+    sub.add_parser('generate-key', help='create a new Fernet encryption key'
+)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 

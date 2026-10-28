@@ -1,4 +1,4 @@
-"""Uji koneksi target: perilaku pemeriksa, penyaringan rahasia, endpoint API."""
+"""Target connection checks: checker behaviour, secret redaction, API endpoints."""
 import datetime
 import json
 import uuid
@@ -9,12 +9,12 @@ import pytest
 from ascam_knowledge import connectors
 from ascam_knowledge.check_service import Hooks
 
-PASSWORD = 'Sandi-Rahasia-987'
+PASSWORD = 'Secret-Password-987'
 
 
-# ── server tiruan ───────────────────────────────────────────────────────────────
+# ── fake servers ────────────────────────────────────────────────────────────────
 def wildfly(valid_user='admin', state='running'):
-    """Management API tiruan dengan tantangan Digest seperti WildFly."""
+    """Fake management API with a Digest challenge like WildFly."""
     def handler(request: httpx.Request):
         auth = request.headers.get('authorization', '')
         if not auth.startswith('Digest '):
@@ -32,14 +32,14 @@ def wildfly(valid_user='admin', state='running'):
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-def agent_server(token='rahasia-token', artifacts=True):
-    """Agen Ontop tiruan: /health terbuka, /api/v1/artifacts memerlukan token."""
+def agent_server(token='secret-token', artifacts=True):
+    """Fake Ontop agent: /health is open, /api/v1/artifacts requires the token."""
     def handler(request: httpx.Request):
         if request.url.path == '/health':
             return httpx.Response(200, json={'status': 'ok', 'ontop_container': 'ontop',
                                              'artifacts': {'r2rml': True, 'ontology': True}})
         if request.headers.get('authorization') != f'Bearer {token}':
-            return httpx.Response(401, json={'detail': 'Token tidak valid'})
+            return httpx.Response(401, json={'detail': 'Invalid token'})
         if not artifacts:
             return httpx.Response(500)
         return httpx.Response(200, json=[{'kind': 'r2rml', 'sha256': 'a' * 64},
@@ -51,7 +51,7 @@ def sparql(status=200):
     def handler(request: httpx.Request):
         assert request.url.params['query'].startswith('ASK')
         if status != 200:
-            return httpx.Response(status, text='galat')
+            return httpx.Response(status, text='error')
         return httpx.Response(200, json={'head': {}, 'boolean': True})
     return httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -84,7 +84,7 @@ TEIID_EP = {'host': 'teiid', 'port': 9990, 'path': '/management'}
 ODBC_EP = {'host': 'teiid', 'port': 35432, 'options': {'vdb': 'government'}}
 
 
-# ── pemeriksa ───────────────────────────────────────────────────────────────────
+# ── checkers ────────────────────────────────────────────────────────────────────
 def test_teiid_mgmt_success_and_facts():
     r = connectors.check_teiid_mgmt(TEIID_EP, 'admin', PASSWORD, http=wildfly())
     assert r.ok and r.facts['product_version'] == '19.1.0.Final'
@@ -93,8 +93,8 @@ def test_teiid_mgmt_success_and_facts():
 
 
 def test_teiid_mgmt_rejected_credentials_and_bad_state():
-    denied = connectors.check_teiid_mgmt(TEIID_EP, 'bukan-admin', PASSWORD, http=wildfly())
-    assert not denied.ok and denied.summary == 'autentikasi ditolak'
+    denied = connectors.check_teiid_mgmt(TEIID_EP, 'not-admin', PASSWORD, http=wildfly())
+    assert not denied.ok and denied.summary == 'authentication rejected'
     stopped = connectors.check_teiid_mgmt(TEIID_EP, 'admin', PASSWORD, http=wildfly(state='restart-required'))
     assert not stopped.ok
 
@@ -108,7 +108,7 @@ def test_teiid_odbc_success():
 
 def test_secret_is_redacted_from_errors():
     def leaky_connect(**kw):
-        raise RuntimeError(f"gagal login user={kw['user']} password={kw['password']}")
+        raise RuntimeError(f"login failed user={kw['user']} password={kw['password']}")
     r = connectors.check_teiid_odbc(ODBC_EP, 'user1', PASSWORD, connect=leaky_connect)
     assert not r.ok and PASSWORD not in json.dumps(r.detail()) and '***' in r.error
 
@@ -127,11 +127,11 @@ def test_ontop_sparql():
 
 def test_ontop_agent_check_uses_token():
     ep = {'host': 'agent', 'port': 8000}
-    ok = connectors.check_ontop_agent(ep, token='rahasia-token', http=agent_server())
+    ok = connectors.check_ontop_agent(ep, token='secret-token', http=agent_server())
     assert ok.ok and ok.facts['artifact_digests'] == {'r2rml': 'a' * 12, 'ontology': 'b' * 12}
-    denied = connectors.check_ontop_agent(ep, token='token-salah', http=agent_server())
-    assert not denied.ok and denied.summary == 'token agen ditolak'
-    assert 'token-salah' not in json.dumps(denied.detail())
+    denied = connectors.check_ontop_agent(ep, token='wrong-token', http=agent_server())
+    assert not denied.ok and denied.summary == 'agent token rejected'
+    assert 'wrong-token' not in json.dumps(denied.detail())
 
 
 def test_kafka_reports_missing_topics():
@@ -151,11 +151,11 @@ def test_latency_is_measured():
 # ── endpoint API ────────────────────────────────────────────────────────────────
 @pytest.fixture
 def lab(api):
-    """OBDF dengan lima target dan hook tiruan."""
+    """OBDF with five targets and fake hooks."""
     class LabHooks(Hooks):
         http = None
         connect = staticmethod(lambda **kw: FakeConn(('government', 1, datetime.datetime(2026, 9, 17))))
-        kafka_admin_factory = staticmethod(lambda: FakeAdmin({'kemensos.topik'}))
+        kafka_admin_factory = staticmethod(lambda: FakeAdmin({'kemensos.topic'}))
 
     def transport(request: httpx.Request):
         if request.url.port == 9990:
@@ -167,9 +167,9 @@ def lab(api):
     name = f'lab-{uuid.uuid4().hex[:8]}'
     oid = api.post('/api/v1/obdf', json={'name': name}).json()['id']
     api.post(f'/api/v1/obdf/{oid}/sources', json={'logical_name': 'kemensos', 'dbms': 'postgresql',
-                                                  'database_name': 'kemensos', 'kafka_topic': 'kemensos.topik'})
+                                                  'database_name': 'kemensos', 'kafka_topic': 'kemensos.topic'})
     api.post(f'/api/v1/obdf/{oid}/sources', json={'logical_name': 'dukcapil', 'dbms': 'mysql',
-                                                  'database_name': 'dukcapil', 'kafka_topic': 'dukcapil.topik'})
+                                                  'database_name': 'dukcapil', 'kafka_topic': 'dukcapil.topic'})
     admin = api.post(f'/api/v1/obdf/{oid}/credentials',
                      json={'name': 'teiid-admin', 'username': 'admin', 'secret': PASSWORD}).json()['id']
     user = api.post(f'/api/v1/obdf/{oid}/credentials',
@@ -196,7 +196,7 @@ def lab(api):
 def test_check_single_target_records_result(api, lab):
     oid, ids = lab
     r = api.post(f"/api/v1/targets/{ids['mgmt']}/check")
-    assert r.status_code == 200 and r.json()['ok'] and r.json()['actor'] == 'ui:penguji'
+    assert r.status_code == 200 and r.json()['ok'] and r.json()['actor'] == 'ui:tester'
     assert PASSWORD not in r.text
     history = api.get(f"/api/v1/targets/{ids['mgmt']}/checks").json()
     assert history[0]['id'] == r.json()['id']
@@ -209,10 +209,10 @@ def test_check_all_skips_disabled_and_reports_kafka_gap(api, lab):
     assert set(by_target) == {ids['mgmt'], ids['odbc'], ids['ontop'], ids['kafka']}
     assert by_target[ids['mgmt']]['ok'] and by_target[ids['odbc']]['ok'] and by_target[ids['ontop']]['ok']
     kafka = by_target[ids['kafka']]
-    assert not kafka['ok'] and kafka['detail']['facts']['missing_topics'] == ['dukcapil.topik']
+    assert not kafka['ok'] and kafka['detail']['facts']['missing_topics'] == ['dukcapil.topic']
 
     disabled = api.post(f"/api/v1/targets/{ids['agent']}/check").json()
-    assert not disabled['ok'] and 'nonaktif' in disabled['detail']['summary']
+    assert not disabled['ok'] and 'disabled' in disabled['detail']['summary']
 
     status = {s['target']['name']: s['last_check'] for s in api.get(f'/api/v1/obdf/{oid}/status').json()}
     assert status['agent']['ok'] is False and status['mgmt']['ok'] is True
@@ -221,7 +221,7 @@ def test_check_all_skips_disabled_and_reports_kafka_gap(api, lab):
 
 
 def test_checks_in_one_request_have_distinct_timestamps(api, lab):
-    """Regresi: now() PostgreSQL = waktu awal transaksi; cap waktu uji harus dari saat uji."""
+    """Regression: PostgreSQL now() = start of the transaction; check timestamps must come from the check itself."""
     import time as _time
     oid, ids = lab
     slow = api.app_ref.state.check_hooks

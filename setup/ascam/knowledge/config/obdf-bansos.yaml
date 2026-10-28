@@ -1,10 +1,10 @@
-# Konfigurasi deklaratif OBDF studi kasus (D5). Diterapkan idempoten saat Knowledge Service
-# start; objek yang tidak disebut di sini tidak dihapus. Rahasia hanya dirujuk lewat berkas.
+# Declarative configuration of the case-study OBDF (D5). Applied idempotently when the Knowledge
+# Service starts; objects not named here are not deleted. Secrets are referenced only by file.
 version: 1
 
 obdf:
   name: bansos
-  description: Federasi data bantuan sosial (Kemensos PostgreSQL + Dukcapil MySQL)
+  description: Social assistance data federation (Kemensos PostgreSQL + Dukcapil MySQL)
 
 sources:
   - logical_name: kemensos
@@ -23,7 +23,7 @@ credentials:
   - name: teiid-user               # ApplicationRealm (transport ODBC, ADR-0003)
     username: user1
     secret_file: /run/secrets/obdf_teiid_user_password
-  - name: ontop-agent              # token bearer untuk agen di host Ontop
+  - name: ontop-agent              # bearer token for the agent on the Ontop host
     username: knowledge
     secret_file: /run/secrets/obdf_ontop_agent_token
 
@@ -42,18 +42,18 @@ targets:
   - kind: kafka
     name: schema-monitor-kafka
     endpoint: {host: kafka, port: 9092}
-  - kind: ontop_agent               # membaca ℳ dan 𝒯 di host Ontop; penerapan artefak pada F4
+  - kind: ontop_agent               # reads ℳ and 𝒯 on the Ontop host; artifact writes since F4
     name: ontop-agent
     endpoint: {host: ascam-ontop-agent, port: 8000}
     credential: ontop-agent
 
 settings:
-  # ADD selalu memerlukan persetujuan administrator lewat UI (ADR-0021, ADR-0024); nilai ini
-  # dipertahankan untuk kompatibilitas dan tidak lagi memengaruhi keputusan
+  # ADD always requires the administrator's approval in the UI (ADR-0021, ADR-0024); this value
+  # is kept for compatibility and no longer affects the decision
   adaptation.add_column: {mode: hitl}
-  adaptation.hitl_default: true                # sel yang tidak otomatis pada matriks D11
+  adaptation.hitl_default: true                # cells of matrix D11 that are not automatic
   retention.keep_versions: 5
-  teiid.keep_previous_vdb_versions: 1          # ADR-0004 langkah 7
+  teiid.keep_previous_vdb_versions: 1          # ADR-0004 step 7
 
 naming_policy:
   namespace: http://bansos.go.id/ontology/
@@ -61,9 +61,9 @@ naming_policy:
   on_collision: qualify_with_class
   label_language: id
 
-# Pemetaan tipe sumber -> Teiid -> XSD. owl2ql_compatible dihitung dari daftar datatype
-# OWL 2 QL (W3C OWL 2 Profiles, §3.2.3). Tipe bilangan bulat dipetakan ke xsd:integer
-# (bukan xsd:long/int/short yang tidak didukung OWL 2 QL).
+# Mapping of source types -> Teiid -> XSD. owl2ql_compatible is computed from the list of OWL 2 QL
+# datatypes (W3C OWL 2 Profiles, §3.2.3). Integer types map to xsd:integer (not xsd:long/int/short,
+# which OWL 2 QL does not support).
 type_mappings:
   - {dbms: postgresql, native_type: smallint, teiid_type: short, xsd_datatype: "xsd:integer"}
   - {dbms: postgresql, native_type: integer, teiid_type: integer, xsd_datatype: "xsd:integer"}

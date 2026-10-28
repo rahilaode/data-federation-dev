@@ -1,875 +1,875 @@
 'use strict';
-/* Konsol administrator ASCAM.
-   Seluruh data dinamis melewati esc() sebelum masuk ke HTML, karena isi event, rencana, dan
-   artefak berasal dari sistem lain dan tidak boleh dipercaya sebagai markup. */
+/* ASCAM administrator console.
+   All dynamic data passes through esc() before it enters the HTML, because the content of
+   events, plans, and artifacts comes from other systems and must not be trusted as markup. */
 
-const S = { user: null, obdf: null, oid: null, menunggu: null, belumDibaca: null, tipe: {}, events: {}, rencana: {}, pemutar: null };
-const LANGKAH = ['deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify', 'sync', 'rollback'];
-const NAMA_LANGKAH = {
-  deploy_vdb: 'Deploy VDB', validate: 'Validasi', start_ontop: 'Nyalakan Ontop siaga', switch: 'Pindah koneksi', reload_ontop: 'Muat ulang Ontop',
-  verify: 'Verifikasi', sync: 'Sinkronisasi', rollback: 'Pemulihan',
+const S = { user: null, obdf: null, oid: null, pending: null, unread: null, types: {}, events: {}, plans: {}, timer: null };
+const STEPS = ['deploy_vdb', 'validate', 'start_ontop', 'switch', 'reload_ontop', 'verify', 'sync', 'rollback'];
+const STEP_NAMES = {
+  deploy_vdb: 'Deploy VDB', validate: 'Validate', start_ontop: 'Start standby Ontop', switch: 'Switch connections', reload_ontop: 'Reload Ontop',
+  verify: 'Verify', sync: 'Synchronise', rollback: 'Roll back',
 };
-const LAPISAN = {
-  vdb: { nama: 'VDB (Σ_S)', kelas: 'sigma' },
-  r2rml: { nama: 'Mapping (ℳ)', kelas: 'mapping' },
-  ontology: { nama: 'Ontologi (𝒯)', kelas: 'ontologi' },
+const LAYERS = {
+  vdb: { name: 'VDB (Σ_S)', cls: 'sigma' },
+  r2rml: { name: 'Mapping (ℳ)', cls: 'mapping' },
+  ontology: { name: 'Ontology (𝒯)', cls: 'ontology' },
 };
 const STATUS = {
-  pending_approval: ['Menunggu persetujuan', 'keputusan'], approved: ['Disetujui', ''],
-  executed: ['Diterapkan', 'berhasil'], failed: ['Gagal', 'gagal'], rejected: ['Ditolak', 'gagal'],
-  superseded: ['Digantikan', ''], planned: ['Direncanakan', ''], ignored: ['Diabaikan', ''],
-  received: ['Diterima', ''], running: ['Berjalan', 'keputusan'], succeeded: ['Berhasil', 'berhasil'],
-  rolled_back: ['Dipulihkan', 'gagal'], active: ['Aktif', 'berhasil'], candidate: ['Kandidat', ''],
-  auto: ['Otomatis', ''], hitl: ['Perlu persetujuan', 'keputusan'],
-  notify: ['Notifikasi', 'peringatan'], notified: ['Diberitahukan', 'peringatan'], revised: ['Direvisi', ''],
+  pending_approval: ['Waiting for approval', 'decision'], approved: ['Approved', ''],
+  executed: ['Applied', 'success'], failed: ['Failed', 'failure'], rejected: ['Rejected', 'failure'],
+  superseded: ['Superseded', ''], planned: ['Planned', ''], ignored: ['Ignored', ''],
+  received: ['Received', ''], running: ['Running', 'decision'], succeeded: ['Succeeded', 'success'],
+  rolled_back: ['Rolled back', 'failure'], active: ['Active', 'success'], candidate: ['Candidate', ''],
+  auto: ['Automatic', ''], hitl: ['Needs approval', 'decision'],
+  notify: ['Notification', 'warning'], notified: ['Notified', 'warning'], revised: ['Revised', ''],
 };
-const LAPISAN_LINEAGE = [
-  { kunci: 'source', judul: 'Kolom sumber', kelas: 'sumber' },
-  { kunci: 'foreign', judul: 'Foreign table (Σ_S)', kelas: 'sigma' },
-  { kunci: 'view', judul: 'View (Σ_V)', kelas: 'sigma' },
-  { kunci: 'mapping', judul: 'TriplesMap (ℳ)', kelas: 'mapping' },
-  { kunci: 'ontology', judul: 'Property (𝒯)', kelas: 'ontologi' },
+const LINEAGE_LAYERS = [
+  { key: 'source', title: 'Source column', cls: 'source' },
+  { key: 'foreign', title: 'Foreign table (Σ_S)', cls: 'sigma' },
+  { key: 'view', title: 'View (Σ_V)', cls: 'sigma' },
+  { key: 'mapping', title: 'TriplesMap (ℳ)', cls: 'mapping' },
+  { key: 'ontology', title: 'Property (𝒯)', cls: 'ontology' },
 ];
-const PERAN = {
-  literal_value: 'nilai literal', iri_template: 'template IRI', join_key: 'kunci join', sql_predicate: 'predikat SQL',
-  dynamic_predicate: 'predikat dinamis', projection_only: 'hanya diproyeksikan',
-  maps_to: 'dipetakan ke property', name_in_source: 'NAMEINSOURCE', direct: 'langsung',
-  passthrough: 'pass-through', star: 'SELECT *', expression: 'ekspresi', predicate: 'klausa WHERE/JOIN',
+const ROLES = {
+  literal_value: 'literal value', iri_template: 'IRI template', join_key: 'join key', sql_predicate: 'SQL predicate',
+  dynamic_predicate: 'dynamic predicate', projection_only: 'projection only',
+  maps_to: 'mapped to property', name_in_source: 'NAMEINSOURCE', direct: 'direct',
+  passthrough: 'pass-through', star: 'SELECT *', expression: 'expression', predicate: 'WHERE/JOIN clause',
 };
 
-const JENIS_TARGET = {
-  teiid_mgmt: 'Manajemen Teiid', teiid_odbc: 'Teiid (ODBC)', ontop_sparql: 'Endpoint SPARQL Ontop',
+const TARGET_KINDS = {
+  teiid_mgmt: 'Teiid management', teiid_odbc: 'Teiid (ODBC)', ontop_sparql: 'Ontop SPARQL endpoint',
   ontop_agent: 'Ontop Agent', kafka: 'Kafka',
 };
-const BENTROK = { qualify_with_class: 'Tambahkan nama kelas pada IRI', hitl: 'Serahkan ke administrator' };
+const COLLISION = { qualify_with_class: 'Add the class name to the IRI', hitl: 'Leave it to the administrator' };
 
 const $ = (sel) => document.querySelector(sel);
-const isi = () => $('#isi');
+const content = () => $('#content');
 
-function esc(nilai) {
-  return String(nilai ?? '').replace(/[&<>"']/g, (c) => ({
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
-function tanda(status) {
-  const [teks, kelas] = STATUS[status] || [status || '-', ''];
-  return `<span class="tanda ${kelas}">${esc(teks)}</span>`;
+function badge(status) {
+  const [text, cls] = STATUS[status] || [status || '-', ''];
+  return `<span class="badge ${cls}">${esc(text)}</span>`;
 }
-function waktu(iso) {
+function time(iso) {
   if (!iso) return '-';
-  return new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
-function relatif(iso) {
+function relative(iso) {
   if (!iso) return '-';
-  const detik = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (detik < 60) return `${detik} detik lalu`;
-  if (detik < 3600) return `${Math.round(detik / 60)} menit lalu`;
-  if (detik < 86400) return `${Math.round(detik / 3600)} jam lalu`;
-  return waktu(iso);
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds} s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
+  return time(iso);
 }
-function durasi(ms) {
+function duration(ms) {
   if (ms === null || ms === undefined) return '-';
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} detik`;
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
-function pendek(iri) {
+function short(iri) {
   if (!iri) return '-';
   const s = String(iri);
   const i = Math.max(s.lastIndexOf('#'), s.lastIndexOf('/'));
   return i >= 0 ? s.slice(i + 1) : s;
 }
-function kabar(pesan, jenis = '', tautan = null) {
-  const el = $('#kabar');
-  el.className = `kabar ${jenis}`;
-  el.innerHTML = esc(pesan) + (tautan ? ` <a href="${esc(tautan[0])}">${esc(tautan[1])}</a>` : '');
+function toast(message, kind = '', link = null) {
+  const el = $('#toast');
+  el.className = `toast ${kind}`;
+  el.innerHTML = esc(message) + (link ? ` <a href="${esc(link[0])}">${esc(link[1])}</a>` : '');
   el.hidden = false;
-  clearTimeout(kabar.t);
-  kabar.t = setTimeout(() => { el.hidden = true; }, 6000);
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => { el.hidden = true; }, 6000);
 }
 
-async function api(path, opsi = {}) {
-  const kepala = { 'X-ASCAM-UI': '1' };
-  if (opsi.body !== undefined) kepala['Content-Type'] = 'application/json';
+async function api(path, options = {}) {
+  const headers = { 'X-ASCAM-UI': '1' };
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, {
-    method: opsi.method || 'GET', headers: kepala, credentials: 'same-origin',
-    body: opsi.body !== undefined ? JSON.stringify(opsi.body) : undefined,
+    method: options.method || 'GET', headers: headers, credentials: 'same-origin',
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
   if (res.status === 401 && !path.startsWith('/api/ui/login')) {
-    tampilkanMasuk();
-    throw new Error('Sesi berakhir. Silakan masuk kembali.');
+    showLogin();
+    throw new Error('Session expired. Please log in again.');
   }
-  const teks = await res.text();
+  const text = await res.text();
   let data = null;
-  try { data = teks ? JSON.parse(teks) : null; } catch { data = { detail: teks }; }
+  try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text }; }
   if (!res.ok) {
     const detail = data && data.detail;
-    throw new Error(typeof detail === 'string' ? detail : `Permintaan gagal (HTTP ${res.status})`);
+    throw new Error(typeof detail === 'string' ? detail : `Request failed (HTTP ${res.status})`);
   }
   return data;
 }
-const k = (path, opsi) => api(`/api/k/${path}`, opsi);
+const k = (path, options) => api(`/api/k/${path}`, options);
 
-/* ── penjelasan kejadian dan tindakan dalam kalimat biasa ─────────────────── */
-function objekEvent(s) {
-  const lokasi = [s.schema, s.table].filter(Boolean).join('.');
-  return `${s.source || '?'}: ${lokasi}`;
+/* ── events and actions explained in plain sentences ─────────────────────── */
+function eventObject(s) {
+  const location = [s.schema, s.table].filter(Boolean).join('.');
+  return `${s.source || '?'}: ${location}`;
 }
-function kalimatEvent(s) {
-  if (!s) return 'Perubahan skema';
-  const lokasi = objekEvent(s);
+function eventSentence(s) {
+  if (!s) return 'Schema change';
+  const location = eventObject(s);
   switch (s.operation) {
-    case 'add': return `Kolom baru ${s.column}${s.column_type ? ` (${s.column_type})` : ''} pada ${lokasi}`;
-    case 'drop': return `Kolom ${s.column} dihapus dari ${lokasi}`;
-    case 'rename': return `Kolom ${s.column} diganti nama menjadi ${s.new_column} pada ${lokasi}`;
-    default: return `Perubahan yang tidak didukung pada ${lokasi}`;
+    case 'add': return `New column ${s.column}${s.column_type ? ` (${s.column_type})` : ''} in ${location}`;
+    case 'drop': return `Column ${s.column} dropped from ${location}`;
+    case 'rename': return `Column ${s.column} renamed to ${s.new_column} in ${location}`;
+    default: return `Unsupported change in ${location}`;
   }
 }
-function rangeUntuk(tipe) {
-  if (!tipe) return null;
-  const dasar = String(tipe).toLowerCase().split('(')[0].trim();
-  return S.tipe[String(tipe).toLowerCase()] || S.tipe[dasar] || null;
+function rangeFor(type) {
+  if (!type) return null;
+  const base = String(type).toLowerCase().split('(')[0].trim();
+  return S.types[String(type).toLowerCase()] || S.types[base] || null;
 }
-function jelaskan(a, plan) {
+function explain(a, plan) {
   const p = a.params || {};
-  const tipeKolom = (plan.actions.find((x) => x.params && x.params.column_type) || {}).params?.column_type;
+  const columnType = (plan.actions.find((x) => x.params && x.params.column_type) || {}).params?.column_type;
   switch (`${a.artifact}:${a.operation}`) {
     case 'vdb:add_column':
-      return [`Tambahkan kolom ${p.column} pada tabel ${p.table}`, `Model VDB ${p.model}, tipe sumber ${p.column_type || '-'}; ditulis sebagai ALTER FOREIGN TABLE pada VDB versi baru`];
+      return [`Add column ${p.column} to table ${p.table}`, `VDB model ${p.model}, source type ${p.column_type || '-'}; written as ALTER FOREIGN TABLE in a new VDB version`];
     case 'vdb:drop_column':
-      return [`Hapus kolom ${p.column} dari tabel ${p.table}`, `Model VDB ${p.model}; versi VDB lama tetap tersedia untuk pemulihan`];
+      return [`Drop column ${p.column} from table ${p.table}`, `VDB model ${p.model}; the old VDB version remains available for rollback`];
     case 'vdb:alter_view':
-      return [`Keluarkan ${(p.removed_columns || []).join(', ')} dari view ${p.model}.${p.table}`, `Definisi baru: ${p.body}; ditulis sebagai ALTER VIEW pada VDB versi baru`];
+      return [`Remove ${(p.removed_columns || []).join(', ')} from view ${p.model}.${p.table}`, `New definition: ${p.body}; written as ALTER VIEW in a new VDB version`];
     case 'vdb:set_name_in_source':
-      return [`Arahkan ${p.table}.${p.column} ke nama baru di sumber, ${p.name_in_source}`, 'Nama kolom Teiid tidak berubah, sehingga mapping dan ontologi tetap utuh (strategi alias)'];
+      return [`Point ${p.table}.${p.column} to the new source name ${p.name_in_source}`, 'The Teiid column name does not change, so the mapping and the ontology stay intact (alias strategy)'];
     case 'ontology:add_datatype_property': {
-      const range = rangeUntuk(tipeKolom);
-      return [`Tambahkan property ${pendek(p.iri)}`, `IRI ${p.iri}; domain ${(p.domain || []).map(pendek).join(', ') || '-'}; range ${range || 'mengikuti pemetaan tipe'}`];
+      const range = rangeFor(columnType);
+      return [`Add property ${short(p.iri)}`, `IRI ${p.iri}; domain ${(p.domain || []).map(short).join(', ') || '-'}; range ${range || 'from the type mapping'}`];
     }
     case 'ontology:deprecate_property':
-      return [`Tandai ${pendek(p.predicate_iri)} sebagai usang`, 'Deklarasinya tetap ada dengan owl:deprecated, agar kueri lama tidak gagal'];
+      return [`Mark ${short(p.predicate_iri)} as deprecated`, 'Its declaration stays, with owl:deprecated, so that existing queries do not fail'];
     case 'ontology:keep_property':
-      return [`Pertahankan ${pendek(p.predicate_iri)}`, 'Property ini masih dipakai pemetaan lain'];
+      return [`Keep ${short(p.predicate_iri)}`, 'This property is still used by another mapping'];
     case 'r2rml:add_predicate_object_map':
-      return [`Petakan kolom ${p.column} ke property ${pendek(p.predicate_iri)}`, `Pada TriplesMap ${pendek(p.triples_map_iri) || p.table}; ditambahkan sebagai blok terkelola tanpa menulis ulang mapping`];
+      return [`Map column ${p.column} to property ${short(p.predicate_iri)}`, `In TriplesMap ${short(p.triples_map_iri) || p.table}; added as a managed block without rewriting the mapping`];
     case 'r2rml:remove_predicate_object_map':
-      return [`Hapus pemetaan ${pendek(p.predicate_iri)}`, `Dari ${pendek(p.triples_map_iri) || 'seluruh TriplesMap'}`];
+      return [`Remove the mapping of ${short(p.predicate_iri)}`, `From ${short(p.triples_map_iri) || 'every TriplesMap'}`];
     case 'r2rml:rewrite_logical_table':
-      return [`Keluarkan kolom ${p.column} dari kueri logical table`, `Pada ${pendek(p.triples_map_iri)}`];
+      return [`Remove column ${p.column} from the logical-table query`, `In ${short(p.triples_map_iri)}`];
     default:
       return [`${a.operation}`, JSON.stringify(p)];
   }
 }
-function daftarTindakan(plan) {
+function actionList(plan) {
   if (!plan.actions || !plan.actions.length) {
-    return '<p class="redup">Tidak ada tindakan otomatis. Perubahan ini harus ditangani administrator secara manual.</p>';
+    return '<p class="muted">No automatic actions. The administrator must handle this change by hand.</p>';
   }
-  return `<ul class="tindakan">${plan.actions.map((a) => {
-    const [judul, rinci] = jelaskan(a, plan);
-    const l = LAPISAN[a.artifact] || { nama: a.artifact, kelas: '' };
-    return `<li class="${esc(a.artifact)}"><span class="tanda ${l.kelas}">${esc(l.nama)}</span>
-      <div><strong>${esc(judul)}</strong><div class="rinci">${esc(rinci)}</div></div></li>`;
+  return `<ul class="action-list">${plan.actions.map((a) => {
+    const [title, detail] = explain(a, plan);
+    const l = LAYERS[a.artifact] || { name: a.artifact, cls: '' };
+    return `<li class="${esc(a.artifact)}"><span class="badge ${l.cls}">${esc(l.name)}</span>
+      <div><strong>${esc(title)}</strong><div class="detail">${esc(detail)}</div></div></li>`;
   }).join('')}</ul>`;
 }
-function daftarAlasan(alasan) {
-  if (!alasan || !alasan.length) return '<p class="redup">Tidak ada catatan.</p>';
-  return `<ul class="alasan">${alasan.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`;
+function reasonList(reasons) {
+  if (!reasons || !reasons.length) return '<p class="muted">No notes.</p>';
+  return `<ul class="reasons">${reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`;
 }
-function tabelPemakaian(impact) {
-  const baris = [];
+function usageTable(impact) {
+  const rows = [];
   for (const t of (impact && impact.targets) || []) {
     for (const u of t.usages || []) {
-      baris.push(`<tr><td>${esc(t.table)}.${esc(t.column)}</td><td>${esc(pendek(u.triples_map))}</td>
-        <td>${esc(u.role)}</td><td>${esc(pendek(u.predicate_iri))}</td><td>${esc(u.weakest_link)}</td></tr>`);
+      rows.push(`<tr><td>${esc(t.table)}.${esc(t.column)}</td><td>${esc(short(u.triples_map))}</td>
+        <td>${esc(u.role)}</td><td>${esc(short(u.predicate_iri))}</td><td>${esc(u.weakest_link)}</td></tr>`);
     }
   }
-  if (!baris.length) return '<p class="redup">Kolom ini belum dipakai mapping mana pun.</p>';
-  return `<div class="gulir"><table><thead><tr><th>Kolom Teiid</th><th>TriplesMap</th><th>Peran</th>
-    <th>Predikat</th><th>Tepi terlemah</th></tr></thead><tbody>${baris.join('')}</tbody></table></div>`;
+  if (!rows.length) return '<p class="muted">No mapping uses this column yet.</p>';
+  return `<div class="scroll"><table><thead><tr><th>Teiid column</th><th>TriplesMap</th><th>Role</th>
+    <th>Predicate</th><th>Weakest edge</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
-/* ── pemuatan data bersama ─────────────────────────────────────────────────── */
-async function muatTipe() {
-  if (Object.keys(S.tipe).length) return;
+/* ── shared data loading ───────────────────────────────────────────────────── */
+async function loadTypes() {
+  if (Object.keys(S.types).length) return;
   try {
-    for (const t of await k(`obdf/${S.oid}/type-mappings`)) S.tipe[t.native_type.toLowerCase()] = t.xsd_datatype;
-  } catch { /* opsional */ }
+    for (const t of await k(`obdf/${S.oid}/type-mappings`)) S.types[t.native_type.toLowerCase()] = t.xsd_datatype;
+  } catch { /* optional */ }
 }
-async function muatEvents() {
+async function loadEvents() {
   for (const e of await k(`obdf/${S.oid}/events?limit=200`)) S.events[e.id] = e;
 }
 
-/* ── halaman: ringkasan ────────────────────────────────────────────────────── */
-function batangLangkah(eksekusi) {
-  const langkah = (eksekusi.steps || []).filter((s) => s.detail && s.detail.duration_ms);
-  const total = langkah.reduce((n, s) => n + s.detail.duration_ms, 0) || 1;
-  const potong = langkah.map((s) => `<span class="l-${esc(s.name)}" style="width:${(100 * s.detail.duration_ms / total).toFixed(2)}%"
-      title="${esc(NAMA_LANGKAH[s.name] || s.name)}: ${esc(durasi(s.detail.duration_ms))}"></span>`).join('');
-  return `<div class="batang" role="img" aria-label="Durasi langkah eksekusi">${potong}</div>`;
+/* ── page: overview ────────────────────────────────────────────────────────── */
+function stepBar(execution) {
+  const steps = (execution.steps || []).filter((s) => s.detail && s.detail.duration_ms);
+  const total = steps.reduce((n, s) => n + s.detail.duration_ms, 0) || 1;
+  const pieces = steps.map((s) => `<span class="l-${esc(s.name)}" style="width:${(100 * s.detail.duration_ms / total).toFixed(2)}%"
+      title="${esc(STEP_NAMES[s.name] || s.name)}: ${esc(duration(s.detail.duration_ms))}"></span>`).join('');
+  return `<div class="bar" role="img" aria-label="Duration of the execution steps">${pieces}</div>`;
 }
-function legendaLangkah() {
-  return `<div class="legenda">${LANGKAH.map((n) => `<span><i class="l-${n}"></i>${esc(NAMA_LANGKAH[n])}</span>`).join('')}</div>`;
+function stepLegend() {
+  return `<div class="legend">${STEPS.map((n) => `<span><i class="l-${n}"></i>${esc(STEP_NAMES[n])}</span>`).join('')}</div>`;
 }
-function baris_eksekusi(e) {
-  return `<tr><td>${esc(e.plan_id)}</td><td>${tanda(e.status)}</td><td>${esc(waktu(e.started_at))}</td>
-    <td>${esc(durasi(e.timings && e.timings.total_ms))}</td><td>${batangLangkah(e)}</td></tr>`;
+function executionRow(e) {
+  return `<tr><td>${esc(e.plan_id)}</td><td>${badge(e.status)}</td><td>${esc(time(e.started_at))}</td>
+    <td>${esc(duration(e.timings && e.timings.total_ms))}</td><td>${stepBar(e)}</td></tr>`;
 }
 
-function ruteSekarang() {
-  return (location.hash.replace(/^#\//, '') || 'ringkasan').split('?')[0];
+function currentRoute() {
+  return (location.hash.replace(/^#\//, '') || 'overview').split('?')[0];
 }
-async function halamanRingkasan() {
-  const [r, sehat] = await Promise.all([api('/api/ui/overview'), api('/api/ui/health')]);
-  // pembaruan berkala yang selesai setelah pengguna pindah halaman tidak boleh menimpa halaman baru
-  if (RUTE[ruteSekarang()] && ruteSekarang() !== 'ringkasan') return;
+async function overviewPage() {
+  const [r, health] = await Promise.all([api('/api/ui/overview'), api('/api/ui/health')]);
+  // a periodic refresh that finishes after the user moved to another page must not overwrite it
+  if (ROUTES[currentRoute()] && currentRoute() !== 'overview') return;
   const ev = r.events[0];
-  const eks = r.executions[0];
-  const exe = sehat.executor || {};
-  const versi = r.active_version || {};
-  const pemberitahuan = r.notifications.filter((n) => !r.pending.some((p) => p.id === n.plan_id)).length;
-  const tahap = [
-    { nama: 'Monitor', nilai: r.events.length ? relatif(ev.received_at) : '-',
-      ket: ev ? kalimatEvent(ev.structured) : 'Belum ada perubahan skema', tautan: '#/perubahan' },
-    { nama: 'Analisis', nilai: ev ? (STATUS[ev.status] || [ev.status])[0] : '-',
-      ket: ev && ev.ignore_reason ? ev.ignore_reason : 'Dampak dihitung dari lineage kolom', tautan: '#/adaptasi' },
-    { nama: 'Keputusan', nilai: `${r.pending.length} menunggu`, perhatian: r.pending.length > 0 || pemberitahuan > 0,
-      ket: [r.pending.length ? 'Penambahan kolom menunggu persetujuan Anda' : 'Tidak ada usulan yang menunggu',
-        pemberitahuan ? `${pemberitahuan} notifikasi perubahan yang tidak diadaptasi` : ''].filter(Boolean).join('; '),
-      tautan: r.pending.length || !pemberitahuan ? '#/persetujuan' : '#/notifikasi' },
-    { nama: 'Eksekusi', nilai: eks ? (STATUS[eks.status] || [eks.status])[0] : '-', bermasalah: eks && ['failed', 'rolled_back'].includes(eks.status),
-      ket: eks ? `Rencana ${eks.plan_id}, ${durasi(eks.timings && eks.timings.total_ms)}${exe.paused ? '; executor dijeda' : ''}` : 'Belum ada eksekusi', tautan: '#/adaptasi' },
-    { nama: 'Pengetahuan', nilai: versi.version_no ? `Versi ${versi.version_no}` : '-',
-      ket: versi.teiid_vdb_name ? `VDB ${versi.teiid_vdb_name} v${versi.teiid_vdb_version}, ${versi.teiid_connection_type || ''}` : '', tautan: '#/versi' },
+  const ex = r.executions[0];
+  const exe = health.executor || {};
+  const version = r.active_version || {};
+  const notices = r.notifications.filter((n) => !r.pending.some((p) => p.id === n.plan_id)).length;
+  const stages = [
+    { name: 'Monitor', value: r.events.length ? relative(ev.received_at) : '-',
+      note: ev ? eventSentence(ev.structured) : 'No schema change yet', link: '#/changes' },
+    { name: 'Analyze', value: ev ? (STATUS[ev.status] || [ev.status])[0] : '-',
+      note: ev && ev.ignore_reason ? ev.ignore_reason : 'The impact is computed from the column lineage', link: '#/plans' },
+    { name: 'Plan', value: `${r.pending.length} waiting`, attention: r.pending.length > 0 || notices > 0,
+      note: [r.pending.length ? 'A column addition is waiting for your approval' : 'No proposal is waiting',
+        notices ? `${notices} notification(s) of changes that were not adapted` : ''].filter(Boolean).join('; '),
+      link: r.pending.length || !notices ? '#/approvals' : '#/notifications' },
+    { name: 'Execute', value: ex ? (STATUS[ex.status] || [ex.status])[0] : '-', troubled: ex && ['failed', 'rolled_back'].includes(ex.status),
+      note: ex ? `Plan ${ex.plan_id}, ${duration(ex.timings && ex.timings.total_ms)}${exe.paused ? '; executor paused' : ''}` : 'No execution yet', link: '#/plans' },
+    { name: 'Knowledge', value: version.version_no ? `Version ${version.version_no}` : '-',
+      note: version.teiid_vdb_name ? `VDB ${version.teiid_vdb_name} v${version.teiid_vdb_version}, ${version.teiid_connection_type || ''}` : '', link: '#/versions' },
   ];
-  const komponen = [
-    ['Knowledge', sehat.knowledge, (d) => d.status || (d._galat ? d._galat : 'siap')],
-    ['Orchestrator', sehat.orchestrator, (d) => d.state ? `${d.state}; ${d.messages ?? 0} pesan, ${d.events_sent ?? 0} event, ${d.skipped ?? 0} dilewati, ${d.failures ?? 0} gagal` : d._galat],
-    ['Executor', sehat.executor, (d) => d.state ? `${d.paused ? 'dijeda' : d.state}; ${d.executed ?? 0} diterapkan, ${d.rolled_back ?? 0} dipulihkan, ${d.failed ?? 0} gagal` : d._galat],
-    ['Ontop Agent', sehat.agent, (d) => d.status ? `${d.status}; artefak ${Object.entries(d.artifacts || {}).map(([a, b]) => `${a} ${b ? 'ada' : 'hilang'}`).join(', ')}` : d._galat],
+  const components = [
+    ['Knowledge', health.knowledge, (d) => d.status || (d._error ? d._error : 'ready')],
+    ['Orchestrator', health.orchestrator, (d) => d.state ? `${d.state}; ${d.messages ?? 0} message(s), ${d.events_sent ?? 0} event(s), ${d.skipped ?? 0} skipped, ${d.failures ?? 0} failed` : d._error],
+    ['Executor', health.executor, (d) => d.state ? `${d.paused ? 'paused' : d.state}; ${d.executed ?? 0} applied, ${d.rolled_back ?? 0} rolled back, ${d.failed ?? 0} failed` : d._error],
+    ['Ontop Agent', health.agent, (d) => d.status ? `${d.status}; artifacts ${Object.entries(d.artifacts || {}).map(([a, b]) => `${a} ${b ? 'present' : 'missing'}`).join(', ')}` : d._error],
   ];
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Ringkasan</h1>
-      <p class="redup">Keadaan siklus adaptasi ${esc(r.obdf.name)} dan komponen ASCAM. Diperbarui otomatis setiap lima detik.</p></div></div>
-    <nav class="siklus" aria-label="Siklus adaptasi">${tahap.map((t) => `
-      <a class="tahap ${t.perhatian ? 'perhatian' : ''} ${t.bermasalah ? 'bermasalah' : ''}" href="${t.tautan}">
-        <span class="nama">${esc(t.nama)}</span><span class="nilai">${esc(t.nilai)}</span>
-        <span class="keterangan">${esc(t.ket)}</span></a>`).join('')}</nav>
-    <div class="grid-dua" style="margin-top:1.25rem">
-      <div class="panel"><h3>Komponen ASCAM</h3><table><tbody>${komponen.map(([nama, d, f]) => {
-        const ok = d && !d._galat && !['failed', 'degraded'].includes(d.state) && d.status !== 'degraded';
-        return `<tr><td><strong>${esc(nama)}</strong></td><td>${ok ? '<span class="tanda berhasil">Sehat</span>' : '<span class="tanda gagal">Bermasalah</span>'}</td>
-          <td class="kecil redup">${esc(f(d || {}) || '-')}</td></tr>`;
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Overview</h1>
+      <p class="muted">State of the adaptation loop of ${esc(r.obdf.name)} and of the ASCAM components. Refreshed every five seconds.</p></div></div>
+    <nav class="cycle" aria-label="Adaptation loop">${stages.map((t) => `
+      <a class="stage ${t.attention ? 'attention' : ''} ${t.troubled ? 'troubled' : ''}" href="${t.link}">
+        <span class="name">${esc(t.name)}</span><span class="value">${esc(t.value)}</span>
+        <span class="note">${esc(t.note)}</span></a>`).join('')}</nav>
+    <div class="grid-two" style="margin-top:1.25rem">
+      <div class="panel"><h3>ASCAM components</h3><table><tbody>${components.map(([name, d, f]) => {
+        const ok = d && !d._error && !['failed', 'degraded'].includes(d.state) && d.status !== 'degraded';
+        return `<tr><td><strong>${esc(name)}</strong></td><td>${ok ? '<span class="badge success">Healthy</span>' : '<span class="badge failure">Problem</span>'}</td>
+          <td class="small muted">${esc(f(d || {}) || '-')}</td></tr>`;
       }).join('')}</tbody></table>
-      <p style="margin-top:1rem"><button class="kecil" id="periksa-target" type="button">Periksa koneksi Teiid, Ontop, dan Kafka</button></p>
-      <div id="hasil-periksa"></div></div>
-      <div class="panel"><h3>Perubahan skema terakhir</h3>${r.events.length ? `<table><tbody>${r.events.map((e) => `
-        <tr><td class="kecil redup waktu">${esc(relatif(e.received_at))}</td><td>${esc(kalimatEvent(e.structured))}</td><td>${tanda(e.status)}</td></tr>`).join('')}
-        </tbody></table>` : '<p class="kosong">Belum ada perubahan skema yang terdeteksi.</p>'}</div>
+      <p style="margin-top:1rem"><button class="small" id="check-targets" type="button">Check the connections to Teiid, Ontop, and Kafka</button></p>
+      <div id="check-results"></div></div>
+      <div class="panel"><h3>Latest schema changes</h3>${r.events.length ? `<table><tbody>${r.events.map((e) => `
+        <tr><td class="small muted time">${esc(relative(e.received_at))}</td><td>${esc(eventSentence(e.structured))}</td><td>${badge(e.status)}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="empty">No schema change detected yet.</p>'}</div>
     </div>
-    <div class="panel"><h3>Eksekusi terakhir</h3>${r.executions.length ? `<div class="gulir"><table>
-      <thead><tr><th>Rencana</th><th>Status</th><th>Mulai</th><th>Total</th><th>Durasi per langkah</th></tr></thead>
-      <tbody>${r.executions.map(baris_eksekusi).join('')}</tbody></table></div>${legendaLangkah()}` : '<p class="kosong">Belum ada rencana yang dieksekusi.</p>'}</div>`;
-  $('#periksa-target').addEventListener('click', periksaTarget);
+    <div class="panel"><h3>Latest executions</h3>${r.executions.length ? `<div class="scroll"><table>
+      <thead><tr><th>Plan</th><th>Status</th><th>Started</th><th>Total</th><th>Duration per step</th></tr></thead>
+      <tbody>${r.executions.map(executionRow).join('')}</tbody></table></div>${stepLegend()}` : '<p class="empty">No plan has been executed yet.</p>'}</div>`;
+  $('#check-targets').addEventListener('click', checkTargets);
 }
 
-async function periksaTarget() {
-  const tombol = $('#periksa-target');
-  tombol.disabled = true;
-  tombol.textContent = 'Memeriksa koneksi';
+async function checkTargets() {
+  const button = $('#check-targets');
+  button.disabled = true;
+  button.textContent = 'Checking connections';
   try {
-    const hasil = await k(`obdf/${S.oid}/checks`, { method: 'POST', body: {} });
-    $('#hasil-periksa').innerHTML = `<table style="margin-top:0.75rem"><tbody>${hasil.map((h) => `
-      <tr><td>${h.ok ? '<span class="tanda berhasil">Terhubung</span>' : '<span class="tanda gagal">Gagal</span>'}</td>
-      <td class="kecil">${esc(h.detail && h.detail.summary)}</td><td class="kecil redup">${esc(h.latency_ms)} ms</td></tr>`).join('')}</tbody></table>`;
-  } catch (e) { kabar(e.message, 'gagal'); }
-  tombol.disabled = false;
-  tombol.textContent = 'Periksa koneksi Teiid, Ontop, dan Kafka';
+    const result = await k(`obdf/${S.oid}/checks`, { method: 'POST', body: {} });
+    $('#check-results').innerHTML = `<table style="margin-top:0.75rem"><tbody>${result.map((h) => `
+      <tr><td>${h.ok ? '<span class="badge success">Connected</span>' : '<span class="badge failure">Failed</span>'}</td>
+      <td class="small">${esc(h.detail && h.detail.summary)}</td><td class="small muted">${esc(h.latency_ms)} ms</td></tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'failure'); }
+  button.disabled = false;
+  button.textContent = 'Check the connections to Teiid, Ontop, and Kafka';
 }
 
-/* ── halaman: persetujuan (hanya penambahan kolom, ADR-0024) ───────────────── */
-function camel(kolom) {
-  return String(kolom || '').split('_').map((b, i) => (i ? b.charAt(0).toUpperCase() + b.slice(1).toLowerCase() : b)).join('');
+/* ── page: approvals (column additions only, ADR-0024) ───────────────────── */
+function camel(column) {
+  return String(column || '').split('_').map((b, i) => (i ? b.charAt(0).toUpperCase() + b.slice(1).toLowerCase() : b)).join('');
 }
-function tautanLineage(plan) {
+function lineageLink(plan) {
   const s = (S.events[plan.event_id] || {}).structured;
   if (!s || !s.table) return '';
-  const q = new URLSearchParams({ sumber: s.source || '', tabel: s.table, kolom: s.column || '' });
-  return `<p style="margin-top:0.75rem"><a href="#/lineage?${esc(q.toString())}">Lihat jalurnya pada lineage kolom</a></p>`;
+  const q = new URLSearchParams({ source: s.source || '', table: s.table, column: s.column || '' });
+  return `<p style="margin-top:0.75rem"><a href="#/lineage?${esc(q.toString())}">See its paths in the column lineage</a></p>`;
 }
-function daftarTerdampak(plan, { tautan = true } = {}) {
+function affectedList(plan, { link = true } = {}) {
   const a = plan.impact && plan.impact.affected;
   if (!a) return '';
-  const kelompok = [['columns', 'Kolom (Σ_S)', 'sigma'], ['views', 'View (Σ_V)', 'sigma'],
-    ['triples_maps', 'TriplesMap (ℳ)', 'mapping'], ['predicates', 'Property (𝒯)', 'ontologi']]
-    .filter(([kunci]) => a[kunci] && a[kunci].length);
-  if (!kelompok.length) return '';
-  return `<section><h3>Elemen OBDF yang terdampak</h3><ul class="terdampak">${kelompok.map(([kunci, judul, kelas]) => `
-    <li><span class="tanda ${kelas}">${esc(judul)}</span><span>${a[kunci].map((x) => esc(['columns', 'views'].includes(kunci) ? x : pendek(x))).join(', ')}</span></li>`).join('')}</ul>
-    ${tautan ? tautanLineage(plan) : ''}</section>`;
+  const groups = [['columns', 'Columns (Σ_S)', 'sigma'], ['views', 'Views (Σ_V)', 'sigma'],
+    ['triples_maps', 'TriplesMaps (ℳ)', 'mapping'], ['predicates', 'Properties (𝒯)', 'ontology']]
+    .filter(([key]) => a[key] && a[key].length);
+  if (!groups.length) return '';
+  return `<section><h3>Affected OBDF elements</h3><ul class="affected">${groups.map(([key, title, cls]) => `
+    <li><span class="badge ${cls}">${esc(title)}</span><span>${a[key].map((x) => esc(['columns', 'views'].includes(key) ? x : short(x))).join(', ')}</span></li>`).join('')}</ul>
+    ${link ? lineageLink(plan) : ''}</section>`;
 }
-function formulirProperty(plan) {
+function propertyForm(plan) {
   const o = plan.impact && plan.impact.add_options;
   if (!o) return '';
   if (!o.triples_maps || !o.triples_maps.length || !o.namespace || !o.iri_template) {
-    return `<section><h3>Property baru di ontologi</h3><p class="redup">Tidak ada property yang dapat ditambahkan:
-      ${!o.triples_maps || !o.triples_maps.length ? 'tidak ada TriplesMap yang otomatis memuat kolom baru, sehingga persetujuan hanya menambah kolom pada VDB.' : 'kebijakan penamaan atau namespace ontologi belum diatur.'}</p></section>`;
+    return `<section><h3>New ontology property</h3><p class="muted">No property can be added:
+      ${!o.triples_maps || !o.triples_maps.length ? 'no TriplesMap exposes the new column by itself, so approval only adds the column to the VDB.' : 'the naming policy or the ontology namespace is not set.'}</p></section>`;
   }
   const id = esc(plan.id);
   const domain = o.proposed_domain || (o.classes || [])[0] || '';
-  return `<section><h3>Property baru di ontologi</h3>
-    <p class="redup kecil" style="margin-bottom:0.75rem">${o.proposed_iri ? 'Usulan ASCAM dari kebijakan penamaan. Ubah bila perlu; persetujuan dengan nama atau domain lain dicatat sebagai rencana revisi.'
-      : 'ASCAM tidak dapat mengusulkan nama yang bebas bentrok. Tentukan nama property sebelum menyetujui.'}</p>
-    <div class="baris-formulir">
-      <div><label for="prop-${id}">Nama property</label>
-        <input id="prop-${id}" data-property="${id}" value="${esc(o.proposed_iri ? pendek(o.proposed_iri) : '')}" placeholder="${esc(camel(o.column))}" maxlength="100" autocomplete="off" spellcheck="false"></div>
-      <div><label for="dom-${id}">Domain (kelas subjek)</label>${(o.classes || []).length
-        ? `<select id="dom-${id}" data-property="${id}">${o.classes.map((c) => `<option value="${esc(c)}" ${c === domain ? 'selected' : ''}>${esc(pendek(c))}</option>`).join('')}</select>`
-        : '<p class="kecil redup" style="padding-top:0.5rem">TriplesMap pengekspos tidak memberi kelas, sehingga property tanpa domain.</p>'}</div>
+  return `<section><h3>New ontology property</h3>
+    <p class="muted small" style="margin-bottom:0.75rem">${o.proposed_iri ? 'Proposal of ASCAM from the naming policy. Change it if needed; approving with another name or domain is recorded as a revised plan.'
+      : 'ASCAM cannot propose a name free of collisions. Choose the property name before approving.'}</p>
+    <div class="form-row">
+      <div><label for="prop-${id}">Property name</label>
+        <input id="prop-${id}" data-property="${id}" value="${esc(o.proposed_iri ? short(o.proposed_iri) : '')}" placeholder="${esc(camel(o.column))}" maxlength="100" autocomplete="off" spellcheck="false"></div>
+      <div><label for="dom-${id}">Domain (subject class)</label>${(o.classes || []).length
+        ? `<select id="dom-${id}" data-property="${id}">${o.classes.map((c) => `<option value="${esc(c)}" ${c === domain ? 'selected' : ''}>${esc(short(c))}</option>`).join('')}</select>`
+        : '<p class="small muted" style="padding-top:0.5rem">The exposing TriplesMaps give no class, so the property has no domain.</p>'}</div>
     </div>
-    <p class="kecil pratinjau-property" id="pratinjau-${id}"></p></section>`;
+    <p class="small property-preview" id="preview-${id}"></p></section>`;
 }
-function pilihanProperty(id) {
-  const plan = S.rencana[id];
+function propertyChoice(id) {
+  const plan = S.plans[id];
   const o = plan && plan.impact && plan.impact.add_options;
-  const masukan = $(`#prop-${id}`);
-  if (!o || !masukan) return null;
-  const pilih = $(`#dom-${id}`);
-  return { o, nama: masukan.value.trim(), domain: pilih ? pilih.value : null };
+  const input = $(`#prop-${id}`);
+  if (!o || !input) return null;
+  const select = $(`#dom-${id}`);
+  return { o, name: input.value.trim(), domain: select ? select.value : null };
 }
-function pratinjauProperty(id) {
-  const p = pilihanProperty(id);
+function propertyPreview(id) {
+  const p = propertyChoice(id);
   if (!p) return;
-  const el = $(`#pratinjau-${id}`);
-  if (!/^[A-Za-z_][A-Za-z0-9_-]{0,99}$/.test(p.nama)) {
-    el.innerHTML = '<span style="color:var(--gagal)">Nama diawali huruf atau garis bawah, lalu huruf, angka, garis bawah, atau tanda hubung.</span>';
+  const el = $(`#preview-${id}`);
+  if (!/^[A-Za-z_][A-Za-z0-9_-]{0,99}$/.test(p.name)) {
+    el.innerHTML = '<span style="color:var(--failure)">A name starts with a letter or underscore, followed by letters, digits, underscores, or hyphens.</span>';
     return;
   }
-  const iri = p.o.iri_template.replace('{namespace}', p.o.namespace).replace('{column_camel}', p.nama).replace('{column}', p.nama);
-  const tm = p.o.triples_maps.filter((t) => !p.domain || !t.classes.length || t.classes.includes(p.domain)).map((t) => pendek(t.iri));
-  el.innerHTML = `IRI <code>${esc(iri)}</code>; kolom ${esc(p.o.column)} dipetakan pada ${tm.length ? tm.map(esc).join(', ') : '<strong>tidak ada TriplesMap</strong>'}.`;
+  const iri = p.o.iri_template.replace('{namespace}', p.o.namespace).replace('{column_camel}', p.name).replace('{column}', p.name);
+  const tm = p.o.triples_maps.filter((t) => !p.domain || !t.classes.length || t.classes.includes(p.domain)).map((t) => short(t.iri));
+  el.innerHTML = `IRI <code>${esc(iri)}</code>; column ${esc(p.o.column)} is mapped in ${tm.length ? tm.map(esc).join(', ') : '<strong>no TriplesMap</strong>'}.`;
 }
 
-function dokumenUsulan(plan, { dapatDiputuskan, pratinjau = false }) {
+function proposalDocument(plan, { decidable, preview = false }) {
   const ev = S.events[plan.event_id];
-  const struktur = ev ? ev.structured : null;
-  const notifikasi = plan.decision === 'notify' || plan.status === 'notify';
-  const judulTindakan = notifikasi ? 'Tindakan ASCAM' : ['executed', 'failed'].includes(plan.status) ? 'Yang dilakukan ASCAM' : 'Yang akan dilakukan ASCAM';
-  const tindakan = notifikasi && !(plan.actions || []).length
-    ? '<p class="redup">ASCAM tidak mengubah OBDF untuk perubahan ini. Perbaiki spesifikasi secara manual pada elemen yang terdampak, lalu jalankan sinkronisasi agar Knowledge memuat versi barunya.</p>'
-    : daftarTindakan(plan);
-  const judulAlasan = dapatDiputuskan ? 'Mengapa butuh keputusan Anda' : notifikasi ? 'Mengapa tidak diadaptasi otomatis' : 'Catatan analisis';
-  return `<article class="usulan ${notifikasi ? 'pemberitahuan' : ''}" id="usulan-${esc(plan.id)}">
-    <header><h2>${esc(kalimatEvent(struktur))}</h2>${tanda(plan.status)}
-      <span class="kecil redup">${pratinjau ? `Pola ${esc(plan.pattern || '-')}, dihitung terhadap versi spesifikasi ${esc(plan.base_spec_version_id)}`
-        : `Rencana ${esc(plan.id)}${plan.revision_of ? ` (revisi rencana ${esc(plan.revision_of)})` : ''}, pola ${esc(plan.pattern || '-')}, disusun ${esc(relatif(plan.created_at))} di atas versi spesifikasi ${esc(plan.base_spec_version_id)}`}</span></header>
-    <section><h3>${judulTindakan}</h3>${tindakan}</section>
-    ${dapatDiputuskan ? formulirProperty(plan) : ''}
-    ${plan.reasons && plan.reasons.length ? `<section><h3>${judulAlasan}</h3>${daftarAlasan(plan.reasons)}</section>` : ''}
-    ${daftarTerdampak(plan)}
-    ${plan.impact && plan.impact.targets && plan.impact.targets.length ? `<section><h3>Pemakaian kolom saat ini</h3>${tabelPemakaian(plan.impact)}</section>` : ''}
-    ${dapatDiputuskan ? `<section class="keputusan-admin">
-      <div><label for="catatan-${esc(plan.id)}">Catatan keputusan (disimpan di jejak audit)</label>
-        <textarea id="catatan-${esc(plan.id)}" placeholder="Contoh: nama property sudah sesuai kaidah penamaan"></textarea></div>
-      <div class="tombol-grup">
-        <button class="tolak" type="button" data-putuskan="reject" data-plan="${esc(plan.id)}">Tolak</button>
-        <button class="setujui" type="button" data-putuskan="approve" data-plan="${esc(plan.id)}">Setujui dan terapkan</button>
-      </div></section>` : pratinjau ? '<p class="kecil redup" style="margin-top:1rem">Pratinjau. Tidak ada yang diubah pada OBDF.</p>'
-      : plan.decided_by ? `<p class="kecil redup" style="margin-top:1rem">Diputuskan oleh ${esc(plan.decided_by)} ${esc(relatif(plan.decided_at))}</p>` : ''}
+  const structured = ev ? ev.structured : null;
+  const notification = plan.decision === 'notify' || plan.status === 'notify';
+  const actionsTitle = notification ? 'ASCAM actions' : ['executed', 'failed'].includes(plan.status) ? 'What ASCAM did' : 'What ASCAM will do';
+  const actions = notification && !(plan.actions || []).length
+    ? '<p class="muted">ASCAM does not change the OBDF for this change. Repair the specification by hand at the affected elements, then run a sync so that Knowledge loads the new version.</p>'
+    : actionList(plan);
+  const reasonsTitle = decidable ? 'Why your decision is needed' : notification ? 'Why it was not adapted automatically' : 'Analysis notes';
+  return `<article class="proposal ${notification ? 'notice' : ''}" id="proposal-${esc(plan.id)}">
+    <header><h2>${esc(eventSentence(structured))}</h2>${badge(plan.status)}
+      <span class="small muted">${preview ? `Pattern ${esc(plan.pattern || '-')}, computed on specification version ${esc(plan.base_spec_version_id)}`
+        : `Plan ${esc(plan.id)}${plan.revision_of ? ` (revision of plan ${esc(plan.revision_of)})` : ''}, pattern ${esc(plan.pattern || '-')}, built ${esc(relative(plan.created_at))} on specification version ${esc(plan.base_spec_version_id)}`}</span></header>
+    <section><h3>${actionsTitle}</h3>${actions}</section>
+    ${decidable ? propertyForm(plan) : ''}
+    ${plan.reasons && plan.reasons.length ? `<section><h3>${reasonsTitle}</h3>${reasonList(plan.reasons)}</section>` : ''}
+    ${affectedList(plan)}
+    ${plan.impact && plan.impact.targets && plan.impact.targets.length ? `<section><h3>Current use of the column</h3>${usageTable(plan.impact)}</section>` : ''}
+    ${decidable ? `<section class="admin-decision">
+      <div><label for="note-${esc(plan.id)}">Decision note (kept in the audit trail)</label>
+        <textarea id="note-${esc(plan.id)}" placeholder="For example: the property name follows the naming rules"></textarea></div>
+      <div class="button-group">
+        <button class="reject" type="button" data-decide="reject" data-plan="${esc(plan.id)}">Reject</button>
+        <button class="approve" type="button" data-decide="approve" data-plan="${esc(plan.id)}">Approve and apply</button>
+      </div></section>` : preview ? '<p class="small muted" style="margin-top:1rem">Preview. Nothing in the OBDF is changed.</p>'
+      : plan.decided_by ? `<p class="small muted" style="margin-top:1rem">Decided by ${esc(plan.decided_by)} ${esc(relative(plan.decided_at))}</p>` : ''}
   </article>`;
 }
 
-async function halamanPersetujuan() {
-  await Promise.all([muatEvents(), muatTipe()]);
-  const [menunggu, semua] = await Promise.all([k(`obdf/${S.oid}/plans?status=pending_approval`),
+async function approvalsPage() {
+  await Promise.all([loadEvents(), loadTypes()]);
+  const [pending, all] = await Promise.all([k(`obdf/${S.oid}/plans?status=pending_approval`),
     k(`obdf/${S.oid}/plans?limit=40`)]);
-  for (const p of menunggu) S.rencana[p.id] = p;
-  const diputuskan = semua.filter((p) => p.decided_by && p.decision === 'hitl' && p.status !== 'revised').slice(0, 8);
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Persetujuan</h1>
-      <p class="redup">Penambahan kolom menambah property baru ke ontologi, sehingga selalu menunggu keputusan Anda. Periksa nama dan domain property serta tindakan pada setiap lapisan OBDF, lalu setujui atau tolak. Perubahan yang tidak dapat diadaptasi otomatis tidak muncul di sini, melainkan di halaman Notifikasi.</p></div></div>
-    ${menunggu.length ? menunggu.map((p) => dokumenUsulan(p, { dapatDiputuskan: true })).join('')
-      : '<div class="panel"><p class="kosong">Tidak ada usulan yang menunggu keputusan. Penambahan kolom pada tabel yang difederasikan akan muncul di sini.</p></div>'}
-    ${diputuskan.length ? `<div class="panel" style="margin-top:1.25rem"><h3>Keputusan terakhir</h3><table>
-      <thead><tr><th>Rencana</th><th>Perubahan</th><th>Keputusan</th><th>Oleh</th><th>Waktu</th></tr></thead><tbody>
-      ${diputuskan.map((p) => `<tr><td>${esc(p.id)}${p.revision_of ? ` <span class="kecil redup">revisi ${esc(p.revision_of)}</span>` : ''}</td><td>${esc(kalimatEvent((S.events[p.event_id] || {}).structured))}</td>
-        <td>${tanda(p.status)}</td><td>${esc(p.decided_by)}</td><td>${esc(waktu(p.decided_at))}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
-  isi().querySelectorAll('[data-putuskan]').forEach((b) => b.addEventListener('click', putuskan));
-  isi().querySelectorAll('[data-property]').forEach((el) => el.addEventListener('input', () => pratinjauProperty(el.dataset.property)));
-  menunggu.forEach((p) => pratinjauProperty(String(p.id)));
+  for (const p of pending) S.plans[p.id] = p;
+  const decided = all.filter((p) => p.decided_by && p.decision === 'hitl' && p.status !== 'revised').slice(0, 8);
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Approvals</h1>
+      <p class="muted">A column addition adds a new property to the ontology, so it always waits for your decision. Check the name and domain of the property and the actions on every OBDF layer, then approve or reject. Changes that cannot be adapted automatically do not appear here but on the Notifications page.</p></div></div>
+    ${pending.length ? pending.map((p) => proposalDocument(p, { decidable: true })).join('')
+      : '<div class="panel"><p class="empty">No proposal is waiting for a decision. Column additions to federated tables will appear here.</p></div>'}
+    ${decided.length ? `<div class="panel" style="margin-top:1.25rem"><h3>Latest decisions</h3><table>
+      <thead><tr><th>Plan</th><th>Change</th><th>Decision</th><th>By</th><th>Time</th></tr></thead><tbody>
+      ${decided.map((p) => `<tr><td>${esc(p.id)}${p.revision_of ? ` <span class="small muted">revision of ${esc(p.revision_of)}</span>` : ''}</td><td>${esc(eventSentence((S.events[p.event_id] || {}).structured))}</td>
+        <td>${badge(p.status)}</td><td>${esc(p.decided_by)}</td><td>${esc(time(p.decided_at))}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  content().querySelectorAll('[data-decide]').forEach((b) => b.addEventListener('click', decide));
+  content().querySelectorAll('[data-property]').forEach((el) => el.addEventListener('input', () => propertyPreview(el.dataset.property)));
+  pending.forEach((p) => propertyPreview(String(p.id)));
 }
 
-async function putuskan(ev) {
-  const tombol = ev.currentTarget;
-  const id = tombol.dataset.plan;
-  const aksi = tombol.dataset.putuskan;
-  const catatan = $(`#catatan-${id}`).value.trim();
-  if (aksi === 'reject' && !catatan) {
-    kabar('Tuliskan alasan penolakan pada catatan keputusan.', 'gagal');
-    $(`#catatan-${id}`).focus();
+async function decide(ev) {
+  const button = ev.currentTarget;
+  const id = button.dataset.plan;
+  const action = button.dataset.decide;
+  const note = $(`#note-${id}`).value.trim();
+  if (action === 'reject' && !note) {
+    toast('Write the reason for the rejection in the decision note.', 'failure');
+    $(`#note-${id}`).focus();
     return;
   }
-  const body = { note: catatan || null };
-  const pilihan = aksi === 'approve' ? pilihanProperty(id) : null;
-  if (pilihan) {
-    if (!pilihan.nama) {
-      kabar('Tentukan nama property sebelum menyetujui.', 'gagal');
+  const body = { note: note || null };
+  const choice = action === 'approve' ? propertyChoice(id) : null;
+  if (choice) {
+    if (!choice.name) {
+      toast('Choose the property name before approving.', 'failure');
       $(`#prop-${id}`).focus();
       return;
     }
-    body.property_name = pilihan.nama;
-    body.domain = pilihan.domain;
+    body.property_name = choice.name;
+    body.domain = choice.domain;
   }
-  isi().querySelectorAll(`[data-plan="${id}"]`).forEach((b) => { b.disabled = true; });
+  content().querySelectorAll(`[data-plan="${id}"]`).forEach((b) => { b.disabled = true; });
   try {
-    const hasil = await k(`plans/${id}/${aksi}`, { method: 'POST', body });
-    kabar(aksi === 'reject' ? 'Ditolak. Rencana tidak akan diterapkan.'
-      : hasil.revision_of ? `Disetujui dengan revisi sebagai rencana ${hasil.id}. Executor akan menerapkannya dalam beberapa detik.`
-        : 'Disetujui. Executor akan menerapkan rencana ini dalam beberapa detik.',
-    aksi === 'approve' ? 'keputusan' : '', aksi === 'approve' ? ['#/adaptasi', 'Pantau eksekusi'] : null);
-    await segarkanLencana();
-    await halamanPersetujuan();
+    const result = await k(`plans/${id}/${action}`, { method: 'POST', body });
+    toast(action === 'reject' ? 'Rejected. The plan will not be applied.'
+      : result.revision_of ? `Approved with a revision as plan ${result.id}. The Executor will apply it in a few seconds.`
+        : 'Approved. The Executor will apply this plan in a few seconds.',
+    action === 'approve' ? 'decision' : '', action === 'approve' ? ['#/plans', 'Follow the execution'] : null);
+    await refreshBadges();
+    await approvalsPage();
   } catch (e) {
-    kabar(e.message, 'gagal');
-    isi().querySelectorAll(`[data-plan="${id}"]`).forEach((b) => { b.disabled = false; });
+    toast(e.message, 'failure');
+    content().querySelectorAll(`[data-plan="${id}"]`).forEach((b) => { b.disabled = false; });
   }
 }
 
-/* ── halaman: notifikasi (DROP/RENAME yang tidak aman, ADR-0024) ───────────── */
-async function halamanNotifikasi() {
-  const semua = (location.hash.split('?')[1] || '').includes('semua=1');
-  await muatEvents();
-  const [daftar, rencana] = await Promise.all([
-    k(`obdf/${S.oid}/notifications?limit=100${semua ? '' : '&unread=true'}`), k(`obdf/${S.oid}/plans?limit=200`)]);
-  for (const p of rencana) S.rencana[p.id] = p;
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Notifikasi</h1>
-      <p class="redup">Perubahan skema yang tidak dapat dibuktikan aman tidak diadaptasi dan tidak perlu disetujui. ASCAM memberi tahu elemen OBDF yang terdampak; perbaiki spesifikasinya secara manual, lalu jalankan sinkronisasi.</p></div>
-      <div class="aksi"><a class="tombol" href="#/notifikasi${semua ? '' : '?semua=1'}">${semua ? 'Hanya yang belum dibaca' : 'Tampilkan semua'}</a>
-        <button class="utama-aksi" id="tombol-sync" type="button">Jalankan sinkronisasi</button></div></div>
-    ${daftar.length ? daftar.map((n) => kartuNotifikasi(n, S.rencana[n.plan_id])).join('')
-      : `<div class="panel"><p class="kosong">${semua ? 'Belum ada notifikasi.' : 'Tidak ada notifikasi yang belum dibaca.'}</p></div>`}`;
-  isi().querySelectorAll('[data-baca]').forEach((b) => b.addEventListener('click', async () => {
+/* ── page: notifications (unsafe DROP/RENAME, ADR-0024) ──────────────────── */
+async function notificationsPage() {
+  const all = (location.hash.split('?')[1] || '').includes('all=1');
+  await loadEvents();
+  const [listing, plans] = await Promise.all([
+    k(`obdf/${S.oid}/notifications?limit=100${all ? '' : '&unread=true'}`), k(`obdf/${S.oid}/plans?limit=200`)]);
+  for (const p of plans) S.plans[p.id] = p;
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Notifications</h1>
+      <p class="muted">Schema changes that cannot be shown to be safe are not adapted and need no approval. ASCAM reports the affected OBDF elements; repair the specification by hand, then run a sync.</p></div>
+      <div class="actions"><a class="btn" href="#/notifications${all ? '' : '?all=1'}">${all ? 'Unread only' : 'Show all'}</a>
+        <button class="primary" id="sync-button" type="button">Run a sync</button></div></div>
+    ${listing.length ? listing.map((n) => notificationCard(n, S.plans[n.plan_id])).join('')
+      : `<div class="panel"><p class="empty">${all ? 'No notifications yet.' : 'No unread notifications.'}</p></div>`}`;
+  content().querySelectorAll('[data-read]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
     try {
-      await k(`notifications/${b.dataset.baca}/ack`, { method: 'POST', body: {} });
-      await segarkanLencana();
-      await halamanNotifikasi();
-    } catch (e) { kabar(e.message, 'gagal'); b.disabled = false; }
+      await k(`notifications/${b.dataset.read}/ack`, { method: 'POST', body: {} });
+      await refreshBadges();
+      await notificationsPage();
+    } catch (e) { toast(e.message, 'failure'); b.disabled = false; }
   }));
-  $('#tombol-sync').addEventListener('click', async (ev) => {
-    const tombol = ev.currentTarget;
-    tombol.disabled = true;
+  $('#sync-button').addEventListener('click', async (ev) => {
+    const button = ev.currentTarget;
+    button.disabled = true;
     try {
       const h = await k(`obdf/${S.oid}/sync`, { method: 'POST', body: {} });
-      kabar(h.changed ? `Sinkronisasi selesai: versi spesifikasi ${h.version_no} kini aktif.` : 'Sinkronisasi selesai: spesifikasi OBDF tidak berubah.');
-      await segarkanLencana();
-    } catch (e) { kabar(e.message, 'gagal'); }
-    tombol.disabled = false;
+      toast(h.changed ? `Sync finished: specification version ${h.version_no} is now active.` : 'Sync finished: the OBDF specification did not change.');
+      await refreshBadges();
+    } catch (e) { toast(e.message, 'failure'); }
+    button.disabled = false;
   });
 }
 
-function kartuNotifikasi(n, plan) {
+function notificationCard(n, plan) {
   const s = plan ? (S.events[plan.event_id] || {}).structured : null;
-  const tindak = !plan ? '' : plan.status === 'pending_approval'
-    ? '<a class="tombol" href="#/persetujuan">Tinjau usulan</a>'
+  const followUp = !plan ? '' : plan.status === 'pending_approval'
+    ? '<a class="btn" href="#/approvals">Review the proposal</a>'
     : plan.decision === 'notify' && s && s.table
-      ? `<a class="tombol" href="#/lineage?${esc(new URLSearchParams({ sumber: s.source || '', tabel: s.table, kolom: s.column || '' }).toString())}">Lihat lineage</a>` : '';
-  const badan = plan && plan.decision === 'notify'
-    ? `${daftarTerdampak(plan, { tautan: false })}${plan.reasons && plan.reasons.length ? `<section><h3>Mengapa tidak diadaptasi otomatis</h3>${daftarAlasan(plan.reasons)}</section>` : ''}`
+      ? `<a class="btn" href="#/lineage?${esc(new URLSearchParams({ source: s.source || '', table: s.table, column: s.column || '' }).toString())}">See the lineage</a>` : '';
+  const body = plan && plan.decision === 'notify'
+    ? `${affectedList(plan, { link: false })}${plan.reasons && plan.reasons.length ? `<section><h3>Why it was not adapted automatically</h3>${reasonList(plan.reasons)}</section>` : ''}`
     : `<p style="margin-top:0.75rem">${esc(n.message)}</p>`;
-  return `<article class="usulan ${plan && plan.decision === 'notify' ? 'pemberitahuan' : ''}">
-    <header><h2>${esc(s ? kalimatEvent(s) : 'Pemberitahuan')}</h2>${plan ? tanda(plan.status) : tanda(n.severity)}
-      <span class="kecil redup">${esc(relatif(n.created_at))}${plan ? `, rencana ${esc(plan.id)}` : ''}${n.acknowledged ? `; dibaca oleh ${esc(n.acknowledged_by)}` : ''}</span></header>
-    ${badan}
-    <div class="tombol-grup" style="margin-top:1rem">${tindak}${n.acknowledged ? '' : `<button type="button" data-baca="${esc(n.id)}">Tandai sudah dibaca</button>`}</div>
+  return `<article class="proposal ${plan && plan.decision === 'notify' ? 'notice' : ''}">
+    <header><h2>${esc(s ? eventSentence(s) : 'Notification')}</h2>${plan ? badge(plan.status) : badge(n.severity)}
+      <span class="small muted">${esc(relative(n.created_at))}${plan ? `, plan ${esc(plan.id)}` : ''}${n.acknowledged ? `; read by ${esc(n.acknowledged_by)}` : ''}</span></header>
+    ${body}
+    <div class="button-group" style="margin-top:1rem">${followUp}${n.acknowledged ? '' : `<button type="button" data-read="${esc(n.id)}">Mark as read</button>`}</div>
   </article>`;
 }
 
-/* ── halaman: lineage kolom spesifikasi aktif ──────────────────────────────── */
-function lapisanSimpul(n) {
+/* ── page: column lineage of the active specification ──────────────────────── */
+function nodeLayer(n) {
   if (n.layer === 'sigma') return n.kind === 'view_column' ? 'view' : 'foreign';
   return n.layer;
 }
-async function halamanLineage() {
+async function lineagePage() {
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
   const data = await k(`obdf/${S.oid}/lineage`);
-  const simpul = Object.fromEntries(data.nodes.map((n) => [n.id, n]));
-  const tabel = [...new Set(data.paths.map((p) => { const n = simpul[p.nodes[0]]; return `${n.source}|${n.table}`; }))].sort();
-  const pilihTabel = q.get('sumber') && q.get('tabel') ? `${q.get('sumber')}|${q.get('tabel')}` : tabel[0];
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Lineage kolom</h1>
-      <p class="redup">Jalur setiap kolom sumber sampai property ontologi pada versi spesifikasi ${esc(data.version_no)} yang sedang aktif. Pilih sebuah simpul untuk menyorot semua jalur yang melewatinya; kumpulan jalur itulah yang terdampak bila kolomnya dihapus atau diganti nama.</p></div></div>
-    <div class="panel"><div class="baris-formulir" style="margin-bottom:0">
-      <div><label for="l-tabel">Tabel sumber</label><select id="l-tabel">
-        ${tabel.map((t) => { const [a, b] = t.split('|'); return `<option value="${esc(t)}" ${t === pilihTabel ? 'selected' : ''}>${esc(a)}: ${esc(b)}</option>`; }).join('')}
-        <option value="*" ${pilihTabel === '*' ? 'selected' : ''}>Semua tabel</option></select></div>
-      <div><label for="l-kolom">Sorot kolom sumber</label><select id="l-kolom"></select></div>
+  const nodes = Object.fromEntries(data.nodes.map((n) => [n.id, n]));
+  const tables = [...new Set(data.paths.map((p) => { const n = nodes[p.nodes[0]]; return `${n.source}|${n.table}`; }))].sort();
+  const chosenTable = q.get('source') && q.get('table') ? `${q.get('source')}|${q.get('table')}` : tables[0];
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Column lineage</h1>
+      <p class="muted">The path of every source column to an ontology property in the active specification version ${esc(data.version_no)}. Select a node to highlight all paths through it; those paths are what is affected when its column is dropped or renamed.</p></div></div>
+    <div class="panel"><div class="form-row" style="margin-bottom:0">
+      <div><label for="l-table">Source table</label><select id="l-table">
+        ${tables.map((t) => { const [a, b] = t.split('|'); return `<option value="${esc(t)}" ${t === chosenTable ? 'selected' : ''}>${esc(a)}: ${esc(b)}</option>`; }).join('')}
+        <option value="*" ${chosenTable === '*' ? 'selected' : ''}>All tables</option></select></div>
+      <div><label for="l-column">Highlight source column</label><select id="l-column"></select></div>
     </div></div>
-    <div class="panel lineage-panel"><div class="lineage" id="lineage"></div>${legendaLineage()}</div>
-    <div class="panel" id="lineage-rincian"></div>`;
-  const gambar = () => {
-    const t = $('#l-tabel').value;
-    const jalur = data.paths.filter((p) => { const n = simpul[p.nodes[0]]; return t === '*' || `${n.source}|${n.table}` === t; });
-    const kolom = [...new Set(jalur.map((p) => simpul[p.nodes[0]].column))].sort();
-    const sorot = q.get('kolom') && kolom.includes(q.get('kolom')) ? q.get('kolom') : '';
-    q.delete('kolom');
-    $('#l-kolom').innerHTML = `<option value="">Tidak ada</option>${kolom.map((c) => `<option value="${esc(c)}" ${c === sorot ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
-    gambarLineage(jalur, simpul, data.edges);
-    const awal = jalur.find((p) => simpul[p.nodes[0]].column === sorot);
-    sorotLineage(awal ? awal.nodes[0] : null);
+    <div class="panel lineage-panel"><div class="lineage" id="lineage"></div>${lineageLegend()}</div>
+    <div class="panel" id="lineage-detail"></div>`;
+  const draw = () => {
+    const t = $('#l-table').value;
+    const paths = data.paths.filter((p) => { const n = nodes[p.nodes[0]]; return t === '*' || `${n.source}|${n.table}` === t; });
+    const columns = [...new Set(paths.map((p) => nodes[p.nodes[0]].column))].sort();
+    const highlighted = q.get('column') && columns.includes(q.get('column')) ? q.get('column') : '';
+    q.delete('column');
+    $('#l-column').innerHTML = `<option value="">None</option>${columns.map((c) => `<option value="${esc(c)}" ${c === highlighted ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+    drawLineage(paths, nodes, data.edges);
+    const start = paths.find((p) => nodes[p.nodes[0]].column === highlighted);
+    highlightLineage(start ? start.nodes[0] : null);
   };
-  $('#l-tabel').addEventListener('change', gambar);
-  $('#l-kolom').addEventListener('change', () => {
-    const c = $('#l-kolom').value;
-    const awal = S.lineage.jalur.find((p) => S.lineage.simpul[p.nodes[0]].column === c);
-    sorotLineage(c && awal ? awal.nodes[0] : null);
+  $('#l-table').addEventListener('change', draw);
+  $('#l-column').addEventListener('change', () => {
+    const c = $('#l-column').value;
+    const start = S.lineage.paths.find((p) => S.lineage.nodes[p.nodes[0]].column === c);
+    highlightLineage(c && start ? start.nodes[0] : null);
   });
-  gambar();
+  draw();
 }
 
-function legendaLineage() {
-  return `<div class="legenda">
-    <span><i class="garis-l"></i>Pass-through atau tepi langsung</span>
-    <span><i class="garis-l lemah"></i>Ekspresi atau predikat SQL (tidak aman untuk adaptasi otomatis)</span>
-    <span><i class="kotak-l tak-terpakai"></i>Kolom yang tidak dipetakan ke ontologi</span>
-    <span><i class="kotak-l usang"></i>Property usang (owl:deprecated)</span></div>`;
+function lineageLegend() {
+  return `<div class="legend">
+    <span><i class="edge-l"></i>Pass-through or direct edge</span>
+    <span><i class="edge-l weak"></i>Expression or SQL predicate (not safe for automatic adaptation)</span>
+    <span><i class="box-l unused"></i>Column not mapped to the ontology</span>
+    <span><i class="box-l deprecated"></i>Deprecated property (owl:deprecated)</span></div>`;
 }
 
-const LEMAH = new Set(['expression', 'predicate', 'iri_template', 'join_key', 'sql_predicate', 'dynamic_predicate']);
-function gambarLineage(jalur, simpul, edges) {
-  const wadah = $('#lineage');
-  const dipakai = new Set(jalur.flatMap((p) => p.nodes));
-  const urutan = new Map();
-  jalur.forEach((p) => p.nodes.forEach((id) => { if (!urutan.has(id)) urutan.set(id, urutan.size); }));
-  const kolomTakTerpakai = new Set(jalur.filter((p) => p.role === null).map((p) => p.nodes[1]));
-  wadah.innerHTML = `<svg class="lineage-garis" aria-hidden="true"></svg>${LAPISAN_LINEAGE.map((l) => {
-    const isiLapisan = [...dipakai].filter((id) => lapisanSimpul(simpul[id]) === l.kunci).sort((a, b) => urutan.get(a) - urutan.get(b));
-    return `<div class="lineage-kolom"><h3 class="kecil">${esc(l.judul)}</h3>${isiLapisan.map((id) => {
-      const n = simpul[id];
+const WEAK = new Set(['expression', 'predicate', 'iri_template', 'join_key', 'sql_predicate', 'dynamic_predicate']);
+function drawLineage(paths, nodes, edges) {
+  const container = $('#lineage');
+  const used = new Set(paths.flatMap((p) => p.nodes));
+  const order = new Map();
+  paths.forEach((p) => p.nodes.forEach((id) => { if (!order.has(id)) order.set(id, order.size); }));
+  const unusedColumns = new Set(paths.filter((p) => p.role === null).map((p) => p.nodes[1]));
+  container.innerHTML = `<svg class="lineage-edges" aria-hidden="true"></svg>${LINEAGE_LAYERS.map((l) => {
+    const layerNodes = [...used].filter((id) => nodeLayer(nodes[id]) === l.key).sort((a, b) => order.get(a) - order.get(b));
+    return `<div class="lineage-column"><h3 class="small">${esc(l.title)}</h3>${layerNodes.map((id) => {
+      const n = nodes[id];
       const label = n.kind === 'source_column' ? n.column : n.kind.endsWith('_column') ? `${n.table.split('.').pop()}.${n.column}` : n.label;
-      const kelas = [l.kelas, kolomTakTerpakai.has(id) ? 'tak-terpakai' : '', n.deprecated ? 'usang' : ''].join(' ');
-      return `<button type="button" class="simpul ${kelas}" data-simpul="${esc(id)}" title="${esc(n.iri || n.label)}">${esc(label)}</button>`;
-    }).join('') || '<p class="kecil redup">-</p>'}</div>`;
+      const cls = [l.cls, unusedColumns.has(id) ? 'unused' : '', n.deprecated ? 'deprecated' : ''].join(' ');
+      return `<button type="button" class="node ${cls}" data-node="${esc(id)}" title="${esc(n.iri || n.label)}">${esc(label)}</button>`;
+    }).join('') || '<p class="small muted">-</p>'}</div>`;
   }).join('')}`;
-  S.lineage = { jalur, simpul, edges: edges.filter((e) => dipakai.has(e.from) && dipakai.has(e.to)), terpilih: null };
-  wadah.querySelectorAll('[data-simpul]').forEach((b) => b.addEventListener('click', () => {
-    sorotLineage(S.lineage.terpilih === b.dataset.simpul ? null : b.dataset.simpul);
+  S.lineage = { paths, nodes, edges: edges.filter((e) => used.has(e.from) && used.has(e.to)), selected: null };
+  container.querySelectorAll('[data-node]').forEach((b) => b.addEventListener('click', () => {
+    highlightLineage(S.lineage.selected === b.dataset.node ? null : b.dataset.node);
   }));
-  garisLineage();
+  lineageEdges();
 }
 
-function garisLineage() {
-  const wadah = $('#lineage');
-  if (!wadah || !S.lineage) return;
-  const svg = wadah.querySelector('svg');
-  const kotak = wadah.getBoundingClientRect();
-  svg.setAttribute('width', wadah.scrollWidth);
-  svg.setAttribute('height', wadah.scrollHeight);
-  const titik = (id, sisi) => {
-    const el = wadah.querySelector(`[data-simpul="${CSS.escape(id)}"]`);
+function lineageEdges() {
+  const container = $('#lineage');
+  if (!container || !S.lineage) return;
+  const svg = container.querySelector('svg');
+  const box = container.getBoundingClientRect();
+  svg.setAttribute('width', container.scrollWidth);
+  svg.setAttribute('height', container.scrollHeight);
+  const point = (id, side) => {
+    const el = container.querySelector(`[data-node="${CSS.escape(id)}"]`);
     if (!el) return null;
     const r = el.getBoundingClientRect();
-    return [(sisi === 'kanan' ? r.right : r.left) - kotak.left + wadah.scrollLeft, r.top + r.height / 2 - kotak.top + wadah.scrollTop];
+    return [(side === 'right' ? r.right : r.left) - box.left + container.scrollLeft, r.top + r.height / 2 - box.top + container.scrollTop];
   };
-  const terang = S.lineage.terang || null;
+  const lit = S.lineage.lit || null;
   svg.innerHTML = S.lineage.edges.map((e) => {
-    const a = titik(e.from, 'kanan');
-    const b = titik(e.to, 'kiri');
+    const a = point(e.from, 'right');
+    const b = point(e.to, 'left');
     if (!a || !b) return '';
     const dx = Math.max(24, (b[0] - a[0]) / 2);
-    const kelas = [LEMAH.has(e.kind) ? 'lemah' : '', terang ? (terang.has(`${e.from}>${e.to}`) ? 'terang' : 'pudar') : ''].join(' ');
-    return `<path class="${kelas}" d="M${a[0]},${a[1]} C${a[0] + dx},${a[1]} ${b[0] - dx},${b[1]} ${b[0]},${b[1]}"><title>${esc(PERAN[e.kind] || e.kind)}</title></path>`;
+    const cls = [WEAK.has(e.kind) ? 'weak' : '', lit ? (lit.has(`${e.from}>${e.to}`) ? 'highlight' : 'faded') : ''].join(' ');
+    return `<path class="${cls}" d="M${a[0]},${a[1]} C${a[0] + dx},${a[1]} ${b[0] - dx},${b[1]} ${b[0]},${b[1]}"><title>${esc(ROLES[e.kind] || e.kind)}</title></path>`;
   }).join('');
 }
 
-function sorotLineage(id) {
+function highlightLineage(id) {
   const L = S.lineage;
-  L.terpilih = id;
-  const kena = id ? L.jalur.filter((p) => p.nodes.includes(id)) : [];
-  L.terang = id ? new Set(kena.flatMap((p) => p.nodes.slice(1).map((n, i) => `${p.nodes[i]}>${n}`))) : null;
-  const simpulTerang = new Set(kena.flatMap((p) => p.nodes));
-  $('#lineage').querySelectorAll('[data-simpul]').forEach((b) => {
-    b.classList.toggle('terang', simpulTerang.has(b.dataset.simpul));
-    b.classList.toggle('pudar', Boolean(id) && !simpulTerang.has(b.dataset.simpul));
-    b.setAttribute('aria-pressed', b.dataset.simpul === id ? 'true' : 'false');
+  L.selected = id;
+  const hit = id ? L.paths.filter((p) => p.nodes.includes(id)) : [];
+  L.lit = id ? new Set(hit.flatMap((p) => p.nodes.slice(1).map((n, i) => `${p.nodes[i]}>${n}`))) : null;
+  const litNodes = new Set(hit.flatMap((p) => p.nodes));
+  $('#lineage').querySelectorAll('[data-node]').forEach((b) => {
+    b.classList.toggle('highlight', litNodes.has(b.dataset.node));
+    b.classList.toggle('faded', Boolean(id) && !litNodes.has(b.dataset.node));
+    b.setAttribute('aria-pressed', b.dataset.node === id ? 'true' : 'false');
   });
-  garisLineage();
-  const rincian = $('#lineage-rincian');
+  lineageEdges();
+  const detail = $('#lineage-detail');
   if (!id) {
-    rincian.innerHTML = '<p class="redup">Pilih simpul pada lineage untuk melihat jalur yang melewatinya.</p>';
+    detail.innerHTML = '<p class="muted">Select a node in the lineage to see the paths through it.</p>';
     return;
   }
-  rincian.innerHTML = `<h3>${esc(kena.length)} jalur melewati ${esc(L.simpul[id].label)}</h3><div class="gulir"><table>
-    <thead><tr><th>Jalur</th><th>Peran di mapping</th><th>Tepi terlemah</th></tr></thead><tbody>
-    ${kena.map((p) => `<tr><td>${p.nodes.map((n) => esc(L.simpul[n].label)).join(' <span class="redup">⊳</span> ')}</td>
-      <td>${p.role ? esc(PERAN[p.role] || p.role) : '<span class="redup">tidak dipetakan</span>'}</td>
-      <td>${p.weakest_link ? `<span class="${LEMAH.has(p.weakest_link) ? 'tanda peringatan' : ''}">${esc(PERAN[p.weakest_link] || p.weakest_link)}</span>` : '-'}</td></tr>`).join('')}
+  detail.innerHTML = `<h3>${esc(hit.length)} path(s) pass through ${esc(L.nodes[id].label)}</h3><div class="scroll"><table>
+    <thead><tr><th>Path</th><th>Role in the mapping</th><th>Weakest edge</th></tr></thead><tbody>
+    ${hit.map((p) => `<tr><td>${p.nodes.map((n) => esc(L.nodes[n].label)).join(' <span class="muted">⊳</span> ')}</td>
+      <td>${p.role ? esc(ROLES[p.role] || p.role) : '<span class="muted">not mapped</span>'}</td>
+      <td>${p.weakest_link ? `<span class="${WEAK.has(p.weakest_link) ? 'badge warning' : ''}">${esc(ROLES[p.weakest_link] || p.weakest_link)}</span>` : '-'}</td></tr>`).join('')}
     </tbody></table></div>`;
 }
 
-/* ── halaman: perubahan skema ──────────────────────────────────────────────── */
-async function halamanPerubahan() {
-  const daftar = await k(`obdf/${S.oid}/events?limit=100`);
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Perubahan skema</h1>
-      <p class="redup">Setiap DDL yang ditangkap monitor pada sumber, beserta hasil analisisnya. Perubahan pada tabel yang tidak difederasikan dicatat sebagai diabaikan.</p></div></div>
-    <div class="panel gulir">${daftar.length ? `<table><thead><tr><th>Diterima</th><th>Perubahan</th><th>Status</th><th>Keterangan</th></tr></thead><tbody>
-      ${daftar.map((e) => `<tr><td class="kecil">${esc(waktu(e.received_at))}</td><td>${esc(kalimatEvent(e.structured))}</td>
-        <td>${tanda(e.status)}</td><td class="kecil redup">${esc(e.ignore_reason || '')}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="kosong">Belum ada perubahan skema. Monitor akan mencatat setiap ALTER TABLE pada sumber yang terdaftar.</p>'}</div>`;
+/* ── page: schema changes ──────────────────────────────────────────────────── */
+async function changesPage() {
+  const listing = await k(`obdf/${S.oid}/events?limit=100`);
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Schema changes</h1>
+      <p class="muted">Every DDL statement captured by the monitor at the sources, with the result of its analysis. Changes to tables that are not federated are recorded as ignored.</p></div></div>
+    <div class="panel scroll">${listing.length ? `<table><thead><tr><th>Received</th><th>Change</th><th>Status</th><th>Note</th></tr></thead><tbody>
+      ${listing.map((e) => `<tr><td class="small">${esc(time(e.received_at))}</td><td>${esc(eventSentence(e.structured))}</td>
+        <td>${badge(e.status)}</td><td class="small muted">${esc(e.ignore_reason || '')}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="empty">No schema change yet. The monitor records every ALTER TABLE at the registered sources.</p>'}</div>`;
 }
 
-/* ── halaman: rencana dan eksekusi ─────────────────────────────────────────── */
-async function halamanAdaptasi() {
-  await Promise.all([muatEvents(), muatTipe()]);
-  const [rencana, eksekusi] = await Promise.all([k(`obdf/${S.oid}/plans?limit=60`), k(`obdf/${S.oid}/executions?limit=60`)]);
-  const perRencana = {};
-  for (const e of eksekusi) (perRencana[e.plan_id] = perRencana[e.plan_id] || []).push(e);
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Rencana dan eksekusi</h1>
-      <p class="redup">Rencana adaptasi yang disusun dari setiap perubahan, dan jejak penerapannya. Pilih baris untuk melihat rinciannya.</p></div></div>
-    <div class="panel gulir">${rencana.length ? `<table><thead><tr><th>Rencana</th><th>Perubahan</th><th>Pola</th><th>Keputusan</th><th>Status</th><th>Eksekusi</th></tr></thead><tbody>
-      ${rencana.map((p) => { const e = (perRencana[p.id] || [])[0]; return `<tr class="dapat-dipilih" data-rencana="${esc(p.id)}" tabindex="0">
-        <td>${esc(p.id)}</td><td>${esc(kalimatEvent((S.events[p.event_id] || {}).structured))}</td><td class="waktu">${esc(p.pattern || '-')}</td>
-        <td>${tanda(p.decision)}</td><td>${tanda(p.status)}</td><td>${e ? `${tanda(e.status)} <span class="kecil redup">${esc(durasi(e.timings && e.timings.total_ms))}</span>` : '-'}</td></tr>`; }).join('')}
-      </tbody></table>` : '<p class="kosong">Belum ada rencana adaptasi.</p>'}</div>
-    <div id="rincian-rencana"></div>`;
-  isi().querySelectorAll('[data-rencana]').forEach((tr) => {
-    const buka = () => rincianRencana(rencana.find((p) => String(p.id) === tr.dataset.rencana), perRencana[tr.dataset.rencana] || []);
-    tr.addEventListener('click', buka);
-    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') buka(); });
+/* ── page: plans and executions ────────────────────────────────────────────── */
+async function plansPage() {
+  await Promise.all([loadEvents(), loadTypes()]);
+  const [plans, executions] = await Promise.all([k(`obdf/${S.oid}/plans?limit=60`), k(`obdf/${S.oid}/executions?limit=60`)]);
+  const perPlan = {};
+  for (const e of executions) (perPlan[e.plan_id] = perPlan[e.plan_id] || []).push(e);
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Plans and executions</h1>
+      <p class="muted">The adaptation plans built for every change, and the trail of how they were applied. Select a row to see its details.</p></div></div>
+    <div class="panel scroll">${plans.length ? `<table><thead><tr><th>Plan</th><th>Change</th><th>Pattern</th><th>Decision</th><th>Status</th><th>Execution</th></tr></thead><tbody>
+      ${plans.map((p) => { const e = (perPlan[p.id] || [])[0]; return `<tr class="selectable" data-plan-row="${esc(p.id)}" tabindex="0">
+        <td>${esc(p.id)}</td><td>${esc(eventSentence((S.events[p.event_id] || {}).structured))}</td><td class="time">${esc(p.pattern || '-')}</td>
+        <td>${badge(p.decision)}</td><td>${badge(p.status)}</td><td>${e ? `${badge(e.status)} <span class="small muted">${esc(duration(e.timings && e.timings.total_ms))}</span>` : '-'}</td></tr>`; }).join('')}
+      </tbody></table>` : '<p class="empty">No adaptation plan yet.</p>'}</div>
+    <div id="plan-detail"></div>`;
+  content().querySelectorAll('[data-plan-row]').forEach((tr) => {
+    const open = () => planDetail(plans.find((p) => String(p.id) === tr.dataset.planRow), perPlan[tr.dataset.planRow] || []);
+    tr.addEventListener('click', open);
+    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
   });
 }
 
-function rincianRencana(plan, daftarEksekusi) {
-  const wadah = $('#rincian-rencana');
-  wadah.innerHTML = `<div style="margin-top:1.25rem">${dokumenUsulan(plan, { dapatDiputuskan: false })}</div>
-    ${daftarEksekusi.map((e) => `<div class="panel"><h3>Eksekusi ${esc(e.id)}: ${(STATUS[e.status] || [e.status])[0]}</h3>
-      <ul class="garis-waktu">${e.steps.map((s) => `<li><span>${esc(NAMA_LANGKAH[s.name] || s.name)}</span><span>${tanda(s.status)}</span>
-        <span class="kecil redup">${esc(durasi(s.detail && s.detail.duration_ms))}${s.detail && s.detail.error ? `; ${esc(s.detail.error)}` : ''}${s.detail && s.detail.statements ? `; ${esc(s.detail.statements.join(' '))}` : ''}</span></li>`).join('')}</ul>
-      ${e.failure ? `<p class="kecil" style="margin-top:0.75rem;color:var(--gagal)">${esc(e.failure.message || JSON.stringify(e.failure))}</p>` : ''}
-      ${e.timings && e.timings.total_ms ? `<p class="kecil redup" style="margin-top:0.5rem">Total ${esc(durasi(e.timings.total_ms))}</p>` : ''}</div>`).join('')}`;
-  wadah.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+function planDetail(plan, executionList) {
+  const container = $('#plan-detail');
+  container.innerHTML = `<div style="margin-top:1.25rem">${proposalDocument(plan, { decidable: false })}</div>
+    ${executionList.map((e) => `<div class="panel"><h3>Execution ${esc(e.id)}: ${(STATUS[e.status] || [e.status])[0]}</h3>
+      <ul class="timeline">${e.steps.map((s) => `<li><span>${esc(STEP_NAMES[s.name] || s.name)}</span><span>${badge(s.status)}</span>
+        <span class="small muted">${esc(duration(s.detail && s.detail.duration_ms))}${s.detail && s.detail.error ? `; ${esc(s.detail.error)}` : ''}${s.detail && s.detail.statements ? `; ${esc(s.detail.statements.join(' '))}` : ''}</span></li>`).join('')}</ul>
+      ${e.failure ? `<p class="small" style="margin-top:0.75rem;color:var(--failure)">${esc(e.failure.message || JSON.stringify(e.failure))}</p>` : ''}
+      ${e.timings && e.timings.total_ms ? `<p class="small muted" style="margin-top:0.5rem">Total ${esc(duration(e.timings.total_ms))}</p>` : ''}</div>`).join('')}`;
+  container.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
 }
 
-/* ── halaman: versi spesifikasi dan perbandingan artefak ───────────────────── */
-async function halamanVersi() {
-  const versi = await k(`obdf/${S.oid}/versions?limit=60`);
-  const pilihan = versi.map((v) => `<option value="${esc(v.id)}">Versi ${esc(v.version_no)} (${esc((STATUS[v.status] || [v.status])[0])})</option>`).join('');
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Versi spesifikasi</h1>
-      <p class="redup">Setiap versi adalah potret lengkap OBDF: skema VDB, mapping, dan ontologi. Bandingkan dua versi untuk melihat apa yang diubah adaptasi.</p></div></div>
-    <div class="panel"><h3>Bandingkan artefak</h3>
-      <div class="baris-formulir">
-        <div><label for="dari">Dari</label><select id="dari">${pilihan}</select></div>
-        <div><label for="ke">Ke</label><select id="ke">${pilihan}</select></div>
-        <div><label for="jenis">Artefak</label><select id="jenis">
-          <option value="r2rml">Mapping (ℳ)</option><option value="ontology">Ontologi (𝒯)</option><option value="vdb_xml">VDB (Σ_S)</option></select></div>
+/* ── page: specification versions and artifact comparison ─────────────────── */
+async function versionsPage() {
+  const versions = await k(`obdf/${S.oid}/versions?limit=60`);
+  const options = versions.map((v) => `<option value="${esc(v.id)}">Version ${esc(v.version_no)} (${esc((STATUS[v.status] || [v.status])[0])})</option>`).join('');
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Specification versions</h1>
+      <p class="muted">Every version is a complete snapshot of the OBDF: VDB schema, mapping, and ontology. Compare two versions to see what an adaptation changed.</p></div></div>
+    <div class="panel"><h3>Compare artifacts</h3>
+      <div class="form-row">
+        <div><label for="from">From</label><select id="from">${options}</select></div>
+        <div><label for="to">To</label><select id="to">${options}</select></div>
+        <div><label for="kind">Artifact</label><select id="kind">
+          <option value="r2rml">Mapping (ℳ)</option><option value="ontology">Ontology (𝒯)</option><option value="vdb_xml">VDB (Σ_S)</option></select></div>
       </div>
-      <button class="utama-aksi" id="tombol-banding" type="button">Bandingkan</button>
-      <div id="hasil-banding" style="margin-top:1rem"></div></div>
-    <div class="panel gulir"><h3>Riwayat versi</h3><table><thead><tr><th>Versi</th><th>Status</th><th>Asal</th><th>VDB</th><th>Dibuat</th><th>Sidik jari</th></tr></thead><tbody>
-      ${versi.map((v) => `<tr><td>${esc(v.version_no)}</td><td>${tanda(v.status)}</td><td>${esc(v.origin)}</td>
-        <td>${esc(v.teiid_vdb_name)} v${esc(v.teiid_vdb_version)}</td><td class="kecil">${esc(waktu(v.created_at))}</td>
+      <button class="primary" id="compare-button" type="button">Compare</button>
+      <div id="compare-results" style="margin-top:1rem"></div></div>
+    <div class="panel scroll"><h3>Version history</h3><table><thead><tr><th>Version</th><th>Status</th><th>Origin</th><th>VDB</th><th>Created</th><th>Fingerprint</th></tr></thead><tbody>
+      ${versions.map((v) => `<tr><td>${esc(v.version_no)}</td><td>${badge(v.status)}</td><td>${esc(v.origin)}</td>
+        <td>${esc(v.teiid_vdb_name)} v${esc(v.teiid_vdb_version)}</td><td class="small">${esc(time(v.created_at))}</td>
         <td><code>${esc((v.content_digest || '').slice(0, 12))}</code></td></tr>`).join('')}</tbody></table></div>`;
-  if (versi.length > 1) { $('#dari').selectedIndex = 1; $('#ke').selectedIndex = 0; }
-  $('#tombol-banding').addEventListener('click', bandingkan);
+  if (versions.length > 1) { $('#from').selectedIndex = 1; $('#to').selectedIndex = 0; }
+  $('#compare-button').addEventListener('click', compare);
 }
 
-async function bandingkan() {
-  const wadah = $('#hasil-banding');
-  wadah.innerHTML = '<p class="redup">Membandingkan artefak</p>';
+async function compare() {
+  const container = $('#compare-results');
+  container.innerHTML = '<p class="muted">Comparing artifacts</p>';
   try {
-    const d = await api(`/api/ui/diff?dari=${encodeURIComponent($('#dari').value)}&ke=${encodeURIComponent($('#ke').value)}&kind=${encodeURIComponent($('#jenis').value)}`);
-    if (d.identik) { wadah.innerHTML = '<p class="redup">Artefak identik pada kedua versi.</p>'; return; }
-    wadah.innerHTML = `<p class="kecil redup" style="margin-bottom:0.5rem">${esc(d.tambah)} baris ditambah, ${esc(d.hapus)} baris dihapus</p>
+    const d = await api(`/api/ui/diff?from_version=${encodeURIComponent($('#from').value)}&to_version=${encodeURIComponent($('#to').value)}&kind=${encodeURIComponent($('#kind').value)}`);
+    if (d.identical) { container.innerHTML = '<p class="muted">The artifact is identical in both versions.</p>'; return; }
+    container.innerHTML = `<p class="small muted" style="margin-bottom:0.5rem">${esc(d.added)} line(s) added, ${esc(d.removed)} line(s) removed</p>
       <div class="diff">${d.diff.map((b) => {
-        const kelas = b.startsWith('+++') || b.startsWith('---') ? 'kepala' : b.startsWith('@@') ? 'blok' : b.startsWith('+') ? 'tambah' : b.startsWith('-') ? 'hapus' : '';
-        return `<div class="${kelas}">${esc(b) || ' '}</div>`;
+        const cls = b.startsWith('+++') || b.startsWith('---') ? 'header-line' : b.startsWith('@@') ? 'hunk' : b.startsWith('+') ? 'added' : b.startsWith('-') ? 'removed' : '';
+        return `<div class="${cls}">${esc(b) || ' '}</div>`;
       }).join('')}</div>`;
-  } catch (e) { wadah.innerHTML = `<p style="color:var(--gagal)">${esc(e.message)}</p>`; }
+  } catch (e) { container.innerHTML = `<p style="color:var(--failure)">${esc(e.message)}</p>`; }
 }
 
-/* ── halaman: analisis dampak (pratinjau tanpa mengubah apa pun) ───────────── */
-async function halamanDampak() {
-  await muatTipe();
-  const sumber = await k(`obdf/${S.oid}/sources`);
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Analisis dampak</h1>
-      <p class="redup">Simulasikan perubahan skema sebelum benar-benar terjadi. ASCAM menghitung kolom yang terdampak dan menyusun rencana, tanpa mengubah apa pun.</p></div></div>
-    <form class="panel" id="formulir-dampak">
-      <div class="baris-formulir">
-        <div><label for="d-op">Perubahan</label><select id="d-op"><option value="add">Tambah kolom</option><option value="drop">Hapus kolom</option><option value="rename">Ganti nama kolom</option></select></div>
-        <div><label for="d-sumber">Sumber</label><select id="d-sumber">${sumber.map((s) => `<option value="${esc(s.logical_name)}">${esc(s.logical_name)} (${esc(s.dbms)})</option>`).join('')}</select></div>
-        <div><label for="d-tabel">Tabel</label><input id="d-tabel" required placeholder="penerima_manfaat"></div>
-        <div><label for="d-kolom">Kolom di sumber</label><input id="d-kolom" required placeholder="email"></div>
-        <div><label for="d-baru">Nama baru (ganti nama)</label><input id="d-baru"></div>
-        <div><label for="d-tipe">Tipe (tambah kolom)</label><input id="d-tipe" placeholder="varchar(100)"></div>
+/* ── page: impact analysis (a preview that changes nothing) ──────────────── */
+async function impactPage() {
+  await loadTypes();
+  const sources = await k(`obdf/${S.oid}/sources`);
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Impact analysis</h1>
+      <p class="muted">Simulate a schema change before it happens. ASCAM computes the affected columns and builds the plan, without changing anything.</p></div></div>
+    <form class="panel" id="impact-form">
+      <div class="form-row">
+        <div><label for="d-op">Change</label><select id="d-op"><option value="add">Add column</option><option value="drop">Drop column</option><option value="rename">Rename column</option></select></div>
+        <div><label for="d-source">Source</label><select id="d-source">${sources.map((s) => `<option value="${esc(s.logical_name)}">${esc(s.logical_name)} (${esc(s.dbms)})</option>`).join('')}</select></div>
+        <div><label for="d-table">Table</label><input id="d-table" required placeholder="penerima_manfaat"></div>
+        <div><label for="d-column">Column in the source</label><input id="d-column" required placeholder="email"></div>
+        <div><label for="d-new">New name (rename)</label><input id="d-new"></div>
+        <div><label for="d-type">Type (add column)</label><input id="d-type" placeholder="varchar(100)"></div>
       </div>
-      <button class="utama-aksi" type="submit">Hitung dampak</button>
+      <button class="primary" type="submit">Compute impact</button>
     </form>
-    <div id="hasil-dampak"></div>`;
-  $('#formulir-dampak').addEventListener('submit', async (ev) => {
+    <div id="impact-results"></div>`;
+  $('#impact-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const body = { operation: $('#d-op').value, source: $('#d-sumber').value, table: $('#d-tabel').value.trim(),
-      column: $('#d-kolom').value.trim(), new_column: $('#d-baru').value.trim() || null, column_type: $('#d-tipe').value.trim() || null };
+    const body = { operation: $('#d-op').value, source: $('#d-source').value, table: $('#d-table').value.trim(),
+      column: $('#d-column').value.trim(), new_column: $('#d-new').value.trim() || null, column_type: $('#d-type').value.trim() || null };
     try {
       const r = await k(`obdf/${S.oid}/impact`, { method: 'POST', body });
-      const semu = { id: '-', status: r.decision, pattern: r.pattern, created_at: new Date().toISOString(), base_spec_version_id: r.spec_version_id,
+      const simulated = { id: '-', status: r.decision, pattern: r.pattern, created_at: new Date().toISOString(), base_spec_version_id: r.spec_version_id,
         reasons: r.reasons, impact: r, actions: r.actions.map((a, i) => ({ seq: i + 1, artifact: a.artifact, operation: a.operation,
-          params: Object.fromEntries(Object.entries(a).filter(([kunci]) => !['artifact', 'operation'].includes(kunci))) })) };
+          params: Object.fromEntries(Object.entries(a).filter(([key]) => !['artifact', 'operation'].includes(key))) })) };
       S.events['-'] = { structured: { ...body, schema: null } };
-      semu.event_id = '-';
-      $('#hasil-dampak').innerHTML = `<div style="margin-top:1.25rem">${dokumenUsulan(semu, { dapatDiputuskan: false, pratinjau: true })}</div>`;
-    } catch (e) { kabar(e.message, 'gagal'); }
+      simulated.event_id = '-';
+      $('#impact-results').innerHTML = `<div style="margin-top:1.25rem">${proposalDocument(simulated, { decidable: false, preview: true })}</div>`;
+    } catch (e) { toast(e.message, 'failure'); }
   });
 }
 
-/* ── halaman: konfigurasi ──────────────────────────────────────────────────── */
-async function halamanKonfigurasi() {
-  const [sumber, target, pengaturan, penamaan] = await Promise.all([
+/* ── page: configuration ───────────────────────────────────────────────────── */
+async function configurationPage() {
+  const [sources, targets, settings, naming] = await Promise.all([
     k(`obdf/${S.oid}/sources`), k(`obdf/${S.oid}/targets`), k(`obdf/${S.oid}/settings`), k(`obdf/${S.oid}/naming-policy`)]);
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Konfigurasi</h1>
-      <p class="redup">Sumber yang dipantau, komponen OBDF yang dikelola ASCAM, dan aturan keputusan adaptasi.</p></div></div>
-    <div class="panel"><h3>Kebijakan adaptasi</h3>
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Configuration</h1>
+      <p class="muted">The monitored sources, the OBDF components managed by ASCAM, and the adaptation decision rules.</p></div></div>
+    <div class="panel"><h3>Adaptation policy</h3>
       <table><tbody>
-        <tr><td>${tanda('auto')}</td><td>Perubahan yang dampaknya tertelusuri penuh, ditentukan oleh DDL, dan tidak mengubah identitas, baris, atau nilai elemen lain. Diterapkan langsung.</td></tr>
-        <tr><td>${tanda('hitl')}</td><td>Penambahan kolom. Nama dan domain property baru adalah keputusan pemodelan, sehingga usulan ASCAM menunggu persetujuan Anda dan dapat direvisi.</td></tr>
-        <tr><td>${tanda('notify')}</td><td>Penghapusan atau penggantian nama kolom yang tidak terbukti aman. ASCAM tidak mengubah OBDF; elemen yang terdampak dilaporkan di halaman Notifikasi.</td></tr>
+        <tr><td>${badge('auto')}</td><td>Changes whose impact is fully traced, determined by the DDL, and that change neither the identity, the rows, nor the values of other elements. Applied directly.</td></tr>
+        <tr><td>${badge('hitl')}</td><td>Column additions. The name and domain of the new property are a modelling decision, so the proposal of ASCAM waits for your approval and can be revised.</td></tr>
+        <tr><td>${badge('notify')}</td><td>Column drops or renames that are not shown to be safe. ASCAM does not change the OBDF; the affected elements are reported on the Notifications page.</td></tr>
       </tbody></table></div>
-    <div class="grid-dua">
-      <div class="panel gulir"><h3>Sumber data</h3><table><thead><tr><th>Nama</th><th>DBMS</th><th>Skema bawaan</th><th>Topik monitor</th></tr></thead><tbody>
-        ${sumber.map((s) => `<tr><td>${esc(s.logical_name)}</td><td>${esc(s.dbms)}</td><td>${esc(s.default_schema)}</td><td class="kecil pecah"><code>${esc(s.kafka_topic)}</code></td></tr>`).join('')}</tbody></table></div>
-      <div class="panel"><h3>Kebijakan penamaan property</h3><table><tbody>
-        <tr><td class="redup">Namespace</td><td><code>${esc((pengaturan.find((p) => p.key === 'ontology.namespace') || {}).value || '-')}</code></td></tr>
-        <tr><td class="redup">Templat IRI</td><td><code>${esc(penamaan.property_iri_template)}</code></td></tr>
-        <tr><td class="redup">Bila nama bentrok</td><td>${esc(BENTROK[penamaan.on_collision] || penamaan.on_collision)}</td></tr></tbody></table></div>
+    <div class="grid-two">
+      <div class="panel scroll"><h3>Data sources</h3><table><thead><tr><th>Name</th><th>DBMS</th><th>Default schema</th><th>Monitor topic</th></tr></thead><tbody>
+        ${sources.map((s) => `<tr><td>${esc(s.logical_name)}</td><td>${esc(s.dbms)}</td><td>${esc(s.default_schema)}</td><td class="small break"><code>${esc(s.kafka_topic)}</code></td></tr>`).join('')}</tbody></table></div>
+      <div class="panel"><h3>Property naming policy</h3><table><tbody>
+        <tr><td class="muted">Namespace</td><td><code>${esc((settings.find((p) => p.key === 'ontology.namespace') || {}).value || '-')}</code></td></tr>
+        <tr><td class="muted">IRI template</td><td><code>${esc(naming.property_iri_template)}</code></td></tr>
+        <tr><td class="muted">On a name collision</td><td>${esc(COLLISION[naming.on_collision] || naming.on_collision)}</td></tr></tbody></table></div>
     </div>
-    <div class="panel gulir"><h3>Komponen OBDF</h3><table><thead><tr><th>Jenis</th><th>Alamat</th><th>Aktif</th><th></th></tr></thead><tbody>
-      ${target.map((t) => `<tr><td>${esc(JENIS_TARGET[t.kind] || t.kind)}</td><td class="kecil"><code>${esc(t.endpoint.host)}:${esc(t.endpoint.port)}${esc(t.endpoint.path || '')}</code></td>
-        <td>${t.enabled ? 'ya' : 'tidak'}</td><td><button class="kecil" type="button" data-periksa="${esc(t.id)}">Periksa</button>
-        <span class="kecil" id="periksa-${esc(t.id)}"></span></td></tr>`).join('')}</tbody></table></div>`;
-  isi().querySelectorAll('[data-periksa]').forEach((b) => b.addEventListener('click', async () => {
-    const id = b.dataset.periksa;
-    $(`#periksa-${id}`).textContent = ' memeriksa';
+    <div class="panel scroll"><h3>OBDF components</h3><table><thead><tr><th>Kind</th><th>Address</th><th>Enabled</th><th></th></tr></thead><tbody>
+      ${targets.map((t) => `<tr><td>${esc(TARGET_KINDS[t.kind] || t.kind)}</td><td class="small"><code>${esc(t.endpoint.host)}:${esc(t.endpoint.port)}${esc(t.endpoint.path || '')}</code></td>
+        <td>${t.enabled ? 'yes' : 'no'}</td><td><button class="small" type="button" data-check="${esc(t.id)}">Check</button>
+        <span class="small" id="check-${esc(t.id)}"></span></td></tr>`).join('')}</tbody></table></div>`;
+  content().querySelectorAll('[data-check]').forEach((b) => b.addEventListener('click', async () => {
+    const id = b.dataset.check;
+    $(`#check-${id}`).textContent = ' checking';
     try {
       const h = await k(`targets/${id}/check`, { method: 'POST', body: {} });
-      $(`#periksa-${id}`).innerHTML = ` ${h.ok ? '<span class="tanda berhasil">Terhubung</span>' : '<span class="tanda gagal">Gagal</span>'} ${esc(h.latency_ms)} ms`;
-    } catch (e) { $(`#periksa-${id}`).textContent = ` ${e.message}`; }
+      $(`#check-${id}`).innerHTML = ` ${h.ok ? '<span class="badge success">Connected</span>' : '<span class="badge failure">Failed</span>'} ${esc(h.latency_ms)} ms`;
+    } catch (e) { $(`#check-${id}`).textContent = ` ${e.message}`; }
   }));
 }
 
-/* ── halaman: jejak audit ──────────────────────────────────────────────────── */
-async function halamanAudit() {
-  const daftar = await k(`obdf/${S.oid}/audit`);
-  isi().innerHTML = `
-    <div class="kepala-halaman"><div><h1>Jejak audit</h1>
-      <p class="redup">Setiap tindakan pada Knowledge, termasuk keputusan administrator, sinkronisasi, dan eksekusi, dengan pelakunya.</p></div></div>
-    <div class="panel gulir"><table><thead><tr><th>Waktu</th><th>Pelaku</th><th>Tindakan</th><th>Objek</th><th>Rincian</th></tr></thead><tbody>
-      ${daftar.map((a) => `<tr><td class="kecil">${esc(waktu(a.created_at || a.at))}</td><td>${esc(a.actor)}</td><td>${esc(a.action)}</td>
-        <td class="kecil">${esc(a.object_kind || '')} ${esc(a.object_ref || '')}</td>
-        <td class="kecil redup"><code>${esc(JSON.stringify(a.detail || {}).slice(0, 160))}</code></td></tr>`).join('')}</tbody></table></div>`;
+/* ── page: audit trail ─────────────────────────────────────────────────────── */
+async function auditPage() {
+  const listing = await k(`obdf/${S.oid}/audit`);
+  content().innerHTML = `
+    <div class="page-header"><div><h1>Audit trail</h1>
+      <p class="muted">Every action on Knowledge, including administrator decisions, syncs, and executions, with who performed it.</p></div></div>
+    <div class="panel scroll"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Object</th><th>Details</th></tr></thead><tbody>
+      ${listing.map((a) => `<tr><td class="small">${esc(time(a.created_at || a.at))}</td><td>${esc(a.actor)}</td><td>${esc(a.action)}</td>
+        <td class="small">${esc(a.object_kind || '')} ${esc(a.object_ref || '')}</td>
+        <td class="small muted"><code>${esc(JSON.stringify(a.detail || {}).slice(0, 160))}</code></td></tr>`).join('')}</tbody></table></div>`;
 }
 
-/* ── kerangka, rute, dan pembaruan berkala ─────────────────────────────────── */
-const RUTE = {
-  ringkasan: halamanRingkasan, persetujuan: halamanPersetujuan, perubahan: halamanPerubahan, adaptasi: halamanAdaptasi,
-  versi: halamanVersi, dampak: halamanDampak, konfigurasi: halamanKonfigurasi, audit: halamanAudit,
-  notifikasi: halamanNotifikasi, lineage: halamanLineage,
+/* ── shell, routes, and periodic refresh ───────────────────────────────────── */
+const ROUTES = {
+  overview: overviewPage, approvals: approvalsPage, changes: changesPage, plans: plansPage,
+  versions: versionsPage, impact: impactPage, configuration: configurationPage, audit: auditPage,
+  notifications: notificationsPage, lineage: lineagePage,
 };
 
-async function tampilkanRute() {
-  const nama = ruteSekarang();
-  const halaman = RUTE[nama] || halamanRingkasan;
-  document.querySelectorAll('.navigasi a[data-rute]').forEach((a) => {
-    if (a.dataset.rute === nama) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+async function showRoute() {
+  const name = currentRoute();
+  const page = ROUTES[name] || overviewPage;
+  document.querySelectorAll('.nav a[data-route]').forEach((a) => {
+    if (a.dataset.route === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  clearInterval(S.pemutar);
+  clearInterval(S.timer);
   try {
-    await halaman();
-    if (nama === 'ringkasan' || !RUTE[nama]) S.pemutar = setInterval(() => halamanRingkasan().catch(() => {}), 5000);
+    await page();
+    if (name === 'overview' || !ROUTES[name]) S.timer = setInterval(() => overviewPage().catch(() => {}), 5000);
   } catch (e) {
-    isi().innerHTML = `<div class="panel"><h3>Halaman tidak dapat dimuat</h3><p style="color:var(--gagal)">${esc(e.message)}</p>
-      <p class="redup" style="margin-top:0.5rem">Periksa apakah Knowledge Service berjalan, lalu muat ulang halaman.</p></div>`;
+    content().innerHTML = `<div class="panel"><h3>The page cannot be loaded</h3><p style="color:var(--failure)">${esc(e.message)}</p>
+      <p class="muted" style="margin-top:0.5rem">Check that the Knowledge Service is running, then reload the page.</p></div>`;
   }
 }
 
-async function segarkanLencana() {
+async function refreshBadges() {
   try {
-    const [r, sehat] = await Promise.all([api('/api/ui/overview'), api('/api/ui/health')]);
-    const jumlah = r.pending.length;
-    const lencana = $('#jumlah-menunggu');
-    lencana.textContent = jumlah;
-    lencana.hidden = jumlah === 0;
-    // hanya memberi kabar bila ada usulan atau notifikasi BARU sejak pemeriksaan sebelumnya
-    if (S.menunggu !== null && jumlah > S.menunggu) kabar(`${jumlah} usulan penambahan kolom menunggu persetujuan Anda.`, 'keputusan', ['#/persetujuan', 'Tinjau']);
-    S.menunggu = jumlah;
-    const pemberitahuan = r.notifications.filter((n) => !r.pending.some((p) => p.id === n.plan_id)).length;
-    const lencanaN = $('#jumlah-notifikasi');
-    lencanaN.textContent = pemberitahuan;
-    lencanaN.hidden = pemberitahuan === 0;
-    if (S.belumDibaca !== null && pemberitahuan > S.belumDibaca) kabar('Ada perubahan skema yang tidak dapat diadaptasi otomatis.', 'peringatan', ['#/notifikasi', 'Lihat']);
-    S.belumDibaca = pemberitahuan;
+    const [r, health] = await Promise.all([api('/api/ui/overview'), api('/api/ui/health')]);
+    const count = r.pending.length;
+    const pendingBadge = $('#pending-count');
+    pendingBadge.textContent = count;
+    pendingBadge.hidden = count === 0;
+    // only toast when there is a NEW proposal or notification since the previous check
+    if (S.pending !== null && count > S.pending) toast(`${count} column-addition proposals are waiting for your approval.`, 'decision', ['#/approvals', 'Review']);
+    S.pending = count;
+    const notices = r.notifications.filter((n) => !r.pending.some((p) => p.id === n.plan_id)).length;
+    const noticeBadge = $('#notification-count');
+    noticeBadge.textContent = notices;
+    noticeBadge.hidden = notices === 0;
+    if (S.unread !== null && notices > S.unread) toast('A schema change could not be adapted automatically.', 'warning', ['#/notifications', 'View']);
+    S.unread = notices;
     const v = r.active_version || {};
-    $('#versi-aktif').textContent = v.version_no ? `Versi spesifikasi ${v.version_no}, VDB v${v.teiid_vdb_version}` : 'Belum ada versi aktif';
-    const exe = sehat.executor || {};
-    const tombol = $('#tombol-executor');
+    $('#active-version').textContent = v.version_no ? `Specification version ${v.version_no}, VDB v${v.teiid_vdb_version}` : 'No active version yet';
+    const exe = health.executor || {};
+    const button = $('#executor-button');
     if (exe.state) {
-      $('#status-executor').textContent = exe.paused ? 'Executor dijeda' : `Executor ${exe.state === 'running' ? 'berjalan' : exe.state}`;
-      tombol.hidden = false;
-      tombol.textContent = exe.paused ? 'Lanjutkan executor' : 'Jeda executor';
-      tombol.dataset.aksi = exe.paused ? 'resume' : 'pause';
+      $('#executor-status').textContent = exe.paused ? 'Executor paused' : `Executor ${exe.state === 'running' ? 'running' : exe.state}`;
+      button.hidden = false;
+      button.textContent = exe.paused ? 'Resume executor' : 'Pause executor';
+      button.dataset.action = exe.paused ? 'resume' : 'pause';
     } else {
-      $('#status-executor').textContent = 'Executor tidak menjawab';
-      tombol.hidden = true;
+      $('#executor-status').textContent = 'Executor does not answer';
+      button.hidden = true;
     }
-  } catch { /* abaikan; akan dicoba lagi */ }
+  } catch { /* ignored; retried later */ }
 }
 
-function tampilkanMasuk() {
-  $('#konsol').hidden = true;
-  $('#layar-masuk').hidden = false;
-  clearInterval(S.pemutar);
-  $('#nama-pengguna').focus();
+function showLogin() {
+  $('#console').hidden = true;
+  $('#login-screen').hidden = false;
+  clearInterval(S.timer);
+  $('#username').focus();
 }
 
-async function mulaiKonsol(me) {
+async function startConsole(me) {
   S.user = me.user;
-  const daftar = await k('obdf');
-  S.obdf = daftar.find((o) => o.name === me.obdf) || daftar[0];
-  if (!S.obdf) throw new Error('Belum ada OBDF yang terdaftar di Knowledge.');
+  const listing = await k('obdf');
+  S.obdf = listing.find((o) => o.name === me.obdf) || listing[0];
+  if (!S.obdf) throw new Error('No OBDF is registered in Knowledge yet.');
   S.oid = S.obdf.id;
-  $('#nama-admin').textContent = S.user;
-  $('#nama-obdf').textContent = S.obdf.name;
-  $('#layar-masuk').hidden = true;
-  $('#konsol').hidden = false;
-  await segarkanLencana();
-  await tampilkanRute();
+  $('#admin-name').textContent = S.user;
+  $('#obdf-name').textContent = S.obdf.name;
+  $('#login-screen').hidden = true;
+  $('#console').hidden = false;
+  await refreshBadges();
+  await showRoute();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  $('#formulir-masuk').addEventListener('submit', async (ev) => {
+  $('#login-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    $('#pesan-masuk').textContent = '';
+    $('#login-message').textContent = '';
     try {
-      await api('/api/ui/login', { method: 'POST', body: { username: $('#nama-pengguna').value, password: $('#kata-sandi').value } });
-      $('#kata-sandi').value = '';
-      await mulaiKonsol(await api('/api/ui/me'));
-    } catch (e) { $('#pesan-masuk').textContent = e.message; }
+      await api('/api/ui/login', { method: 'POST', body: { username: $('#username').value, password: $('#password').value } });
+      $('#password').value = '';
+      await startConsole(await api('/api/ui/me'));
+    } catch (e) { $('#login-message').textContent = e.message; }
   });
-  $('#tombol-keluar').addEventListener('click', async () => {
+  $('#logout-button').addEventListener('click', async () => {
     await api('/api/ui/logout', { method: 'POST' }).catch(() => {});
-    tampilkanMasuk();
+    showLogin();
   });
-  $('#tombol-executor').addEventListener('click', async (ev) => {
-    const aksi = ev.currentTarget.dataset.aksi;
+  $('#executor-button').addEventListener('click', async (ev) => {
+    const action = ev.currentTarget.dataset.action;
     try {
-      await api(`/api/ui/executor/${aksi}`, { method: 'POST' });
-      kabar(aksi === 'pause' ? 'Executor dijeda. Rencana baru tidak akan diterapkan sampai dilanjutkan.' : 'Executor dilanjutkan.');
-      await segarkanLencana();
-    } catch (e) { kabar(e.message, 'gagal'); }
+      await api(`/api/ui/executor/${action}`, { method: 'POST' });
+      toast(action === 'pause' ? 'Executor paused. New plans are not applied until it is resumed.' : 'Executor resumed.');
+      await refreshBadges();
+    } catch (e) { toast(e.message, 'failure'); }
   });
-  window.addEventListener('hashchange', tampilkanRute);
-  window.addEventListener('resize', () => { if ($('#lineage')) garisLineage(); });
-  setInterval(segarkanLencana, 8000);
-  try { await mulaiKonsol(await api('/api/ui/me')); } catch { tampilkanMasuk(); }
+  window.addEventListener('hashchange', showRoute);
+  window.addEventListener('resize', () => { if ($('#lineage')) lineageEdges(); });
+  setInterval(refreshBadges, 8000);
+  try { await startConsole(await api('/api/ui/me')); } catch { showLogin(); }
 });

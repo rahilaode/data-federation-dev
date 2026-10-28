@@ -1,4 +1,4 @@
-"""Uji koneksi target dan status terakhir (dasbor UI)."""
+"""Connection checks of targets and their latest status (UI dashboard)."""
 from fastapi import APIRouter, Depends, Request
 from ..transaction import TransactionalRoute
 from sqlalchemy import select
@@ -11,7 +11,7 @@ from ...security.auth import current_actor
 from ..deps import get_db
 from ..schemas import CheckOut, TargetOut, TargetStatusOut
 
-router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['uji koneksi'], dependencies=[Depends(current_actor)])
+router = APIRouter(route_class=TransactionalRoute, prefix='/api/v1', tags=['connection checks'], dependencies=[Depends(current_actor)])
 
 
 def _hooks(request: Request) -> type[Hooks]:
@@ -30,7 +30,7 @@ def check_target(target_id: int, request: Request, db: Session = Depends(get_db)
 @router.post('/obdf/{obdf_id}/checks', response_model=list[CheckOut])
 def check_all(obdf_id: int, request: Request, db: Session = Depends(get_db),
               actor: str = Depends(current_actor)):
-    """Menguji semua target yang aktif pada OBDF."""
+    """Check every enabled target of the OBDF."""
     svc.get_obdf(db, obdf_id)
     targets = db.execute(select(registry.Target).filter_by(obdf_id=obdf_id, enabled=True)
                          .order_by(registry.Target.name)).scalars().all()
@@ -50,7 +50,7 @@ def check_history(target_id: int, limit: int = 20, db: Session = Depends(get_db)
 
 @router.get('/obdf/{obdf_id}/status', response_model=list[TargetStatusOut])
 def status(obdf_id: int, db: Session = Depends(get_db)):
-    """Status terkini setiap target (hasil uji terakhir)."""
+    """Current status of every target (latest check result)."""
     svc.get_obdf(db, obdf_id)
     out = []
     for t in db.execute(select(registry.Target).filter_by(obdf_id=obdf_id)

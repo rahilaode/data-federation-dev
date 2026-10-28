@@ -1,4 +1,4 @@
-"""Konfigurasi Orchestrator. Identitas OBDF, sumber, dan alamat Kafka diambil dari Knowledge."""
+"""Orchestrator configuration. The OBDF identity, the sources, and the Kafka address come from Knowledge."""
 import os
 from dataclasses import dataclass
 
@@ -11,9 +11,9 @@ class Settings:
     token_client: str = os.getenv('ASCAM_ORCH_TOKEN_CLIENT', 'orchestrator')
     obdf_name: str = os.getenv('ASCAM_ORCH_OBDF', 'bansos')
     group_id: str = os.getenv('ASCAM_ORCH_GROUP_ID', 'ascam-orchestrator')
-    # Titik awal grup konsumen BARU: 'earliest' membaca seluruh riwayat topik, 'latest' hanya
-    # pesan sesudah Orchestrator tersambung. Setelah Knowledge direset, 'latest' mencegah DDL
-    # lama diperlakukan sebagai perubahan baru.
+    # Starting point of a NEW consumer group: 'earliest' reads the whole topic history, 'latest'
+    # only messages after the Orchestrator connects. After Knowledge is reset, 'latest' prevents
+    # old DDL from being treated as new changes.
     offset_reset: str = os.getenv('ASCAM_ORCH_OFFSET_RESET', 'earliest')
     bootstrap: str | None = os.getenv('ASCAM_ORCH_KAFKA_BOOTSTRAP')
     poll_timeout_ms: int = int(os.getenv('ASCAM_ORCH_POLL_TIMEOUT_MS', '2000'))
@@ -21,18 +21,18 @@ class Settings:
 
     def __post_init__(self) -> None:
         if self.offset_reset not in ('earliest', 'latest'):
-            raise ValueError(f'ASCAM_ORCH_OFFSET_RESET harus earliest atau latest, bukan {self.offset_reset!r}')
+            raise ValueError(f'ASCAM_ORCH_OFFSET_RESET must be earliest or latest, not {self.offset_reset!r}')
 
     def bearer(self) -> str:
-        """Token untuk klien ini.
+        """Token for this client.
 
-        Berkas token memuat beberapa klien (`<klien>:<token>` per baris), sehingga baris yang
-        dipakai dipilih berdasarkan `token_client`; berkas berisi token polos juga diterima.
+        The token file holds several clients (`<client>:<token>` per line), so the line is
+        chosen by `token_client`; a file holding a plain token is accepted too.
         """
         if self.token:
             return self.token
         if not self.token_file:
-            raise RuntimeError('Token Knowledge belum diset (ASCAM_ORCH_TOKEN atau _TOKEN_FILE)')
+            raise RuntimeError('Knowledge token is not set (ASCAM_ORCH_TOKEN or _TOKEN_FILE)')
         fallback = None
         with open(self.token_file, encoding='utf-8') as fh:
             for line in fh:
@@ -47,4 +47,4 @@ class Settings:
                     return token
         if fallback:
             return fallback
-        raise RuntimeError(f'token untuk klien {self.token_client!r} tidak ada di {self.token_file}')
+        raise RuntimeError(f'token for client {self.token_client!r} not found in {self.token_file}')

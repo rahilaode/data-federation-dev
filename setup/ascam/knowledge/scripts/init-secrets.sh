@@ -16,7 +16,7 @@ write() {  # $1 file name, $2 content
 rand() { python3 -c "import secrets; print(secrets.token_urlsafe(32))"; }
 fernet_key() { python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"; }
 
-# basis data Knowledge
+# Knowledge database
 write knowledge_db_owner_password "$(rand)"
 write knowledge_db_app_password "$(rand)"
 # credential encryption: one key per line, newest key on the first line

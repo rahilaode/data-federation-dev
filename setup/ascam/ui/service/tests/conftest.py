@@ -19,6 +19,7 @@ ARTIFACTS = {
 class FakeKnowledge:
     def __init__(self):
         self.requests: list[httpx.Request] = []
+        self.reject_token = False
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -32,6 +33,8 @@ class FakeKnowledge:
             return httpx.Response(200, json={'state': 'running', 'paused': False})
         if host == 'agent':
             raise httpx.ConnectError('agent down')
+        if self.reject_token and path.startswith('/api/v1/'):
+            return httpx.Response(401, json={'detail': 'invalid token'})
         if path == '/ready':
             return httpx.Response(200, json={'status': 'ok'})
         if path == '/api/v1/obdf':

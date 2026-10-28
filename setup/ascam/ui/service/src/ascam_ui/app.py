@@ -116,6 +116,12 @@ def create_app(settings: Settings | None = None,
                                     content_type=request.headers.get('content-type'))
         except httpx.HTTPError as exc:
             raise HTTPException(502, f'Knowledge cannot be reached: {type(exc).__name__}')
+        if response.status_code == 401:
+            # Knowledge refused the console's service token. Passing the 401 on would make the
+            # browser treat it as an expired session and return to the login form for ever.
+            raise HTTPException(502, 'Knowledge rejected the service token of the console: the ui line '
+                                     'of secrets/knowledge_api_tokens differs from the one Knowledge '
+                                     'loaded; restart both after changing the secrets')
         return Response(response.content, status_code=response.status_code,
                         media_type=response.headers.get('content-type', 'application/json'))
 
@@ -193,6 +199,16 @@ def create_app(settings: Settings | None = None,
         return JSONResponse(response.json(), status_code=response.status_code)
 
     # ── static files ───────────────────────────────────────────────────────────
+    # The page and its assets must be revalidated on every load: a browser that keeps an older
+    # index.html next to a newer app.js (or the reverse) after an upgrade shows a login form
+    # whose fields the script cannot find, so logging in does nothing.
+    @app.middleware('http')
+    async def revalidate_static(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path == '/' or request.url.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'no-cache'
+        return response
+
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
 
     @app.get('/')

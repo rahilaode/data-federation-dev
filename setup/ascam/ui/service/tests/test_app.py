@@ -141,3 +141,20 @@ def test_mapping_artifacts_are_reachable(logged_in):
     """Regression: the pattern [a-z_]+ rejected 'r2rml' because it contains a digit."""
     assert logged_in.get('/api/k/versions/7/artifacts/r2rml').status_code == 200
     assert logged_in.get('/api/ui/diff', params={'from_version': 7, 'to_version': 8, 'kind': 'r2rml'}).status_code == 200
+
+
+def test_page_and_assets_are_revalidated(console):
+    """After an upgrade the browser must not mix an old page with a new script."""
+    page = console.get('/')
+    assert page.headers['cache-control'] == 'no-cache'
+    for asset in ('/static/app.js', '/static/style.css'):
+        assert asset + '?v=' in page.text
+        assert console.get(asset).headers['cache-control'] == 'no-cache'
+
+
+def test_rejected_service_token_is_not_reported_as_expired_session(logged_in, fake):
+    """A 401 from Knowledge must not send the administrator back to the login form."""
+    fake.reject_token = True
+    r = logged_in.get('/api/k/obdf')
+    assert r.status_code == 502 and 'service token' in r.json()['detail']
+    assert logged_in.get('/api/ui/me').status_code == 200       # the console session is still valid

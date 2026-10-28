@@ -22,6 +22,8 @@ Analisis: python3 experiments/f6/analisis.py
 import argparse
 import json
 import os
+import platform
+import random
 import subprocess
 import sys
 import threading
@@ -39,6 +41,13 @@ from preflight import periksa, uji_rantai                              # noqa: E
 from skenario import SKENARIO                                          # noqa: E402
 
 KNOWLEDGE = 'http://127.0.0.1:18000'
+# Jeda acak sebelum DDL (eval/final). Tanpa jeda, setiap run dimulai tepat sesudah pemindaian
+# monitor MySQL yang mendeteksi pemulihan, sehingga DDL selalu jatuh pada fase yang sama dari
+# siklus 10 detik itu dan deteksi MySQL terkunci di 5,3-7,3 s. Jeda U(0, JEDA_MAKS) membuat
+# fase DDL tersebar atas seluruh siklus pemindaian MySQL dan polling Executor (5 s).
+JEDA_MAKS = 10.0
+ACAK = random.Random()
+KOMMIT = None
 EXECUTOR = 'http://127.0.0.1:18300'
 SECRETS = ROOT / 'setup/ascam/knowledge/secrets'
 UI = None
@@ -156,6 +165,38 @@ def siapkan(kode: str) -> dict:
             'versi_dasar': versi[0]['version_no'] if isinstance(versi, list) and versi else None}
 
 
+def git(*argumen: str) -> str:
+    return subprocess.run(['git', *argumen], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+
+
+def metadata_evaluasi(args, seed: int) -> dict:
+    """Identitas kode dan mesin yang dievaluasi. Hanya berkas terlacak yang diperiksa: berkas
+    hasil dan log nohup yang belum terlacak tidak mengubah kode yang dijalankan."""
+    def baca(path: str) -> str:
+        try:
+            return Path(path).read_text()
+        except OSError:
+            return ''
+    cpu = next((b.split(':', 1)[1].strip() for b in baca('/proc/cpuinfo').splitlines()
+                if b.startswith('model name')), platform.processor())
+    mem_kb = next((int(b.split()[1]) for b in baca('/proc/meminfo').splitlines()
+                   if b.startswith('MemTotal:')), None)
+    return {'commit': git('rev-parse', 'HEAD'),
+            'cabang': git('rev-parse', '--abbrev-ref', 'HEAD'),
+            'perubahan_terlacak': git('status', '--porcelain', '--untracked-files=no'),
+            'argumen': vars(args), 'seed_jeda': seed, 'jeda_maks_s': JEDA_MAKS,
+            'mulai': datetime.now(timezone.utc).isoformat(),
+            'mesin': {'cpu': cpu, 'n_cpu': os.cpu_count(),
+                      'ram_gib': round(mem_kb / 1048576, 1) if mem_kb else None,
+                      'os': platform.platform(), 'python': platform.python_version()}}
+
+
+def jeda_acak(catatan: dict) -> None:
+    jeda = round(ACAK.uniform(0.0, JEDA_MAKS), 3)
+    catatan['jeda_acak_s'] = jeda
+    time.sleep(jeda)
+
+
 class PemantauKetersediaan(threading.Thread):
     """Mengirim kueri ringan ke endpoint SPARQL secara berkala selama adaptasi.
 
@@ -206,12 +247,14 @@ class PersiapanGagal(RuntimeError):
 def satu_baseline(kode: str, nomor: int, jeda_amati: float) -> dict:
     sk = SKENARIO[kode]
     catatan = {'mode': 'baseline', 'skenario': kode, 'kode_baseline': 'b' + kode[1:],
-               'judul': sk.judul, 'run': nomor, 'mulai': datetime.now(timezone.utc).isoformat()}
+               'judul': sk.judul, 'run': nomor, 'commit': KOMMIT,
+               'mulai': datetime.now(timezone.utc).isoformat()}
     catatan.update(siapkan(kode))                  # Executor tetap dijeda: tanpa adaptasi
     if not catatan['pemulihan_terdeteksi']:
         catatan['hasil'] = 'persiapan tidak tuntas'
         return catatan
     catatan['jawaban_sebelum'] = kueri.jalankan_stabil(kode)
+    jeda_acak(catatan)                             # prosedur sama dengan perlakuan
     catatan['ddl'] = sk.terapkan()
     time.sleep(jeda_amati)                         # beri waktu perubahan berlaku di sumber
     if sk.isi_data:
@@ -230,7 +273,7 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
     sk = SKENARIO[kode]
     catatan = {'mode': 'perlakuan', 'skenario': kode, 'judul': sk.judul,
                'pola_diharapkan': sk.pola, 'keputusan_diharapkan': sk.keputusan, 'run': nomor,
-               'mulai': datetime.now(timezone.utc).isoformat()}
+               'commit': KOMMIT, 'mulai': datetime.now(timezone.utc).isoformat()}
     catatan.update(siapkan(kode))
     if not catatan['pemulihan_terdeteksi']:
         catatan['hasil'] = 'persiapan tidak tuntas'
@@ -239,6 +282,7 @@ def satu_perlakuan(kode: str, nomor: int, batas: float) -> dict:
     event_awal = id_event()
     eksekusi_awal = {e['id'] for e in api('/api/v1/obdf/1/executions?limit=50')}
     kendali('resume')
+    jeda_acak(catatan)                             # sebelum t0: deteksi tetap diukur dari DDL
 
     pemantau = PemantauKetersediaan()
     pemantau.start()
@@ -387,7 +431,20 @@ def main() -> int:
     parser.add_argument('--jeda-amati', type=float, default=15.0,
                         help='jeda sesudah DDL sebelum kueri baseline (detik)')
     parser.add_argument('--lewati-periksa', action='store_true')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='seed jeda acak sebelum DDL (bawaan: dari waktu, lalu dicatat)')
+    parser.add_argument('--izinkan-kotor', action='store_true',
+                        help='izinkan evaluasi walau berkas terlacak berubah dari commit')
     args = parser.parse_args()
+    global KOMMIT
+    seed = args.seed if args.seed is not None else int(time.time())
+    ACAK.seed(seed)
+    KOMMIT = git('rev-parse', 'HEAD')
+    kotor = git('status', '--porcelain', '--untracked-files=no')
+    if kotor and not args.izinkan_kotor:
+        print('Evaluasi dibatalkan: berkas terlacak berbeda dari commit '
+              f'{KOMMIT[:7]}, sehingga kode yang dievaluasi tidak dapat diidentifikasi:\n{kotor}')
+        return 1
     UI = token('ui')
     daftar = args.skenario or sorted(SKENARIO)
 
@@ -404,7 +461,9 @@ def main() -> int:
 
     keluaran = ROOT / 'results/f6' / datetime.now().strftime('%Y%m%dT%H%M%S')
     keluaran.mkdir(parents=True, exist_ok=True)
-    print(f'Hasil akan ditulis ke {keluaran.relative_to(ROOT)}')
+    print(f'Hasil akan ditulis ke {keluaran.relative_to(ROOT)} (commit {KOMMIT[:7]}, seed {seed})')
+    (keluaran / 'metadata.json').write_text(
+        json.dumps(metadata_evaluasi(args, seed), indent=2, ensure_ascii=False))
     (keluaran / 'konfigurasi-debezium.json').write_text(
         json.dumps(periksa_konfigurasi_debezium(), indent=2))
     tunggu(lambda: api('/health', base=EXECUTOR, bearer='').get('state') == 'running', 60)

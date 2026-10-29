@@ -62,14 +62,15 @@ naming_policy:
   label_language: id
 
 # Mapping of source types -> Teiid -> XSD. owl2ql_compatible is computed from the list of OWL 2 QL
-# datatypes (W3C OWL 2 Profiles, §3.2.3). Integer types map to xsd:integer (not xsd:long/int/short,
-# which OWL 2 QL does not support).
+# datatypes (W3C OWL 2 Profiles, §3.2.3). The XSD datatypes follow the natural mapping of SQL
+# datatypes in R2RML (W3C R2RML, §10.2): integer types map to xsd:integer (not xsd:long/int/short,
+# which OWL 2 QL does not support either), and REAL, FLOAT, and DOUBLE PRECISION to xsd:double.
 type_mappings:
   - {dbms: postgresql, native_type: smallint, teiid_type: short, xsd_datatype: "xsd:integer"}
   - {dbms: postgresql, native_type: integer, teiid_type: integer, xsd_datatype: "xsd:integer"}
   - {dbms: postgresql, native_type: bigint, teiid_type: long, xsd_datatype: "xsd:integer"}
   - {dbms: postgresql, native_type: numeric, teiid_type: bigdecimal, xsd_datatype: "xsd:decimal"}
-  - {dbms: postgresql, native_type: real, teiid_type: float, xsd_datatype: "xsd:float"}
+  - {dbms: postgresql, native_type: real, teiid_type: float, xsd_datatype: "xsd:double"}
   - {dbms: postgresql, native_type: double precision, teiid_type: double, xsd_datatype: "xsd:double"}
   - {dbms: postgresql, native_type: character varying, teiid_type: string, xsd_datatype: "xsd:string"}
   - {dbms: postgresql, native_type: character, teiid_type: string, xsd_datatype: "xsd:string"}
@@ -85,7 +86,7 @@ type_mappings:
   - {dbms: mysql, native_type: int, teiid_type: integer, xsd_datatype: "xsd:integer"}
   - {dbms: mysql, native_type: bigint, teiid_type: long, xsd_datatype: "xsd:integer"}
   - {dbms: mysql, native_type: decimal, teiid_type: bigdecimal, xsd_datatype: "xsd:decimal"}
-  - {dbms: mysql, native_type: float, teiid_type: float, xsd_datatype: "xsd:float"}
+  - {dbms: mysql, native_type: float, teiid_type: float, xsd_datatype: "xsd:double"}
   - {dbms: mysql, native_type: double, teiid_type: double, xsd_datatype: "xsd:double"}
   - {dbms: mysql, native_type: varchar, teiid_type: string, xsd_datatype: "xsd:string"}
   - {dbms: mysql, native_type: char, teiid_type: string, xsd_datatype: "xsd:string"}

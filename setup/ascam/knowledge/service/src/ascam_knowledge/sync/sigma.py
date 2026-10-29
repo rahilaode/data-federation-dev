@@ -6,7 +6,9 @@ Sources: `get-vdb` (models and source mappings), tables `SYS.*` (tables, columns
 `StoredProcedures`, and `Triggers` (ADR-0003, ADR-0006, ADR-0009).
 
 View columns are classified with sqlglot over `Body` (pass-through, expression, star); a column
-that a view refers to but that is not the source of any view column gets role `predicate` (F0.7).
+that a view refers to but that is not the source of any view column gets role `predicate` (F0.7),
+and so does a column that the view projects and also uses in WHERE, JOIN, GROUP BY, HAVING, or
+ORDER BY, because it decides which rows the view returns.
 """
 import hashlib
 import json
@@ -219,15 +221,33 @@ def build(metadata: dict[str, list[dict]], vdb_info: dict,
             projection_pairs.add((dependent_table, used_table, used_column))
         dependencies.append({'dependent': dependent_table, 'dependent_column': dependent_column,
                              'used': used_table, 'used_column': used_column})
+    def in_clause(view_key: str, column: str) -> bool:
+        """Whether the view uses `column` in WHERE, JOIN, GROUP BY, HAVING, or ORDER BY."""
+        info = views.get(view_key)
+        return bool(info and info.parse_status == 'ok' and column
+                    and column.lower() in {c.lower() for c in info.predicate_columns})
+
     for dep in dependencies:
         if dep['dependent_column']:
             dep['derived_role'] = 'projection'
         elif dep['used_column'] is None:
             dep['derived_role'] = 'table'
+        elif in_clause(dep['dependent'], dep['used_column']):
+            # also projected, but it decides which rows the view returns (lineage rule (ii))
+            dep['derived_role'] = 'predicate'
         elif (dep['dependent'], dep['used'], dep['used_column']) in projection_pairs:
             dep['derived_role'] = 'projection'
         else:
             dep['derived_role'] = 'predicate'
+    # A column that a view both projects and uses in a clause may be reported by Teiid only at
+    # column level; the clause use is then added as a view-level predicate dependency.
+    predicate_deps = {(d['dependent'], d['used'], d['used_column']) for d in dependencies
+                      if d['derived_role'] == 'predicate'}
+    for view_key, used_table, used_column in sorted(projection_pairs):
+        if (view_key, used_table, used_column) not in predicate_deps and in_clause(view_key, used_column):
+            dependencies.append({'dependent': view_key, 'dependent_column': None, 'used': used_table,
+                                 'used_column': used_column, 'derived_role': 'predicate'})
+            predicate_deps.add((view_key, used_table, used_column))
 
     routines = []
     for kind, rows in (('stored_procedure', metadata.get('procedures') or []),

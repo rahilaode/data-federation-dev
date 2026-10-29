@@ -41,6 +41,7 @@ Some later decisions revise earlier ones. Where that happens the entry says so, 
 | [0023](#adr-0023-adjusting-teiid-views-when-a-column-is-dropped) | Adjust Teiid views when a source column is dropped | Analyze, Plan, Execute | F0.8 | Yes |
 | [0024](#adr-0024-approval-only-for-add-notification-for-unsafe-dropping-and-renaming) | Approval only for ADD; notification for unsafe DROP/RENAME; lineage in the console | Plan, Knowledge | F6 | Yes |
 | [0025](#adr-0025-repeated-changes-to-the-same-column) | A re-added column withdraws ASCAM's deprecation; one status block per property; same range required | Plan, Execute | F6 | Yes |
+| [0026](#adr-0026-columns-that-a-view-projects-and-filters-on-r2rml-datatypes) | A column a view projects and filters on is a predicate; XSD datatypes follow R2RML §10.2 | Knowledge, Analyze, Plan | F6 | Yes |
 
 ---
 
@@ -608,3 +609,33 @@ deprecated property, and for a range conflict in both. 75 Executor and 162 Knowl
 
 **Effect on the evaluation.** None on A001–A009: their plans never reuse a declared property, and
 every run starts from the artifacts in git.
+
+## ADR-0026: Columns that a view projects and filters on; R2RML datatypes
+
+*2026-10-30. Knowledge, Analyze, Plan.*
+
+**Context.** A review of the paper against the code found two deviations. (1) Lineage rule (ii)
+says that a view column reads every column used in the clauses of its view. `sigma.py` gave a
+view-level use the role `predicate` only when the used column was not also projected, so in
+`SELECT id, active FROM t WHERE active` the drop of `active` looked like a plain projection
+and could be planned automatically, although it changes which rows the view returns. None of
+the case-study views projects a column it filters on, so A001-A009 were not affected.
+(2) The paper says that xsd(θ) is the datatype that R2RML associates with θ, but the
+configuration mapped PostgreSQL `real` and MySQL `float` to `xsd:float`; R2RML §10.2 maps REAL,
+FLOAT, and DOUBLE PRECISION to `xsd:double`. No scenario adds a floating-point column.
+
+**Decision.**
+
+- A view-level use gets the role `predicate` whenever sqlglot finds the column in WHERE, JOIN,
+  GROUP BY, HAVING, or ORDER BY of the view body, also when the view projects it. If Teiid
+  reports such a column only at column level, a view-level `predicate` dependency is added, so
+  the result does not depend on how `SYSADMIN.Usage` reports the clause.
+- `real` and `float` map to `xsd:double`; a test checks the whole type mapping of the
+  configuration against the R2RML natural mapping.
+
+**Evidence.** Two sigma tests (with and without a view-level row from Teiid; both fail on the
+old code) and one test that a projected column without a clause stays a projection; the
+configuration test. 166 Knowledge tests pass.
+
+**Effect on the evaluation.** None on A001-A009: no case-study view projects a column it filters
+on, and no scenario adds a floating-point column.

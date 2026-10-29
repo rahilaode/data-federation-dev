@@ -386,3 +386,38 @@ def test_object_property_used_for_literal_is_flagged(api):
     result = api.post(f'/api/v1/obdf/{oid}/sync').json()
     issues = [i for i in result['issues'] if i['code'] == 'predicate_kind_mismatch']
     assert issues and 'object_property' in issues[0]['message']
+
+
+# ── a column that a view projects and also filters on (lineage rule (ii)) ──────
+def _projected_and_filtered(view_level_row: bool, body_where: bool = True):
+    md = fx.metadata()
+    md['columns'].append({'SchemaName': 'v', 'TableName': 'penduduk_ringkas', 'Name': 'tanggal_lahir',
+                          'Position': 2, 'NameInSource': None, 'DataType': 'date',
+                          'NullType': 'Nullable', 'Length': 0, 'Precision': 0, 'Scale': 0, 'UID': 'c5'})
+    md['views'][0]['Body'] = ('SELECT p.nik, p.tanggal_lahir FROM dukcapil.master_penduduk AS p'
+                              + (' WHERE p.tanggal_lahir IS NOT NULL' if body_where else ''))
+    usage = [u for u in md['usage'] if view_level_row or u['Uses_UID'] != 'c2']
+    usage.append({'UID': 'c5', 'object_type': 'Column', 'SchemaName': 'v', 'Name': 'penduduk_ringkas',
+                  'ElementName': 'tanggal_lahir', 'Uses_UID': 'c2', 'Uses_object_type': 'Column',
+                  'Uses_SchemaName': 'dukcapil', 'Uses_Name': 'master_penduduk',
+                  'Uses_ElementName': 'tanggal_lahir'})
+    md['usage'] = usage
+    snapshot = sigma.build(md, fx.vdb_info(), {'dukcapil': 'insensitive'})
+    return [(d['dependent_column'], d['used_column'], d['derived_role']) for d in snapshot.dependencies
+            if d['dependent'] == 'v.penduduk_ringkas']
+
+
+@pytest.mark.parametrize('view_level_row', [True, False])
+def test_projected_column_used_in_where_is_also_a_predicate(view_level_row):
+    """Regression: a view-level use of a column that the view also projects was classified as a
+    projection, so dropping the column looked safe although it decides which rows the view
+    returns. Teiid may or may not report the view-level use; both cases give one predicate."""
+    deps = _projected_and_filtered(view_level_row)
+    assert deps.count((None, 'tanggal_lahir', 'predicate')) == 1
+    assert ('tanggal_lahir', 'tanggal_lahir', 'projection') in deps
+
+
+def test_projected_column_without_clause_stays_a_projection():
+    deps = _projected_and_filtered(view_level_row=False, body_where=False)
+    assert (None, 'tanggal_lahir', 'predicate') not in deps
+    assert ('tanggal_lahir', 'tanggal_lahir', 'projection') in deps

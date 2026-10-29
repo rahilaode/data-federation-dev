@@ -236,7 +236,8 @@ def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
         existing = {c.column.lower() for c in table_columns} | {
             (c.source_column or '').lower() for c in table_columns}
         report.targets = []
-        return _decide_add(db, obdf_id, version, event, table_columns, existing, report)
+        return _decide_add(db, obdf_id, version, event, table_columns, existing, report,
+                           dbms=source.dbms)
 
     if not targets:
         report.decision = 'ignored'
@@ -389,14 +390,36 @@ def _iri_property(template: str, namespace: str, local: str, column: str | None 
             .replace('{column}', column if column is not None else local))
 
 
-def property_problems(db: Session, version_id: int, iri: str, domain: str | None) -> list[str]:
+XSD = 'http://www.w3.org/2001/XMLSchema#'
+
+
+def expected_range(db: Session, obdf_id: int, dbms: str | None, column_type: str | None) -> str:
+    """XSD datatype that the Executor gives a new column (rdfs:range and rr:datatype): the type
+    mapping of the native type, xsd:string when there is none."""
+    base = (column_type or '').lower().split('(')[0].strip()
+    rows = db.execute(select(registry.TypeMapping).filter_by(obdf_id=obdf_id)
+                      .order_by(registry.TypeMapping.id)).scalars().all()
+    rows = sorted(rows, key=lambda r: r.dbms != dbms)          # the source's own DBMS first
+    for row in rows:
+        if column_type and row.native_type.lower() in (column_type.lower(), base):
+            datatype = row.xsd_datatype
+            return XSD + datatype[4:] if datatype.startswith('xsd:') else datatype
+    return XSD + 'string'
+
+
+def _entity(db: Session, version_id: int, iri: str):
+    return db.execute(select(spec.OntEntity).where(spec.OntEntity.spec_version_id == version_id,
+                                                   spec.OntEntity.iri == iri)).scalars().first()
+
+
+def property_problems(db: Session, version_id: int, iri: str, domain: str | None,
+                      range_iri: str | None = None) -> list[str]:
     """Collisions between the IRI of a new property and entities of the active version.
 
     OWL 2 QL and Ontop reject a name used both as an object property and as a data property
     ("name sets are not disjoint"); an existing data property may be reused only when its
-    domain is the same."""
-    entity = db.execute(select(spec.OntEntity).where(spec.OntEntity.spec_version_id == version_id,
-                                                    spec.OntEntity.iri == iri)).scalars().first()
+    domain and range are the same, because its declaration stays as it is."""
+    entity = _entity(db, version_id, iri)
     if entity is None:
         return []
     if entity.kind != 'datatype_property':
@@ -405,7 +428,23 @@ def property_problems(db: Session, version_id: int, iri: str, domain: str | None
                              .filter_by(entity_id=entity.id)).scalars().all())
     if domains - ({domain} if domain else set()):
         return [f'IRI {iri} already exists with a different domain: {sorted(domains)}']
+    ranges = set(db.execute(select(spec.OntRange.range_iri)
+                            .filter_by(entity_id=entity.id)).scalars().all())
+    if range_iri and ranges and range_iri not in ranges:
+        return [f'IRI {iri} already exists with range {sorted(ranges)}, '
+                f'but the new column maps to {range_iri}']
     return []
+
+
+def property_notes(db: Session, version_id: int, iri: str) -> list[str]:
+    """What reusing an existing property means, for the reasons of an ADD plan."""
+    entity = _entity(db, version_id, iri)
+    if entity is None or entity.kind != 'datatype_property':
+        return []
+    if entity.deprecated:
+        return [f'property {iri} already exists and is deprecated, because its column was dropped '
+                'earlier; approving reuses it and withdraws the deprecation']
+    return [f'property {iri} already exists; approving maps the new column to it']
 
 
 def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
@@ -424,7 +463,8 @@ def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
     return actions
 
 
-def _decide_add(db, obdf_id, version, event, table_columns, existing, report) -> ImpactReport:
+def _decide_add(db, obdf_id, version, event, table_columns, existing, report,
+                dbms: str | None = None) -> ImpactReport:
     """ADD always waits for approval: ASCAM proposes the property name and domain from the
     naming policy, and the administrator approves or revises them in the console (ADR-0021,
     ADR-0024)."""
@@ -447,7 +487,8 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
                'namespace': namespace,
                'iri_template': naming.property_iri_template if naming else None,
                'triples_maps': [{'iri': tm['iri'], 'classes': tm['classes']} for tm in exposing],
-               'classes': classes, 'proposed_iri': None, 'proposed_domain': None}
+               'classes': classes, 'proposed_iri': None, 'proposed_domain': None,
+               'range_iri': expected_range(db, obdf_id, dbms, event.get('column_type'))}
     report.add_options = options
     if not exposing:
         report.reasons.append(
@@ -462,13 +503,13 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
                     for i, part in enumerate((event.get('column') or '').split('_')))
     iri = _iri_property(naming.property_iri_template, namespace, local, event.get('column') or '')
     domain = classes[0] if classes else None
-    problems = property_problems(db, version.id, iri, domain)
+    problems = property_problems(db, version.id, iri, domain, options['range_iri'])
     if problems:
         report.reasons.extend(problems)
         if naming.on_collision == 'qualify_with_class' and domain:
             iri = f"{iri}_{domain.rsplit('/', 1)[-1]}"
             report.reasons.append(f'the name collision policy uses IRI {iri}')
-            problems = property_problems(db, version.id, iri, domain)
+            problems = property_problems(db, version.id, iri, domain, options['range_iri'])
         if problems:
             report.reasons.append('choose another property name in the approval form')
             return report
@@ -477,6 +518,7 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report) ->
             f'the TriplesMaps that expose {target_table.table} give more than one class '
             f'{classes}; the proposal uses {domain} as domain and should be reviewed')
     options['proposed_iri'], options['proposed_domain'] = iri, domain
+    report.reasons.extend(property_notes(db, version.id, iri))
     report.actions.extend(property_actions(options, iri, domain))
     return report
 
@@ -499,7 +541,7 @@ def revise_add(db: Session, plan, local_name: str, domain: str | None) -> tuple[
     if not options['classes'] and domain:
         raise ValueError('the exposing TriplesMaps give no class, so no domain can be chosen')
     iri = _iri_property(options['iri_template'], options['namespace'], local_name)
-    problems = property_problems(db, plan.base_spec_version_id, iri, domain)
+    problems = property_problems(db, plan.base_spec_version_id, iri, domain, options.get('range_iri'))
     if problems:
         raise ValueError('; '.join(problems))
     return iri, property_actions(options, iri, domain)

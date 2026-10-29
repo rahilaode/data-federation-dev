@@ -200,7 +200,8 @@ def _revise(db: Session, plan: ops.AdaptationPlan, actor: str, now: datetime, ir
     revision = ops.AdaptationPlan(
         event_id=plan.event_id, base_spec_version_id=plan.base_spec_version_id,
         pattern=plan.pattern, decision=plan.decision, status='approved', impact=impact,
-        reasons=[*plan.reasons, f"revised by the administrator: property {iri}, domain {domain or '-'}"],
+        reasons=[*plan.reasons, f"revised by the administrator: property {iri}, domain {domain or '-'}",
+                 *impact_service.property_notes(db, plan.base_spec_version_id, iri)],
         created_at=now, decided_by=actor, decided_at=now, revision_of=plan.id)
     db.add(revision)
     db.flush()

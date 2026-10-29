@@ -267,3 +267,27 @@ def test_property_choice_only_for_add_and_approval(api, obdf):
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     r = api.post(f"/api/v1/plans/{plan['id']}/reject", json={'property_name': 'alamatBaru'})
     assert r.status_code == 422
+
+
+def test_admin_choice_of_a_deprecated_property_is_explained(api, obdf):
+    """ADD → DROP → ADD: the administrator gives the new column the name of a property whose
+    column was dropped earlier (bansos:statusEkonomi is deprecated in the fixture)."""
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    domain = plan['impact']['add_options']['proposed_domain']
+    revision = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                        json={'property_name': 'statusEkonomi', 'domain': domain}).json()
+    assert revision['revision_of'] == plan['id']
+    assert any('is deprecated' in r and 'withdraws the deprecation' in r for r in revision['reasons'])
+
+
+def test_admin_choice_with_another_range_is_refused(api, obdf):
+    api.put(f'/api/v1/obdf/{obdf}/type-mappings', json=[
+        {'dbms': 'postgresql', 'native_type': 'integer', 'teiid_type': 'integer',
+         'xsd_datatype': 'xsd:integer'}])
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='integer')['plan']
+    domain = plan['impact']['add_options']['proposed_domain']
+    r = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                 json={'property_name': 'statusEkonomi', 'domain': domain})
+    assert r.status_code == 422 and 'already exists with range' in r.json()['detail']

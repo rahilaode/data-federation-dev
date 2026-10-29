@@ -272,3 +272,33 @@ def test_drop_of_star_column_needs_no_rewrite(api, obdf):
     out = impact(api, obdf, operation='drop', source='kemensos', schema='public',
                  table='penerima_manfaat', column='status_ekonomi')
     assert not [a for a in out['actions'] if a['operation'] == 'rewrite_logical_table']
+
+
+# ── reusing a property whose column was dropped earlier (ADD → DROP → ADD) ──────
+def test_add_that_reuses_a_deprecated_property_says_so(api, obdf):
+    """bansos:statusEkonomi is deprecated in the fixture; a proposal that reuses it must tell the
+    administrator that approving withdraws the deprecation."""
+    api.put(f'/api/v1/obdf/{obdf}/naming-policy',
+            json={'property_iri_template': '{namespace}statusEkonomi', 'on_collision': 'hitl',
+                  'namespace': 'http://bansos.go.id/ontology/'})
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='status_baru', column_type='varchar(20)')
+    assert out['decision'] == 'hitl'
+    assert out['add_options']['proposed_iri'] == 'http://bansos.go.id/ontology/statusEkonomi'
+    assert out['add_options']['range_iri'] == 'http://www.w3.org/2001/XMLSchema#string'
+    assert any('is deprecated' in r and 'withdraws the deprecation' in r for r in out['reasons'])
+
+
+def test_add_that_reuses_a_property_with_another_range_is_refused(api, obdf):
+    api.put(f'/api/v1/obdf/{obdf}/type-mappings', json=[
+        {'dbms': 'postgresql', 'native_type': 'integer', 'teiid_type': 'integer',
+         'xsd_datatype': 'xsd:integer'}])
+    api.put(f'/api/v1/obdf/{obdf}/naming-policy',
+            json={'property_iri_template': '{namespace}statusEkonomi', 'on_collision': 'hitl',
+                  'namespace': 'http://bansos.go.id/ontology/'})
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='status_baru', column_type='integer')
+    assert out['add_options']['range_iri'] == 'http://www.w3.org/2001/XMLSchema#integer'
+    assert any('already exists with range' in r for r in out['reasons'])
+    assert out['add_options']['proposed_iri'] is None          # the administrator must give a name
+    assert [a['artifact'] for a in out['actions']] == ['vdb']

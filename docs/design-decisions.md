@@ -40,6 +40,7 @@ Some later decisions revise earlier ones. Where that happens the entry says so, 
 | [0022](#adr-0022-blue-green-obda-layer) | Two Ontop instances behind a proxy (blue-green) | Execute | F6 | Yes (default strategy) |
 | [0023](#adr-0023-adjusting-teiid-views-when-a-column-is-dropped) | Adjust Teiid views when a source column is dropped | Analyze, Plan, Execute | F0.8 | Yes |
 | [0024](#adr-0024-approval-only-for-add-notification-for-unsafe-dropping-and-renaming) | Approval only for ADD; notification for unsafe DROP/RENAME; lineage in the console | Plan, Knowledge | F6 | Yes |
+| [0025](#adr-0025-repeated-changes-to-the-same-column) | A re-added column withdraws ASCAM's deprecation; one status block per property; same range required | Plan, Execute | F6 | Yes |
 
 ---
 
@@ -568,3 +569,42 @@ none, with the same reasons.
 **Effect on the evaluation.** A009 is expected to be `notify`; a run records `notified`, no
 actions, a notification naming the view, no execution, an unchanged version, and an affected query
 that still fails. A009 needs no manual decision; its repair remains manual.
+
+## ADR-0025: Repeated changes to the same column
+
+*2026-10-30. Plan, Knowledge, Execute.*
+
+**Context.** A manual test added `email` to `penerima_manfaat` (approved as `bansos:hasEmail`),
+dropped it, and added it again, several times. The mapping followed every step, but the ontology
+did not: on the second ADD, `add_datatype_property` found `hasEmail` already declared and returned
+the file unchanged, so the `owl:deprecated true` written by the DROP stayed while ℳ populated the
+property again; every further DROP appended another `deprecate` block. 𝒯 thus contradicted ℳ, and
+the Knowledge sync reported `predicate_deprecated_in_use`. A re-added column with another type
+would also have kept the old `rdfs:range`. The evaluation was not affected, because every run
+starts from the artifacts in git (`experiments/reset_obdf.py`).
+
+**Decision.**
+
+- A property has at most one ASCAM status block: `deprecate <iri>` after a DROP, or
+  `reactivate <iri>` after its column was added again. A new status block replaces the old one, so
+  the file does not grow with the number of changes; the full history stays in the sealed
+  specification versions and in `ops`.
+- ADD of a declared property withdraws ASCAM's own deprecation (the `deprecate` blocks are removed
+  and a `reactivate` block records when and why). A deprecation written by a person is never
+  removed (P6, ADR-0019); the action fails and the administrator chooses another name. A DROP of a
+  property that a person already deprecated adds nothing.
+- An existing data property may be reused only with the same domain (ADR-0024) and the same range.
+  Knowledge stores the expected range of the new column in `add_options.range_iri` (type mapping
+  of the source DBMS, `xsd:string` when there is none) and refuses a proposal or an administrator's
+  choice with another range; the Executor checks the declared range again before writing.
+- An ADD plan that reuses a property says so in its reasons, and whether approving withdraws a
+  deprecation.
+
+**Evidence.** Executor tests for three ADD/DROP cycles (one status block, active after each ADD,
+valid Turtle, comments of people intact), for repeated DROP, for files with duplicated blocks
+written before this change, for a deprecation written by a person, and for a range conflict.
+Knowledge tests for the reasons of a proposal and of an administrator's choice that reuse a
+deprecated property, and for a range conflict in both. 75 Executor and 162 Knowledge tests pass.
+
+**Effect on the evaluation.** None on A001–A009: their plans never reuse a declared property, and
+every run starts from the artifacts in git.

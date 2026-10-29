@@ -204,6 +204,10 @@ def chain_test(timeout: float = 60.0, quiet: bool = False) -> tuple[bool, str]:
         return False, f'Knowledge does not answer: {initial}'
     before = {e['id'] for e in initial}
     pg(f'CREATE TABLE IF NOT EXISTS public.{PROBE} (id serial primary key)')
+    # The monitor logs only tables listed in captured_tables_ref, so the test table is listed
+    # for the duration of the test and removed again afterwards (see cleanup()).
+    pg("INSERT INTO schema_monitor.captured_tables_ref (schema_name, table_name, description) "
+       f"VALUES ('public', '{PROBE}', 'preflight chain test') ON CONFLICT DO NOTHING")
     column = f'probe_{int(time.time())}'
     pg(f'ALTER TABLE public.{PROBE} ADD COLUMN {column} varchar(10)')
     start = time.perf_counter()
@@ -217,13 +221,20 @@ def chain_test(timeout: float = 60.0, quiet: bool = False) -> tuple[bool, str]:
                 delay = int((time.perf_counter() - start) * 1000)
                 report(f"  chain intact: event {event['id']} received after {delay} ms "
                        f"(status {event['status']})")
-                pg(f'DROP TABLE IF EXISTS public.{PROBE}')
+                cleanup()
                 return True, f'{delay} ms'
         time.sleep(1)
     for finding in diagnose(column, initial_messages):
         report(f'  {finding}')
-    pg(f'DROP TABLE IF EXISTS public.{PROBE}')
+    cleanup()
     return False, f'no event within {int(timeout)} s'
+
+
+def cleanup() -> None:
+    """Removes the test table and its entry in the reference table."""
+    pg(f'DROP TABLE IF EXISTS public.{PROBE}')
+    pg("DELETE FROM schema_monitor.captured_tables_ref "
+       f"WHERE schema_name = 'public' AND table_name = '{PROBE}'")
 
 
 def main() -> int:

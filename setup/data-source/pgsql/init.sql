@@ -216,13 +216,18 @@ BEGIN
         );
         v_column_name := split_part(v_column_name, ' ', 1);
 
-        -- Check whether this table is listed in the reference table
+        -- Only tables listed (and active) in the reference table are monitored;
+        -- changes to any other table are not logged and never leave the source.
         SELECT EXISTS (
             SELECT 1 FROM schema_monitor.captured_tables_ref
             WHERE is_active   = TRUE
               AND schema_name = v_schema_name
               AND table_name  = v_table_name
         ) INTO v_is_regulated;
+
+        IF NOT v_is_regulated THEN
+            CONTINUE;
+        END IF;
 
         INSERT INTO schema_monitor.ddl_event_log
             (username, schema_name, table_name, object_tag,

@@ -16,9 +16,9 @@ as rows of `ddl_event_log`. Debezium captures that log table only, never the bus
 (ADR-0017; C_safe in `docs/evaluation.md`). Whether a table is federated is decided by Knowledge,
 not by the monitors.
 
-- PostgreSQL: an event trigger on `ddl_command_end` writes every such statement to
-  `schema_monitor.ddl_event_log` (with `REPLICA IDENTITY FULL`), and sets `is_regulated` when the
-  table is listed in `schema_monitor.captured_tables_ref`.
+- PostgreSQL: an event trigger on `ddl_command_end` writes every such statement on a table that is
+  listed (and active) in `schema_monitor.captured_tables_ref` to `schema_monitor.ddl_event_log`
+  (with `REPLICA IDENTITY FULL`); statements on any other table are not logged.
 - MySQL has no DDL triggers. The Event Scheduler runs `sp_detect_ddl_changes` every 10 seconds for
   the tables listed in `captured_tables_ref`; it compares `information_schema.COLUMNS` with the
   snapshot in `ddl_column_snapshot` and writes the differences to `ddl_event_capture`, from where a

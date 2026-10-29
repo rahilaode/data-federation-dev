@@ -562,7 +562,7 @@ rejected. Administrators also had no view of which OBDF elements depend on a col
 
 **Evidence.** 158 Knowledge tests and 25 console tests. On the case-study artifacts the old and new
 analysis gave byte-identical plans for A001 and A004 and identical decisions, actions, and reasons
-for A002, A003, and A005–A008; only A009 changed, from `hitl` with three actions to `notify` with
+for A002 and A005–A008; only A009 changed, from `hitl` with three actions to `notify` with
 none, with the same reasons.
 
 **Effect on the evaluation.** A009 is expected to be `notify`; a run records `notified`, no

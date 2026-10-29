@@ -17,16 +17,23 @@ change columns that the mapping reads through Teiid views of the service model `
 |---|---|---|---|---|
 | A001 | `ADD COLUMN email` on `penerima_manfaat` | PostgreSQL | P-001 | `hitl` (ADR-0021) |
 | A002 | `DROP COLUMN tipe_program` on `program_bansos` (explicit projection) | PostgreSQL | P-002 | `auto` |
-| A003 | `RENAME COLUMN tanggal_lahir` on `master_penduduk` (`SELECT *`) | MySQL | P-003 | `auto` |
+| A003 | `RENAME COLUMN nama_program` on `program_bansos` (explicit projection) | PostgreSQL | P-003 | `auto` |
 | A004 | `ADD COLUMN kode_pos` on `master_wilayah` | MySQL | P-001 | `hitl` |
 | A005 | `DROP COLUMN status_hidup` on `master_penduduk` (`SELECT *`) | MySQL | P-002 | `auto` |
-| A006 | `RENAME COLUMN nama_program` on `program_bansos` (explicit projection) | PostgreSQL | P-003 | `auto` |
+| A006 | `RENAME COLUMN tanggal_lahir` on `master_penduduk` (`SELECT *`) | MySQL | P-003 | `auto` |
 | A007 | `DROP COLUMN no_kartu_keluarga`, read through the pass-through view `v_penerima_aktif` | PostgreSQL | P-002 | `auto` (the view is narrowed with `ALTER VIEW`) |
 | A008 | `DROP COLUMN diubah_oleh`, read through the aliased view `v_riwayat_perubahan` | MySQL | P-002 | `auto` (the aliased column is removed from the view; the mapping runs `SELECT *` over it) |
 | A009 | `DROP COLUMN periode_selesai`, used in the expression `YEAR(periode_selesai)` of `v_program_berakhir` | PostgreSQL | P-002 | `notify` (ADR-0024; negative control) |
 
 The paper uses the same scenario codes; the harness writes them in lower case (`a001`), and
 the baseline run of a scenario carries the code `b` + number (for example `b002`).
+
+**Renumbering (29 October 2026).** A003 and A006 were swapped so that A001–A003 are the
+PostgreSQL scenarios and A004–A006 the MySQL ones, in the same operator order (ADD, DROP,
+RENAME). Result directories written before that change, including run `20261028T214208` (commit
+`a1e9b0a`, tag `eval-2026-10-28`), use the old codes: their `a003`/`b003` is the MySQL rename
+(now A006) and their `a006`/`b006` the PostgreSQL rename (now A003). `convert_results.py`
+renumbers them; in this document, earlier evaluations are described with the new codes.
 
 The view scenarios use columns that A001–A006 do not touch and that no other TriplesMap reads, so
 what is observed comes only from the path through the view. The properties they use
@@ -64,10 +71,10 @@ is in [SPARQL queries](#sparql-queries).
 |---|---|---|---|
 | a001 | `email` | `recipient` | `resident_link`, `count_per_class`, `transaction_status` |
 | a002 | `program_type` | `program_name` | `transaction_program`, `count_per_class`, `transaction_status` |
-| a003 | `birth_date` | `name_occupation` | `recipient_to_resident` (cross-source), `count_per_class`, `transaction_status` |
+| a003 | `program_name` | `type_amount` | `recipient_to_resident`, `count_per_class`, `transaction_status` |
 | a004 | `postal_code` | `region` | `recipient_to_resident`, `count_per_class`, `transaction_status` |
 | a005 | `living_status` | `name_occupation` | `family_region`, `count_per_class`, `transaction_status` |
-| a006 | `program_name` | `type_amount` | `recipient_to_resident`, `count_per_class`, `transaction_status` |
+| a006 | `birth_date` | `name_occupation` | `recipient_to_resident` (cross-source), `count_per_class`, `transaction_status` |
 | a007 | `active_recipient_kk` | `active_recipient` | `resident_link`, `count_per_class`, `transaction_status` |
 | a008 | `history_officer` | `history_column` | `family_region`, `count_per_class`, `transaction_status` |
 | a009 | `end_year` | `program_name` | `transaction_program`, `count_per_class`, `transaction_status` |
@@ -190,7 +197,7 @@ The evaluation reported in the paper was run on branch `eval/final` (commit `a1e
 code was translated. That harness lived in `experiments/f6/`, wrote to `results/f6/`, and used
 Indonesian keys, file names, and query names. The scenarios, the SQL statements, and the SPARQL
 queries are the same, apart from the names of the backup tables (`ascam_cadangan_*` instead of
-`ascam_backup_*`). To analyse such a directory with the tools of this branch, convert it first; the
+`ascam_backup_*`) and the old numbering of A003 and A006. To analyse such a directory with the tools of this branch, convert it first; the
 original is not modified:
 
 ```bash
@@ -222,10 +229,10 @@ restores the column after the run.
 |---|---|---|
 | A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
 | A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
-| A003 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
+| A003 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
 | A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
 | A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
-| A006 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
+| A006 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
 | A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
 | A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
 | A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
@@ -276,21 +283,21 @@ SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### A003: RENAME COLUMN tanggal_lahir on master_penduduk
+#### A003: RENAME COLUMN nama_program on program_bansos
 
-Pattern `P-003`, expected decision `auto`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/tanggalLahir`.
+Pattern `P-003`, expected decision `auto`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/namaProgram`.
 
 ```sql
--- Schema change (apply), MySQL (dukcapil)
-ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp;
--- Restore after the run (restore), MySQL (dukcapil)
-ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir;
+-- Schema change (apply), PostgreSQL (kemensos)
+ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program;
+-- Restore after the run (restore), PostgreSQL (kemensos)
+ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program;
 ```
 
 | Query | Kind |
 |---|---|
-| `birth_date` | affected |
-| `name_occupation` | neighbour |
+| `program_name` | affected |
+| `type_amount` | neighbour |
 | `recipient_to_resident` | control |
 | `count_per_class` | control |
 | `transaction_status` | control |
@@ -339,21 +346,21 @@ SELECT count(*) FROM master_penduduk WHERE status_hidup IS NOT NULL;
 | `count_per_class` | control |
 | `transaction_status` | control |
 
-#### A006: RENAME COLUMN nama_program on program_bansos
+#### A006: RENAME COLUMN tanggal_lahir on master_penduduk
 
-Pattern `P-003`, expected decision `auto`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/namaProgram`.
+Pattern `P-003`, expected decision `auto`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/tanggalLahir`.
 
 ```sql
--- Schema change (apply), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program;
--- Restore after the run (restore), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program;
+-- Schema change (apply), MySQL (dukcapil)
+ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp;
+-- Restore after the run (restore), MySQL (dukcapil)
+ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir;
 ```
 
 | Query | Kind |
 |---|---|
-| `program_name` | affected |
-| `type_amount` | neighbour |
+| `birth_date` | affected |
+| `name_occupation` | neighbour |
 | `recipient_to_resident` | control |
 | `count_per_class` | control |
 | `transaction_status` | control |
@@ -490,18 +497,18 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
 ```
 
-**`birth_date`** (used by a003)
+**`program_name`** (used by a003)
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
+SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
 ```
 
-**`name_occupation`** (used by a003, a005)
+**`type_amount`** (used by a003)
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
 ```
 
 **`recipient_to_resident`** (used by a003, a004, a006)
@@ -532,6 +539,13 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; bansos:statusHidup ?status } ORDER BY ?s
 ```
 
+**`name_occupation`** (used by a005, a006)
+
+```sparql
+PREFIX bansos: <http://bansos.go.id/ontology/>
+SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+```
+
 **`family_region`** (used by a005, a008)
 
 ```sparql
@@ -539,18 +553,11 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
 ```
 
-**`program_name`** (used by a006)
+**`birth_date`** (used by a006)
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
-```
-
-**`type_amount`** (used by a006)
-
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
+SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
 ```
 
 **`active_recipient_kk`** (used by a007)
@@ -601,15 +608,17 @@ Run `20261028T214208` on branch `eval/final` (commit `a1e9b0a`), 28 October 2026
 on one Linux host with 72 logical CPUs (Intel Xeon E5-2695 v4, 2.1 GHz) and 125.5 GiB of memory;
 45 baseline runs (9 × 5) and 180 treatment runs (9 × 20), random-delay seed 1793198525. Every
 restore was detected, no run started from a tainted state, and there were no anomalies.
+The table uses the new scenario codes; in the files of this run, A003 and A006 are stored as
+`a006` and `a003` (see Renumbering under Scenarios).
 
 | Scenario | EP / RP / PR without | EP / RP / PR with | Decision | Adaptation | Detection, median (s) | Δt_adapt, median (max) (s) |
 |---|---|---|---|---|---:|---:|
 | A001 | 100 / 100 / 100 | 100 / 80 / 100 | 20/20 `hitl` | 20/20 | 1.3 | 29.4 (32.1) |
 | A002 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 1.3 | 29.1 (32.6) |
-| A003 | 80 / 80 / 80 | 100 / 100 / 100 | 20/20 `auto` | 20/20 | 7.3 | 35.2 (41.4) |
+| A003 | 80 / 80 / 80 | 100 / 100 / 100 | 20/20 `auto` | 20/20 | 1.3 | 29.5 (31.9) |
 | A004 | 100 / 100 / 100 | 100 / 80 / 100 | 20/20 `hitl` | 20/20 | 6.3 | 36.5 (40.8) |
 | A005 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 5.3 | 34.0 (39.9) |
-| A006 | 80 / 80 / 80 | 100 / 100 / 100 | 20/20 `auto` | 20/20 | 1.3 | 29.5 (31.9) |
+| A006 | 80 / 80 / 80 | 100 / 100 / 100 | 20/20 `auto` | 20/20 | 7.3 | 35.2 (41.4) |
 | A007 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 1.3 | 32.1 (33.7) |
 | A008 | 80 / 80 / 80 | 100 / 80 / 100 | 20/20 `auto` | 20/20 | 5.3 | 36.2 (41.2) |
 | A009 | 80 / 80 / 80 | 80 / 80 / 80 | 20/20 `notify` | not adapted | 1.3 | – |
@@ -631,7 +640,7 @@ affected are kept as a record but are not used in the paper.
 
 1. **The restore step is itself a schema change.** Putting a column back between runs is seen by
    ASCAM as a new change and, left alone, is executed automatically, including an Ontop reload just
-   when the base answers are taken. In the first evaluation this made 3 of 20 A003 runs fail to take
+   when the base answers are taken. In the first evaluation this made 3 of 20 A006 runs fail to take
    their base answers (connection error), and they were wrongly classified as "not identical". The
    effect is largest on MySQL, whose detection time varies by 1–10 s. Handled by pausing the
    Executor and superseding the plans of the restore step (procedure steps 1–3).
@@ -653,11 +662,11 @@ affected are kept as a record but are not used in the paper.
 
 ### Evaluation 20260922T150904
 
-Six of 60 treatment runs were not recorded as finished. Five (A002 run 9; A003 runs 1, 3, 8, 17)
+Six of 60 treatment runs were not recorded as finished. Five (A002 run 9; A006 runs 1, 3, 8, 17)
 came from a defect: Knowledge committed after sending its response, so `/finish` sometimes arrived
 before the commit of `/sync`, was refused with 409, and the Executor left the execution `running`
 (ADR-0008 and ADR-0020, revisions F6). The adaptations themselves had finished, sync included. One
-run (A003 run 12) produced no event, because the MySQL monitor recorded neither the restore rename
+run (A006 run 12) produced no event, because the MySQL monitor recorded neither the restore rename
 nor the treatment rename. Because these results came from defective code, the treatment runs were
 repeated after the fix.
 
@@ -680,10 +689,10 @@ evaluation when it does not.
 
 ### Evaluation 20260924T072348
 
-That check never applied to A003 at first: the MySQL client prints nothing when `ALTER` succeeds,
+That check never applied to A006 at first: the MySQL client prints nothing when `ALTER` succeeds,
 and the harness read empty output as "clean" (no change). The treatment DDL then ran about 9–10 s
 after the restore, only the duration of the OBDF reset, and both could fall into one scan window
-and cancel out. This explains A003 run 12 of the previous evaluation and A003 runs 1 and 2 of this
+and cancel out. This explains A006 run 12 of the previous evaluation and A006 runs 1 and 2 of this
 one (the `tanggal_lahir` query returned HTTP 200 before the DDL, the treatment DDL succeeded, but
 `ddl_event_log` held no row between 00:30:06 and 00:58:46). The restore contract is now explicit:
 `'clean'` means only that no DDL ran, and every path that runs DDL returns `restored: …`. The
@@ -706,10 +715,10 @@ PostgreSQL replication slot and publication, and changes neither the source data
 
 ### Evaluation 20260930T091536: scenarios sharing a table (not valid)
 
-In the 3 × 2 design, A002 and A006 use `program_bansos`, and A003 and A005 use `master_penduduk`.
+In the 3 × 2 design, A002 and A003 use `program_bansos`, and A006 and A005 use `master_penduduk`.
 Each run restored only its own column, so changes left by another scenario carried over: after
-B006, `nama_program` was still called `judul_program`, and the A002 neighbour query failed in 20 of
-20 runs; after A002, `tipe_program` was missing, and the A006 and B006 neighbour queries failed.
+B003, `nama_program` was still called `judul_program`, and the A002 neighbour query failed in 20 of
+20 runs; after A002, `tipe_program` was missing, and the A003 and B003 neighbour queries failed.
 Those failures happened BEFORE the treatment DDL, so they were not caused by an adaptation. The
 A002 timings were affected too (IQR 22.6–30.0 s, maximum 39.1 s).
 

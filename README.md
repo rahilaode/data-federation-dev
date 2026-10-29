@@ -161,7 +161,7 @@ Three scripts cover day-to-day use:
 
 ### Trying a schema change by hand
 
-Rename a column that the mapping uses (scenario A006), then watch the console
+Rename a column that the mapping uses (scenario A003), then watch the console
 (Schema changes, Plans and executions):
 
 ```bash
@@ -216,10 +216,10 @@ result names the code that produced it. Results of the earlier Indonesian-langua
 |---|---|---|
 | A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
 | A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
-| A003 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
+| A003 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
 | A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
 | A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
-| A006 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
+| A006 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
 | A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
 | A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
 | A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
@@ -307,18 +307,18 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
 ```
 
-**`birth_date`** (used by a003)
+**`program_name`** (used by a003)
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
+SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
 ```
 
-**`name_occupation`** (used by a003, a005)
+**`type_amount`** (used by a003)
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
 ```
 
 **`recipient_to_resident`** (used by a003, a004, a006)
@@ -349,6 +349,13 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; bansos:statusHidup ?status } ORDER BY ?s
 ```
 
+**`name_occupation`** (used by a005, a006)
+
+```sparql
+PREFIX bansos: <http://bansos.go.id/ontology/>
+SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+```
+
 **`family_region`** (used by a005, a008)
 
 ```sparql
@@ -356,18 +363,11 @@ PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
 ```
 
-**`program_name`** (used by a006)
+**`birth_date`** (used by a006)
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
-```
-
-**`type_amount`** (used by a006)
-
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
+SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
 ```
 
 **`active_recipient_kk`** (used by a007)

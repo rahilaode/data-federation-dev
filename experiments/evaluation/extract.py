@@ -30,8 +30,8 @@ DT_COMPONENTS = ['deploy_vdb', 'validate', 'start_ontop', 'reload_ontop', 'verif
 OPERATION = {'a001': 'ADD', 'a002': 'DROP', 'a003': 'RENAME',
              'a004': 'ADD', 'a005': 'DROP', 'a006': 'RENAME',
              'a007': 'DROP (view)', 'a008': 'DROP (view)', 'a009': 'DROP (view expression)'}
-DBMS = {'a001': 'PostgreSQL', 'a002': 'PostgreSQL', 'a006': 'PostgreSQL',
-        'a003': 'MySQL', 'a004': 'MySQL', 'a005': 'MySQL',
+DBMS = {'a001': 'PostgreSQL', 'a002': 'PostgreSQL', 'a003': 'PostgreSQL',
+        'a004': 'MySQL', 'a005': 'MySQL', 'a006': 'MySQL',
         'a007': 'PostgreSQL', 'a008': 'MySQL', 'a009': 'PostgreSQL'}
 # Valid outcomes without an execution: 'notified' for the scenario that must not be adapted
 # (A009, ADR-0024); 'rejected' is kept so that older results (A009 plan rejected) still read.

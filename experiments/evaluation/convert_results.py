@@ -10,6 +10,11 @@ directory is never modified.
 Text produced by the services themselves at run time (plan reasons, notification messages,
 error messages, DDL output) is copied as it is, so it stays in Indonesian in converted files.
 
+The old harness numbers the two RENAME scenarios the other way round: its a003 is the MySQL rename
+(now a006) and its a006 the PostgreSQL rename (now a003). The converter renumbers them, in file
+names and in the scenario fields, so converted results use the codes of scenarios.py. Files that
+are copied unchanged (analisis.md) keep the old codes.
+
 Usage (from the repository root):
   python3 experiments/evaluation/convert_results.py results/f6/20261028T230000
   python3 experiments/evaluation/convert_results.py <source> <target>
@@ -59,7 +64,7 @@ QUERY_NAME = {
     'nokk_penerima_aktif': 'active_recipient_kk', 'penerima_aktif': 'active_recipient',
     'petugas_riwayat': 'history_officer', 'kolom_riwayat': 'history_column', 'tahun_berakhir': 'end_year',
 }
-# 'nama_program' is the affected query of A006 and the neighbour query of A002/A009; the
+# 'nama_program' is the affected query of A003 and the neighbour query of A002/A009; the
 # mapping is the same in every scenario, so one table is enough.
 KIND = {'terdampak': 'affected', 'tetangga': 'neighbour', 'kontrol': 'control'}
 ASSESSMENT = {'metrik': 'metric', 'preservation_ratio': 'preservation_ratio', 'per_kueri': 'per_query'}
@@ -90,6 +95,8 @@ ARGUMENT = {'mode': 'mode', 'skenario': 'scenario', 'ulangan': 'runs', 'ulangan_
             'batas': 'timeout', 'jeda_amati': 'observe_delay', 'lewati_periksa': 'skip_checks',
             'seed': 'seed', 'izinkan_kotor': 'allow_dirty'}
 FILES = {'konfigurasi-debezium.json': 'debezium-config.json', 'kafka-awal.json': 'kafka-start.json'}
+# Old scenario code -> current code (A003 and A006 were swapped after the old harness was frozen)
+RENUMBER = {'a003': 'a006', 'a006': 'a003', 'b003': 'b006', 'b006': 'b003'}
 
 unknown: set[str] = set()
 
@@ -126,6 +133,11 @@ def assessment(block: dict | None) -> dict | None:
 def record(rec: dict) -> dict:
     out = rename(rec, RECORD, 'record')
     out['mode'] = MODE.get(out.get('mode'), out.get('mode'))
+    for key in ('scenario', 'baseline_code'):
+        if out.get(key) in RENUMBER:
+            out[key] = RENUMBER[out[key]]
+    if isinstance(out.get('restored_scenarios'), list):
+        out['restored_scenarios'] = [RENUMBER.get(c, c) for c in out['restored_scenarios']]
     if out.get('outcome') in OUTCOME:
         out['outcome'] = OUTCOME[out['outcome']]
     if out.get('scenario') in SCENARIOS:
@@ -183,6 +195,9 @@ def main() -> int:
         if path.is_dir():
             continue                                   # summaries are recomputed with extract.py
         name = FILES.get(path.name, path.name)
+        parts = name.split('-')                        # baseline-a003-01.json, run-a003-01.json
+        if len(parts) == 3 and parts[1] in RENUMBER:
+            name = '-'.join((parts[0], RENUMBER[parts[1]], parts[2]))
         if path.suffix != '.json':
             shutil.copy2(path, target / name)
             continue

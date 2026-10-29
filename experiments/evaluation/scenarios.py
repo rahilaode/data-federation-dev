@@ -96,20 +96,17 @@ def a002_restore() -> str:
     return 'restored: ' + pg("SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL")
 
 
-# ── A003: column renamed on the MySQL source ──────────────────────────────────
+# ── A003: column renamed on the PostgreSQL source (explicit projection) ───────
 def a003_apply() -> str:
-    return my('ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp')
+    return pg('ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program')
 
 
 def a003_restore() -> str:
-    exists = my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
-                "AND table_name='master_penduduk' AND column_name='tgl_lahir_ktp'")
-    if exists.strip() == '1':
-        # The MySQL client prints nothing when ALTER succeeds; without a marker the empty output
-        # reads as "nothing changed" and the harness does not wait for the restore event
-        # (A003 runs 1 and 2, evaluation 20260924T072348).
-        return 'restored: ' + my('ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir')
-    return 'clean'
+    exists = pg("SELECT count(*) FROM information_schema.columns "
+                "WHERE table_name='program_bansos' AND column_name='judul_program'")
+    if exists != '1':
+        return 'clean'
+    return 'restored: ' + pg('ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program')
 
 
 # ── A004: new column on the MySQL source ──────────────────────────────────────
@@ -155,17 +152,20 @@ def a005_restore() -> str:
     return 'restored: ' + my('SELECT count(*) FROM master_penduduk WHERE status_hidup IS NOT NULL')
 
 
-# ── A006: column renamed on the PostgreSQL source (explicit projection) ───────
+# ── A006: column renamed on the MySQL source ──────────────────────────────────
 def a006_apply() -> str:
-    return pg('ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program')
+    return my('ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp')
 
 
 def a006_restore() -> str:
-    exists = pg("SELECT count(*) FROM information_schema.columns "
-                "WHERE table_name='program_bansos' AND column_name='judul_program'")
-    if exists != '1':
-        return 'clean'
-    return 'restored: ' + pg('ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program')
+    exists = my("SELECT count(*) FROM information_schema.columns WHERE table_schema='dukcapil' "
+                "AND table_name='master_penduduk' AND column_name='tgl_lahir_ktp'")
+    if exists.strip() == '1':
+        # The MySQL client prints nothing when ALTER succeeds; without a marker the empty output
+        # reads as "nothing changed" and the harness does not wait for the restore event
+        # (runs 1 and 2 of this scenario, then numbered A003, evaluation 20260924T072348).
+        return 'restored: ' + my('ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir')
+    return 'clean'
 
 
 # ── A007-A009: columns the mapping reads THROUGH a Teiid view (service model, ADR-0023) ──
@@ -258,12 +258,12 @@ SCENARIOS = {
                      restore=a002_restore,
                      predicate='http://bansos.go.id/ontology/tipeProgram',
                      note='the tipeProgram predicate must disappear from the graph'),
-    'a003': Scenario(code='a003', title='RENAME COLUMN tanggal_lahir on master_penduduk',
-                     pattern='P-003', decision='auto', source='dukcapil', table='master_penduduk',
-                     column='tanggal_lahir', apply=a003_apply, restore=a003_restore,
-                     predicate='http://bansos.go.id/ontology/tanggalLahir',
-                     note='answers must be identical to those before the adaptation'),
-    # 3 x 2 design: every operator is also tested on the other DBMS.
+    'a003': Scenario(code='a003', title='RENAME COLUMN nama_program on program_bansos',
+                     pattern='P-003', decision='auto', source='kemensos', table='program_bansos',
+                     column='nama_program', apply=a003_apply, restore=a003_restore,
+                     predicate='http://bansos.go.id/ontology/namaProgram',
+                     note='the explicit projection names the column; answers must be identical'),
+    # 3 x 2 design: A001-A003 test the three operators on PostgreSQL, A004-A006 on MySQL.
     'a004': Scenario(code='a004', title='ADD COLUMN kode_pos on master_wilayah', pattern='P-001',
                      decision='hitl', source='dukcapil', table='master_wilayah', column='kode_pos',
                      apply=a004_apply, restore=a004_restore,
@@ -275,11 +275,11 @@ SCENARIOS = {
                      restore=a005_restore,
                      predicate='http://bansos.go.id/ontology/statusHidup',
                      note='logical table SELECT *: no projection is rewritten'),
-    'a006': Scenario(code='a006', title='RENAME COLUMN nama_program on program_bansos',
-                     pattern='P-003', decision='auto', source='kemensos', table='program_bansos',
-                     column='nama_program', apply=a006_apply, restore=a006_restore,
-                     predicate='http://bansos.go.id/ontology/namaProgram',
-                     note='the explicit projection names the column; answers must be identical'),
+    'a006': Scenario(code='a006', title='RENAME COLUMN tanggal_lahir on master_penduduk',
+                     pattern='P-003', decision='auto', source='dukcapil', table='master_penduduk',
+                     column='tanggal_lahir', apply=a006_apply, restore=a006_restore,
+                     predicate='http://bansos.go.id/ontology/tanggalLahir',
+                     note='answers must be identical to those before the adaptation'),
     'a007': Scenario(code='a007', title='DROP COLUMN no_kartu_keluarga through view v_penerima_aktif',
                      pattern='P-002', decision='auto', source='kemensos', table='penerima_manfaat',
                      column='no_kartu_keluarga', prepare=a007_prepare, apply=a007_apply,

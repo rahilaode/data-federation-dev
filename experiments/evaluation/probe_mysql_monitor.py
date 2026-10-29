@@ -1,5 +1,5 @@
 """
-Targeted test of the polling-based MySQL monitor (anomaly in A003 run 12).
+Targeted test of the polling-based MySQL monitor (anomaly in run 12 of A006, then numbered A003).
 
 The MySQL monitor compares a column snapshot (ddl_column_snapshot) with information_schema
 every 10 seconds. Hypothesis: if a column is renamed and renamed back between two scans, no

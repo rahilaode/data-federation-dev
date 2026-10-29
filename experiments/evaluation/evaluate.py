@@ -129,10 +129,10 @@ def ms_between(start_iso: str, end_iso: str | None) -> int | None:
 def restore_all() -> tuple[bool, list[str]]:
     """Restores the columns of ALL scenarios, not only the one about to run.
 
-    In the 3 x 2 design two scenarios can share a table (A002 and A006 on program_bansos, A003
+    In the 3 x 2 design two scenarios can share a table (A002 and A003 on program_bansos, A006
     and A005 on master_penduduk). If each run restored only its own column, what another
     scenario left behind would leak into the next run: in evaluation 20260930T091536 the A002
-    and A006 neighbour queries already failed BEFORE the treatment DDL.
+    and A003 (then numbered A006) neighbour queries already failed BEFORE the treatment DDL.
     Every restore waits for its own event (see the note on the MySQL monitor in prepare)."""
     detected, restored = True, []
     for other_code, s in SCENARIOS.items():
@@ -154,8 +154,8 @@ def prepare(code: str) -> dict:
     events are awaited, their plans are superseded, then the OBDF is reset. The restore event
     MUST arrive before the treatment DDL: the MySQL monitor compares a snapshot every 10
     seconds, and a change that is undone before the next scan is not seen
-    (probe_mysql_monitor.py; anomaly in A003 run 12 of evaluation 20260922T150904). The restore
-    step is itself a schema change (threat to validity 1)."""
+    (probe_mysql_monitor.py; anomaly in run 12 of A006, then numbered A003, in evaluation
+    20260922T150904). The restore step is itself a schema change (threat to validity 1)."""
     control('pause')
     quiet()
     restore_detected, restored = restore_all()

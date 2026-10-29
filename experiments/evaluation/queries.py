@@ -48,10 +48,10 @@ Q = {
         **CONTROL,
     },
     'a003': {
-        'birth_date': ('affected', B + 'SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; '
-                                   'bansos:tanggalLahir ?tgl } ORDER BY ?s'),
-        'name_occupation': ('neighbour', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
-                                         'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
+        'program_name': ('affected', B + 'SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; '
+                                     'bansos:namaProgram ?nama } ORDER BY ?p'),
+        'type_amount': ('neighbour', B + 'SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; '
+                                     'bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p'),
         'recipient_to_resident': ('control', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
                                              '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
         **CONTROL,
@@ -75,10 +75,10 @@ Q = {
         **CONTROL,
     },
     'a006': {
-        'program_name': ('affected', B + 'SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; '
-                                     'bansos:namaProgram ?nama } ORDER BY ?p'),
-        'type_amount': ('neighbour', B + 'SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; '
-                                     'bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p'),
+        'birth_date': ('affected', B + 'SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; '
+                                   'bansos:tanggalLahir ?tgl } ORDER BY ?s'),
+        'name_occupation': ('neighbour', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
+                                         'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
         'recipient_to_resident': ('control', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
                                              '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
         **CONTROL,

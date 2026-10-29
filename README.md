@@ -242,177 +242,343 @@ Expected outcome per scenario:
 
 ### SPARQL queries
 
-Each scenario has five queries: the affected one, a neighbour on the same table or view, and
-three controls (two of them shared by every scenario). All of them, exactly as sent to
-`http://localhost:8080/sparql`, are listed below and in
-[`docs/evaluation.md`](docs/evaluation.md#sparql-queries); their names and kinds per scenario are
-in `experiments/evaluation/queries.py`.
+Every scenario runs five queries, before and after the change: q1 reads the changed column
+(affected), q2 another column of the same table or view (neighbour), and q3–q5 other tables
+(control). q4 `count_per_class` and q5 `transaction_status` are the same in every scenario. The
+queries are listed exactly as they are sent to `http://localhost:8080/sparql`; they are defined in
+`experiments/evaluation/queries.py` and also listed in
+[`docs/evaluation.md`](docs/evaluation.md#sparql-queries).
 
-<details>
-<summary>All SPARQL queries of the evaluation</summary>
+- **A001**: ADD COLUMN email on penerima_manfaat (PostgreSQL)
+  - q1 `email` (affected)
 
-**`recipient`** (used by a001)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?email WHERE { ?p bansos:email ?email } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama ?status WHERE { ?p a bansos:PenerimaBansos ; bansos:namaLengkap ?nama ; bansos:statusEkonomi ?status } ORDER BY ?p
-```
+  - q2 `recipient` (neighbour)
 
-**`email`** (used by a001)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama ?status WHERE { ?p a bansos:PenerimaBansos ; bansos:namaLengkap ?nama ; bansos:statusEkonomi ?status } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?email WHERE { ?p bansos:email ?email } ORDER BY ?p
-```
+  - q3 `resident_link` (control)
 
-**`resident_link`** (used by a001, a007)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } ORDER BY ?p
-```
+  - q4 `count_per_class` (control)
 
-**`count_per_class`** (used by a001, a002, a003, a004, a005, a006, a007, a008, a009)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
-```
+  - q5 `transaction_status` (control)
 
-**`transaction_status`** (used by a001, a002, a003, a004, a005, a006, a007, a008, a009)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
-```
+- **A002**: DROP COLUMN tipe_program on program_bansos (PostgreSQL)
+  - q1 `program_type` (affected)
 
-**`program_type`** (used by a002)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?tipe WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?tipe WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe } ORDER BY ?p
-```
+  - q2 `program_name` (neighbour)
 
-**`program_name`** (used by a002, a009)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p
-```
+  - q3 `transaction_program` (control)
 
-**`transaction_program`** (used by a002, a009)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
-```
+  - q4 `count_per_class` (control)
 
-**`program_name`** (used by a003)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
-```
+  - q5 `transaction_status` (control)
 
-**`type_amount`** (used by a003)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
-```
+- **A003**: RENAME COLUMN nama_program on program_bansos (PostgreSQL)
+  - q1 `program_name` (affected)
 
-**`recipient_to_resident`** (used by a003, a004, a006)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
-```
+  - q2 `type_amount` (neighbour)
 
-**`postal_code`** (used by a004)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?w ?kode WHERE { ?w bansos:kodePos ?kode } ORDER BY ?w
-```
+  - q3 `recipient_to_resident` (control)
 
-**`region`** (used by a004)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?w ?prov ?kab WHERE { ?w a bansos:Wilayah ; bansos:provinsi ?prov ; bansos:kabupaten ?kab } ORDER BY ?w
-```
+  - q4 `count_per_class` (control)
 
-**`living_status`** (used by a005)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; bansos:statusHidup ?status } ORDER BY ?s
-```
+  - q5 `transaction_status` (control)
 
-**`name_occupation`** (used by a005, a006)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
-```
+- **A004**: ADD COLUMN kode_pos on master_wilayah (MySQL)
+  - q1 `postal_code` (affected)
 
-**`family_region`** (used by a005, a008)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?w ?kode WHERE { ?w bansos:kodePos ?kode } ORDER BY ?w
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
-```
+  - q2 `region` (neighbour)
 
-**`birth_date`** (used by a006)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?w ?prov ?kab WHERE { ?w a bansos:Wilayah ; bansos:provinsi ?prov ; bansos:kabupaten ?kab } ORDER BY ?w
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
-```
+  - q3 `recipient_to_resident` (control)
 
-**`active_recipient_kk`** (used by a007)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; bansos:noKartuKeluarga ?kk }
-```
+  - q4 `count_per_class` (control)
 
-**`active_recipient`** (used by a007)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p WHERE { ?p a bansos:PenerimaAktif }
-```
+  - q5 `transaction_status` (control)
 
-**`history_officer`** (used by a008)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?r ?petugas WHERE { ?r bansos:diubahOleh ?petugas }
-```
+- **A005**: DROP COLUMN status_hidup on master_penduduk (MySQL)
+  - q1 `living_status` (affected)
 
-**`history_column`** (used by a008)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; bansos:statusHidup ?status } ORDER BY ?s
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?r ?kolom WHERE { ?r a bansos:RiwayatPerubahan ; bansos:kolomDiubah ?kolom }
-```
+  - q2 `name_occupation` (neighbour)
 
-**`end_year`** (used by a009)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+    ```
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th }
-```
+  - q3 `family_region` (control)
 
-**Availability probe** (run about every 0.5 s during each treatment run)
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
+    ```
+
+  - q4 `count_per_class` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
+
+  - q5 `transaction_status` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
+
+- **A006**: RENAME COLUMN tanggal_lahir on master_penduduk (MySQL)
+  - q1 `birth_date` (affected)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
+    ```
+
+  - q2 `name_occupation` (neighbour)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+    ```
+
+  - q3 `recipient_to_resident` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+    ```
+
+  - q4 `count_per_class` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
+
+  - q5 `transaction_status` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
+
+- **A007**: DROP COLUMN no_kartu_keluarga through view v_penerima_aktif (PostgreSQL)
+  - q1 `active_recipient_kk` (affected)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; bansos:noKartuKeluarga ?kk }
+    ```
+
+  - q2 `active_recipient` (neighbour)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p WHERE { ?p a bansos:PenerimaAktif }
+    ```
+
+  - q3 `resident_link` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } ORDER BY ?p
+    ```
+
+  - q4 `count_per_class` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
+
+  - q5 `transaction_status` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
+
+- **A008**: DROP COLUMN diubah_oleh through view v_riwayat_perubahan (MySQL)
+  - q1 `history_officer` (affected)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?r ?petugas WHERE { ?r bansos:diubahOleh ?petugas }
+    ```
+
+  - q2 `history_column` (neighbour)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?r ?kolom WHERE { ?r a bansos:RiwayatPerubahan ; bansos:kolomDiubah ?kolom }
+    ```
+
+  - q3 `family_region` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
+    ```
+
+  - q4 `count_per_class` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
+
+  - q5 `transaction_status` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
+
+- **A009**: DROP COLUMN periode_selesai used in a view expression (PostgreSQL)
+  - q1 `end_year` (affected)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th }
+    ```
+
+  - q2 `program_name` (neighbour)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p
+    ```
+
+  - q3 `transaction_program` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
+    ```
+
+  - q4 `count_per_class` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    ```
+
+  - q5 `transaction_status` (control)
+
+    ```sparql
+    PREFIX bansos: <http://bansos.go.id/ontology/>
+    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    ```
+
+Availability probe, sent about every 0.5 s during each treatment run:
 
 ```sparql
 PREFIX bansos: <http://bansos.go.id/ontology/>
 SELECT ?t WHERE { ?t a bansos:TransaksiBansos } LIMIT 1
 ```
-
-</details>
 
 ## Knowledge Base and ERD
 

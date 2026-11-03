@@ -26,7 +26,7 @@ mkdir -p slots/blue slots/green proxy/runtime
 for colour in blue green; do
   cp config/mapping.ttl config/ontology_file.ttl "slots/$colour/"
   sed -E "s|^(\s*jdbc\.url\s*=\s*[^;[:space:]]*)(;version=[^;[:space:]]*)?|\1;version=$VERSION|" \
-    config/government.docker.properties > "slots/$colour/government.docker.properties"
+    config/npd.docker.properties > "slots/$colour/npd.docker.properties"
 done
 printf '{\n  "active": "blue",\n  "vdb_version": "%s"\n}\n' "$VERSION" > slots/state.json
 printf '# managed by the ASCAM agent (ADR-0022); do not edit by hand\nset $ontop_upstream http://vkg-system-ontop-blue:8080;\n' \

@@ -4,7 +4,7 @@ Returns the OBDF to its base state so that an experiment can be repeated.
 Every evaluation run must start from the same state. This script:
   1. restores the OBDA artifacts (mapping.ttl, ontology_file.ttl) to their content in git;
   2. points the Teiid connection back at VDB version 1 and removes newer versions;
-  3. drops the test column on the source (default: kemensos.penerima_manfaat.email);
+  3. drops the test column on the source (default: reporting.wellbore_mud."wlbMudPh", A001);
   4. reloads Ontop and checks that the endpoint answers (blue-green: the active instance is
      rebuilt from the artifacts in git and pinned to the base VDB version, ADR-0022);
   5. syncs Knowledge so that the active specification version reflects the base state.
@@ -76,7 +76,7 @@ def teiid(operation: dict, user: str, password: str):
 
 def psql(command: str) -> str:
     result = subprocess.run(['docker', 'exec', 'datasources-pgsql', 'psql', '-U', 'postgres',
-                             '-d', 'kemensos', '-tAc', command], capture_output=True, text=True)
+                             '-d', 'reporting', '-tAc', command], capture_output=True, text=True)
     return (result.stdout or result.stderr).strip()
 
 
@@ -86,9 +86,9 @@ def heading(text: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--column', default='email')
-    parser.add_argument('--table', default='penerima_manfaat')
-    parser.add_argument('--vdb', default='government')
+    parser.add_argument('--column', default='wlbMudPh')
+    parser.add_argument('--table', default='wellbore_mud')
+    parser.add_argument('--vdb', default='npd')
     parser.add_argument('--base-version', default='1')
     parser.add_argument('--keep-sources', action='store_true')
     parser.add_argument('--user', default=os.getenv('ASCAM_TEIID_USER', 'admin'))
@@ -135,7 +135,7 @@ def main() -> int:
         heading('3) test column dropped on the source')
         exists = psql("SELECT count(*) FROM information_schema.columns "
                       f"WHERE table_name='{args.table}' AND column_name='{args.column}'")
-        print(' ', psql(f'ALTER TABLE public.{args.table} DROP COLUMN {args.column}')
+        print(' ', psql(f'ALTER TABLE public."{args.table}" DROP COLUMN "{args.column}"')
               if exists == '1' else 'column already gone')
 
     heading('4) Ontop reloaded')

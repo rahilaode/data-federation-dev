@@ -7,48 +7,49 @@ thesis proposal.
 
 ## Scenarios
 
-Nine schema changes are applied to the two sources of the case study. A001–A006 form a 3 × 2
-design (operator × DBMS), so the effect of an operator is not mixed up with the detection
-mechanism of the DBMS (an event trigger in PostgreSQL, polling every 10 s in MySQL). A007–A009
-change columns that the mapping reads through Teiid views of the service model `layanan`
-(ADR-0023).
+The case study is the NPD benchmark (ADR-0027), split into two sources: `reporting` (PostgreSQL,
+25 tables: wellbores, seismic surveys, stratigraphy, production) and `registry` (MySQL, 45
+tables: licences, fields, discoveries, companies, facilities). Nine schema changes are applied
+to them. A001–A006 form a 3 × 2 design (operator × DBMS), so the effect of an operator is not
+mixed up with the detection mechanism of the DBMS (an event trigger in PostgreSQL, polling every
+10 s in MySQL). A007–A009 change columns that the mapping reads through Teiid views of the
+service model `services` (ADR-0023); these three views and the seven TriplesMaps that read them
+are the only part of the case study that is not NPD as published.
 
 | Scenario | Change on the source | DBMS | Pattern | Expected decision |
 |---|---|---|---|---|
-| A001 | `ADD COLUMN email` on `penerima_manfaat` | PostgreSQL | P-001 | `hitl` (ADR-0021) |
-| A002 | `DROP COLUMN tipe_program` on `program_bansos` (explicit projection) | PostgreSQL | P-002 | `auto` |
-| A003 | `RENAME COLUMN nama_program` on `program_bansos` (explicit projection) | PostgreSQL | P-003 | `auto` |
-| A004 | `ADD COLUMN kode_pos` on `master_wilayah` | MySQL | P-001 | `hitl` |
-| A005 | `DROP COLUMN status_hidup` on `master_penduduk` (`SELECT *`) | MySQL | P-002 | `auto` |
-| A006 | `RENAME COLUMN tanggal_lahir` on `master_penduduk` (`SELECT *`) | MySQL | P-003 | `auto` |
-| A007 | `DROP COLUMN no_kartu_keluarga`, read through the pass-through view `v_penerima_aktif` | PostgreSQL | P-002 | `auto` (the view is narrowed with `ALTER VIEW`) |
-| A008 | `DROP COLUMN diubah_oleh`, read through the aliased view `v_riwayat_perubahan` | MySQL | P-002 | `auto` (the aliased column is removed from the view; the mapping runs `SELECT *` over it) |
-| A009 | `DROP COLUMN periode_selesai`, used in the expression `YEAR(periode_selesai)` of `v_program_berakhir` | PostgreSQL | P-002 | `notify` (ADR-0024; negative control) |
+| A001 | `ADD COLUMN "wlbMudPh"` on `wellbore_mud` | PostgreSQL | P-001 | `hitl` (ADR-0021); a new TriplesMap is proposed (ADR-0027) |
+| A002 | `DROP COLUMN "wlbLotMudDencity"` on `wellbore_casing_and_lot` | PostgreSQL | P-002 | `auto` |
+| A003 | `RENAME COLUMN "wlbDrillingOperator"` on `wellbore_exploration_all` (join column of a cross-source TriplesMap) | PostgreSQL | P-003 | `auto` |
+| A004 | `ADD COLUMN cmpCountryCode` on `company` | MySQL | P-001 | `hitl`; a new TriplesMap is proposed |
+| A005 | `DROP COLUMN dscDiscoveryYear` on `discovery` | MySQL | P-002 | `auto` |
+| A006 | `RENAME COLUMN cmpLongName` on `company` (company names; target of the wells → company join) | MySQL | P-003 | `auto` |
+| A007 | `DROP COLUMN "wlbMudViscosityAtMD"`, read through the pass-through view `v_wellbore_mud` | PostgreSQL | P-002 | `auto` (the view is narrowed with `ALTER VIEW`) |
+| A008 | `DROP COLUMN prfInvestmentsMillNOK`, read through the aliased view `v_field_investment` | MySQL | P-002 | `auto` (the aliased column is removed from the view; the mapping runs `SELECT *` over it) |
+| A009 | `DROP COLUMN "wlbCoreIntervalBottom"`, used in the expression `"wlbCoreIntervalBottom" * 0.3048` of `v_wellbore_core_ft` | PostgreSQL | P-002 | `notify` (ADR-0024; negative control) |
 
 The paper uses the same scenario codes; the harness writes them in lower case (`a001`), and
 the baseline run of a scenario carries the code `b` + number (for example `b002`).
 
-**Renumbering (29 October 2026).** A003 and A006 were swapped so that A001–A003 are the
-PostgreSQL scenarios and A004–A006 the MySQL ones, in the same operator order (ADD, DROP,
-RENAME). Result directories written before that change, including run `20261028T214208` (commit
-`a1e9b0a`, tag `eval-2026-10-28`), use the old codes: their `a003`/`b003` is the MySQL rename
-(now A006) and their `a006`/`b006` the PostgreSQL rename (now A003). `convert_results.py`
-renumbers them; in this document, earlier evaluations are described with the new codes.
-
-The view scenarios use columns that A001–A006 do not touch and that no other TriplesMap reads, so
-what is observed comes only from the path through the view. The properties they use
-(`noKartuKeluarga`, `kolomDiubah`, `diubahOleh`) already existed in the ontology; only
-`tahunBerakhir` and the class `PenerimaAktif` were added. In the sample data all ten
-`penerima_manfaat` rows have `aktif = TRUE`, so the `WHERE aktif = TRUE` of `v_penerima_aktif`
-filters nothing in A007; the clause is there so that a `WHERE` column of a view is still treated
-as unsafe (this is tested in Knowledge, not in the evaluation).
+The ADD scenarios use names that are not in NPD; A001 and A004 fill three rows of the new
+column after the change, so that the new query has something to return. The view scenarios use
+columns that A001–A006 do not touch and that no TriplesMap outside the view reads, so what is
+observed comes only from the path through the view. `v_wellbore_core_ft` (A009) is not invented
+for the test: it holds the feet-to-metres conversion that NPD's own TriplesMap
+`NPD:Manual10:2` computes in its logical table, moved into a Teiid view.
 
 A009 is the negative control. Its plan cannot be complete, because the view definition has to be
 rewritten by a person. ASCAM therefore builds no actions and only notifies the administrator; the
 harness records that no execution ran, that the OBDF version did not change, and that the
 affected query still fails as in the baseline. The decision only counts as correct when the plan
-reasons contain both `expression` and `layanan.v_program_berakhir` (`reasons_contain` in
+reasons contain both `expression` and `services.v_wellbore_core_ft` (`reasons_contain` in
 `scenarios.py`), not just when `decision = notify`.
+
+**First case study.** The evaluation of 28 October 2026 (run `20261028T214208`, commit
+`a1e9b0a`) used nine scenarios of the same design on a social-assistance OBDF (PostgreSQL
+`kemensos`, MySQL `dukcapil`); its artifacts are in `archive/bansos/`. Results of that run use an
+older numbering: their `a003`/`b003` is the MySQL rename (A006 in that study) and their
+`a006`/`b006` the PostgreSQL rename; `convert_results.py` renumbers them.
 
 ## Modes
 
@@ -63,26 +64,31 @@ behaviour can be attributed to ASCAM (§3.10.2, p. 104).
 ## Query set Q_k
 
 Every scenario has five queries: one that touches the changed column (affected), one on another
-column of the same table or view (neighbour), and three on other tables (control), one of which
-crosses sources where the mapping allows it. Their definitions are in `queries.py`; the full text
-is in [SPARQL queries](#sparql-queries).
+column of the same table or view (neighbour), and three on other tables (control). Two controls
+are the same in every scenario: `well_licence`, which joins exploration wells in `reporting` to
+their licences in `registry` on a pair of columns no scenario touches, and `well_name`. Their
+definitions are in `queries.py`; the full text is in [SPARQL queries](#sparql-queries).
 
 | Scenario | Affected | Neighbour | Control |
 |---|---|---|---|
-| a001 | `email` | `recipient` | `resident_link`, `count_per_class`, `transaction_status` |
-| a002 | `program_type` | `program_name` | `transaction_program`, `count_per_class`, `transaction_status` |
-| a003 | `program_name` | `type_amount` | `recipient_to_resident`, `count_per_class`, `transaction_status` |
-| a004 | `postal_code` | `region` | `recipient_to_resident`, `count_per_class`, `transaction_status` |
-| a005 | `living_status` | `name_occupation` | `family_region`, `count_per_class`, `transaction_status` |
-| a006 | `birth_date` | `name_occupation` | `recipient_to_resident` (cross-source), `count_per_class`, `transaction_status` |
-| a007 | `active_recipient_kk` | `active_recipient` | `resident_link`, `count_per_class`, `transaction_status` |
-| a008 | `history_officer` | `history_column` | `family_region`, `count_per_class`, `transaction_status` |
-| a009 | `end_year` | `program_name` | `transaction_program`, `count_per_class`, `transaction_status` |
+| a001 | `mud_ph` | `mud_weight` | `company_name`, `well_licence`, `well_name` |
+| a002 | `lot_mud_density` | `casing_type` | `company_name`, `well_licence`, `well_name` |
+| a003 | `drilling_operator` | `well_total_depth` | `discovery_name`, `well_licence`, `well_name` |
+| a004 | `country_code` | `company_short_name` | `mud_weight`, `well_licence`, `well_name` |
+| a005 | `discovery_year` | `discovery_name` | `casing_type`, `well_licence`, `well_name` |
+| a006 | `company_name` | `company_short_name` | `drilling_operator`, `well_licence`, `well_name` |
+| a007 | `mud_viscosity` | `mud_yield_point` | `company_name`, `well_licence`, `well_name` |
+| a008 | `investment` | `investment_year` | `mud_weight`, `well_licence`, `well_name` |
+| a009 | `core_bottom` | `core_top` | `company_name`, `well_licence`, `well_name` |
 
-A005 has no cross-source control, because the only cross-source query of the mapping touches
-`master_penduduk`; its control uses `master_keluarga` instead. The queries over views have no
-`ORDER BY` (see [finding of 2026-10-09](#findings-before-the-final-evaluation)); order does not
-matter because the harness sorts every answer set before comparing.
+The queries have no `ORDER BY`: for a view without a key Ontop 4.1.1 adds `SELECT DISTINCT`, with
+which Teiid rejects `ORDER BY` over an IRI expression that is not projected (TEIID30088, see
+[finding of 2026-10-09](#findings-before-the-final-evaluation)). Order does not matter, because the
+harness sorts every answer set before comparing.
+
+Beyond Q_k, the 31 queries of the NPD benchmark are a check on the case study itself: they were
+answered on the base federation and, in an offline run (below), stayed identical after each of
+the six adaptations that could be emulated.
 
 ## Procedure of one run
 
@@ -196,7 +202,7 @@ Main keys of a treatment record: `scenario`, `run`, `commit`, `restore_detected`
 The evaluation reported in the paper was run on branch `eval/final` (commit `a1e9b0a`), before the
 code was translated. That harness lived in `experiments/f6/`, wrote to `results/f6/`, and used
 Indonesian keys, file names, and query names. The scenarios, the SQL statements, and the SPARQL
-queries are the same, apart from the names of the backup tables (`ascam_cadangan_*` instead of
+queries are those of the first case study (`archive/bansos/`), apart from the names of the backup tables (`ascam_cadangan_*` instead of
 `ascam_backup_*`) and the old numbering of A003 and A006. To analyse such a directory with the tools of this branch, convert it first; the
 original is not modified:
 
@@ -227,384 +233,390 @@ restores the column after the run.
 
 | Scenario | Source | Statement applied to the source |
 |---|---|---|
-| A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
-| A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
-| A003 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
-| A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
-| A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
-| A006 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
-| A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
-| A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
-| A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
+| A001 | PostgreSQL (reporting) | `ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2)` |
+| A002 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_casing_and_lot" DROP COLUMN "wlbLotMudDencity"` |
+| A003 | PostgreSQL (reporting) | `ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" TO "wlbDrillingCompany"` |
+| A004 | MySQL (registry) | `ALTER TABLE company ADD COLUMN cmpCountryCode VARCHAR(2)` |
+| A005 | MySQL (registry) | `` ALTER TABLE `discovery` DROP COLUMN `dscDiscoveryYear` `` |
+| A006 | MySQL (registry) | `ALTER TABLE company RENAME COLUMN cmpLongName TO cmpFullName` |
+| A007 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_mud" DROP COLUMN "wlbMudViscosityAtMD"` |
+| A008 | MySQL (registry) | `` ALTER TABLE `field_investment_yearly` DROP COLUMN `prfInvestmentsMillNOK` `` |
+| A009 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_core" DROP COLUMN "wlbCoreIntervalBottom"` |
 
 ### Full statements per scenario
 
-#### A001: ADD COLUMN email on penerima_manfaat
+#### A001: ADD COLUMN wlbMudPh on wellbore_mud
 
-Pattern `P-001`, expected decision `hitl`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/email`.
+PostgreSQL, database `reporting`; pattern P-001; expected decision `hitl`.
 
-```sql
--- Schema change (apply), PostgreSQL (kemensos)
-ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100);
--- Data written after the change (fill_data), PostgreSQL (kemensos)
-UPDATE public.penerima_manfaat SET email = 'penerima' || penerima_id || '@contoh.id' WHERE penerima_id <= 3;
--- Restore after the run (restore), PostgreSQL (kemensos)
-ALTER TABLE public.penerima_manfaat DROP COLUMN email;
-```
+- change
 
-| Query | Kind |
-|---|---|
-| `recipient` | neighbour |
-| `email` | affected |
-| `resident_link` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2);
+  ```
 
-#### A002: DROP COLUMN tipe_program on program_bansos
+- data after the change
 
-Pattern `P-002`, expected decision `auto`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/tipeProgram`.
+  ```sql
+  UPDATE public.wellbore_mud SET "wlbMudPh" = 8.5 + wellbore_mud_id / 10.0 WHERE wellbore_mud_id <= 3;
+  ```
 
-```sql
--- Backup before the run (prepare), PostgreSQL (kemensos)
-CREATE TABLE IF NOT EXISTS public.ascam_backup_tipe_program AS SELECT program_id, tipe_program FROM public.program_bansos;
--- Schema change (apply), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos DROP COLUMN tipe_program;
--- Restore after the run (restore), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos ADD COLUMN tipe_program VARCHAR(100);
-UPDATE public.program_bansos p SET tipe_program = c.tipe_program FROM public.ascam_backup_tipe_program c WHERE c.program_id = p.program_id;
-SELECT count(*) FROM public.program_bansos WHERE tipe_program IS NOT NULL;
-```
+- restore
 
-| Query | Kind |
-|---|---|
-| `program_type` | affected |
-| `program_name` | neighbour |
-| `transaction_program` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  ALTER TABLE public.wellbore_mud DROP COLUMN "wlbMudPh";
+  ```
 
-#### A003: RENAME COLUMN nama_program on program_bansos
+#### A002: DROP COLUMN wlbLotMudDencity on wellbore_casing_and_lot
 
-Pattern `P-003`, expected decision `auto`, source `kemensos`. Predicate: `http://bansos.go.id/ontology/namaProgram`.
+PostgreSQL, database `reporting`; pattern P-002; expected decision `auto`.
 
-```sql
--- Schema change (apply), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program;
--- Restore after the run (restore), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos RENAME COLUMN judul_program TO nama_program;
-```
+- before the first run
 
-| Query | Kind |
-|---|---|
-| `program_name` | affected |
-| `type_amount` | neighbour |
-| `recipient_to_resident` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  CREATE TABLE IF NOT EXISTS public.ascam_backup_wlblotmuddencity AS SELECT "wellbore_casing_and_lot_id", "wlbLotMudDencity" FROM public."wellbore_casing_and_lot";
+  ```
 
-#### A004: ADD COLUMN kode_pos on master_wilayah
+- change
 
-Pattern `P-001`, expected decision `hitl`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/kodePos`.
+  ```sql
+  ALTER TABLE public."wellbore_casing_and_lot" DROP COLUMN "wlbLotMudDencity";
+  ```
 
-```sql
--- Schema change (apply), MySQL (dukcapil)
-ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10);
--- Data written after the change (fill_data), MySQL (dukcapil)
-UPDATE master_wilayah SET kode_pos = CONCAT('9022', wilayah_id) WHERE wilayah_id <= 3;
--- Restore after the run (restore), MySQL (dukcapil)
-ALTER TABLE master_wilayah DROP COLUMN kode_pos;
-```
+- restore
 
-| Query | Kind |
-|---|---|
-| `postal_code` | affected |
-| `region` | neighbour |
-| `recipient_to_resident` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  ALTER TABLE public."wellbore_casing_and_lot" ADD COLUMN "wlbLotMudDencity" NUMERIC(13,6);
+  UPDATE public."wellbore_casing_and_lot" t SET "wlbLotMudDencity" = c."wlbLotMudDencity" FROM public.ascam_backup_wlblotmuddencity c WHERE c."wellbore_casing_and_lot_id" = t."wellbore_casing_and_lot_id";
+  SELECT count(*) FROM public."wellbore_casing_and_lot" WHERE "wlbLotMudDencity" IS NOT NULL;
+  ```
 
-#### A005: DROP COLUMN status_hidup on master_penduduk
+#### A003: RENAME COLUMN wlbDrillingOperator on wellbore_exploration_all
 
-Pattern `P-002`, expected decision `auto`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/statusHidup`.
+PostgreSQL, database `reporting`; pattern P-003; expected decision `auto`.
 
-```sql
--- Backup before the run (prepare), MySQL (dukcapil)
-CREATE TABLE IF NOT EXISTS ascam_backup_status_hidup AS SELECT nik, status_hidup FROM master_penduduk;
--- Schema change (apply), MySQL (dukcapil)
-ALTER TABLE master_penduduk DROP COLUMN status_hidup;
--- Restore after the run (restore), MySQL (dukcapil)
-ALTER TABLE master_penduduk ADD COLUMN status_hidup VARCHAR(20);
-UPDATE master_penduduk p JOIN ascam_backup_status_hidup c ON c.nik = p.nik SET p.status_hidup = c.status_hidup;
-SELECT count(*) FROM master_penduduk WHERE status_hidup IS NOT NULL;
-```
+- change
 
-| Query | Kind |
-|---|---|
-| `living_status` | affected |
-| `name_occupation` | neighbour |
-| `family_region` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" TO "wlbDrillingCompany";
+  ```
 
-#### A006: RENAME COLUMN tanggal_lahir on master_penduduk
+- restore
 
-Pattern `P-003`, expected decision `auto`, source `dukcapil`. Predicate: `http://bansos.go.id/ontology/tanggalLahir`.
+  ```sql
+  ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingCompany" TO "wlbDrillingOperator";
+  ```
 
-```sql
--- Schema change (apply), MySQL (dukcapil)
-ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp;
--- Restore after the run (restore), MySQL (dukcapil)
-ALTER TABLE master_penduduk RENAME COLUMN tgl_lahir_ktp TO tanggal_lahir;
-```
+#### A004: ADD COLUMN cmpCountryCode on company
 
-| Query | Kind |
-|---|---|
-| `birth_date` | affected |
-| `name_occupation` | neighbour |
-| `recipient_to_resident` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+MySQL, database `registry`; pattern P-001; expected decision `hitl`.
 
-#### A007: DROP COLUMN no_kartu_keluarga through view v_penerima_aktif
+- change
 
-Pattern `P-002`, expected decision `auto`, source `kemensos`, view `layanan.v_penerima_aktif`. Predicate: `http://bansos.go.id/ontology/noKartuKeluarga`.
+  ```sql
+  ALTER TABLE company ADD COLUMN cmpCountryCode VARCHAR(2);
+  ```
 
-```sql
--- Backup before the run (prepare), PostgreSQL (kemensos)
-CREATE TABLE IF NOT EXISTS public.ascam_backup_no_kk AS SELECT penerima_id, no_kartu_keluarga FROM public.penerima_manfaat;
--- Schema change (apply), PostgreSQL (kemensos)
-ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga;
--- Restore after the run (restore), PostgreSQL (kemensos)
-ALTER TABLE public.penerima_manfaat ADD COLUMN no_kartu_keluarga CHAR(16);
-UPDATE public.penerima_manfaat p SET no_kartu_keluarga = c.no_kartu_keluarga FROM public.ascam_backup_no_kk c WHERE c.penerima_id = p.penerima_id;
-SELECT count(*) FROM public.penerima_manfaat WHERE no_kartu_keluarga IS NOT NULL;
-```
+- data after the change
 
-| Query | Kind |
-|---|---|
-| `active_recipient_kk` | affected |
-| `active_recipient` | neighbour |
-| `resident_link` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  UPDATE company SET cmpCountryCode = 'NO' ORDER BY cmpNpdidCompany LIMIT 3;
+  ```
 
-#### A008: DROP COLUMN diubah_oleh through view v_riwayat_perubahan
+- restore
 
-Pattern `P-002`, expected decision `auto`, source `dukcapil`, view `layanan.v_riwayat_perubahan`. Predicate: `http://bansos.go.id/ontology/diubahOleh`.
+  ```sql
+  ALTER TABLE company DROP COLUMN cmpCountryCode;
+  ```
 
-```sql
--- Backup before the run (prepare), MySQL (dukcapil)
-CREATE TABLE IF NOT EXISTS ascam_backup_diubah_oleh AS SELECT riwayat_id, diubah_oleh FROM riwayat_perubahan_data;
--- Schema change (apply), MySQL (dukcapil)
-ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh;
--- Restore after the run (restore), MySQL (dukcapil)
-ALTER TABLE riwayat_perubahan_data ADD COLUMN diubah_oleh VARCHAR(100);
-UPDATE riwayat_perubahan_data r JOIN ascam_backup_diubah_oleh c ON c.riwayat_id = r.riwayat_id SET r.diubah_oleh = c.diubah_oleh;
-SELECT count(*) FROM riwayat_perubahan_data WHERE diubah_oleh IS NOT NULL;
-```
+#### A005: DROP COLUMN dscDiscoveryYear on discovery
 
-| Query | Kind |
-|---|---|
-| `history_officer` | affected |
-| `history_column` | neighbour |
-| `family_region` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+MySQL, database `registry`; pattern P-002; expected decision `auto`.
 
-#### A009: DROP COLUMN periode_selesai used in a view expression
+- before the first run
 
-Pattern `P-002`, expected decision `notify`, source `kemensos`, view `layanan.v_program_berakhir`. Predicate: `http://bansos.go.id/ontology/tahunBerakhir`.
+  ```sql
+  CREATE TABLE IF NOT EXISTS ascam_backup_dscdiscoveryyear AS SELECT `dscNpdidDiscovery`, `dscDiscoveryYear` FROM `discovery`;
+  ```
 
-```sql
--- Backup before the run (prepare), PostgreSQL (kemensos)
-CREATE TABLE IF NOT EXISTS public.ascam_backup_periode_selesai AS SELECT program_id, periode_selesai FROM public.program_bansos;
--- Schema change (apply), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos DROP COLUMN periode_selesai;
--- Restore after the run (restore), PostgreSQL (kemensos)
-ALTER TABLE public.program_bansos ADD COLUMN periode_selesai DATE;
-UPDATE public.program_bansos p SET periode_selesai = c.periode_selesai FROM public.ascam_backup_periode_selesai c WHERE c.program_id = p.program_id;
-SELECT count(*) FROM public.program_bansos WHERE periode_selesai IS NOT NULL;
-```
+- change
 
-| Query | Kind |
-|---|---|
-| `end_year` | affected |
-| `program_name` | neighbour |
-| `transaction_program` | control |
-| `count_per_class` | control |
-| `transaction_status` | control |
+  ```sql
+  ALTER TABLE `discovery` DROP COLUMN `dscDiscoveryYear`;
+  ```
 
+- restore
+
+  ```sql
+  ALTER TABLE `discovery` ADD COLUMN `dscDiscoveryYear` INT;
+  UPDATE `discovery` t JOIN ascam_backup_dscdiscoveryyear c ON c.`dscNpdidDiscovery` = t.`dscNpdidDiscovery` SET t.`dscDiscoveryYear` = c.`dscDiscoveryYear`;
+  SELECT count(*) FROM `discovery` WHERE `dscDiscoveryYear` IS NOT NULL;
+  ```
+
+#### A006: RENAME COLUMN cmpLongName on company
+
+MySQL, database `registry`; pattern P-003; expected decision `auto`.
+
+- change
+
+  ```sql
+  ALTER TABLE company RENAME COLUMN cmpLongName TO cmpFullName;
+  ```
+
+- restore
+
+  ```sql
+  ALTER TABLE company RENAME COLUMN cmpFullName TO cmpLongName;
+  ```
+
+#### A007: DROP COLUMN wlbMudViscosityAtMD through view v_wellbore_mud
+
+PostgreSQL, database `reporting`; pattern P-002; expected decision `auto`.
+
+- before the first run
+
+  ```sql
+  CREATE TABLE IF NOT EXISTS public.ascam_backup_wlbmudviscosityatmd AS SELECT "wellbore_mud_id", "wlbMudViscosityAtMD" FROM public."wellbore_mud";
+  ```
+
+- change
+
+  ```sql
+  ALTER TABLE public."wellbore_mud" DROP COLUMN "wlbMudViscosityAtMD";
+  ```
+
+- restore
+
+  ```sql
+  ALTER TABLE public."wellbore_mud" ADD COLUMN "wlbMudViscosityAtMD" NUMERIC(13,6);
+  UPDATE public."wellbore_mud" t SET "wlbMudViscosityAtMD" = c."wlbMudViscosityAtMD" FROM public.ascam_backup_wlbmudviscosityatmd c WHERE c."wellbore_mud_id" = t."wellbore_mud_id";
+  SELECT count(*) FROM public."wellbore_mud" WHERE "wlbMudViscosityAtMD" IS NOT NULL;
+  ```
+
+#### A008: DROP COLUMN prfInvestmentsMillNOK through view v_field_investment
+
+MySQL, database `registry`; pattern P-002; expected decision `auto`.
+
+- before the first run
+
+  ```sql
+  CREATE TABLE IF NOT EXISTS ascam_backup_prfinvestmentsmillnok AS SELECT `prfNpdidInformationCarrier`, `prfYear`, `prfInvestmentsMillNOK` FROM `field_investment_yearly`;
+  ```
+
+- change
+
+  ```sql
+  ALTER TABLE `field_investment_yearly` DROP COLUMN `prfInvestmentsMillNOK`;
+  ```
+
+- restore
+
+  ```sql
+  ALTER TABLE `field_investment_yearly` ADD COLUMN `prfInvestmentsMillNOK` DECIMAL(13,6);
+  UPDATE `field_investment_yearly` t JOIN ascam_backup_prfinvestmentsmillnok c ON c.`prfNpdidInformationCarrier` = t.`prfNpdidInformationCarrier` AND c.`prfYear` = t.`prfYear` SET t.`prfInvestmentsMillNOK` = c.`prfInvestmentsMillNOK`;
+  SELECT count(*) FROM `field_investment_yearly` WHERE `prfInvestmentsMillNOK` IS NOT NULL;
+  ```
+
+#### A009: DROP COLUMN wlbCoreIntervalBottom used in a view expression
+
+PostgreSQL, database `reporting`; pattern P-002; expected decision `notify`.
+
+- before the first run
+
+  ```sql
+  CREATE TABLE IF NOT EXISTS public.ascam_backup_wlbcoreintervalbottom AS SELECT "wellbore_core_id", "wlbCoreIntervalBottom" FROM public."wellbore_core";
+  ```
+
+- change
+
+  ```sql
+  ALTER TABLE public."wellbore_core" DROP COLUMN "wlbCoreIntervalBottom";
+  ```
+
+- restore
+
+  ```sql
+  ALTER TABLE public."wellbore_core" ADD COLUMN "wlbCoreIntervalBottom" NUMERIC(13,6);
+  UPDATE public."wellbore_core" t SET "wlbCoreIntervalBottom" = c."wlbCoreIntervalBottom" FROM public.ascam_backup_wlbcoreintervalbottom c WHERE c."wellbore_core_id" = t."wellbore_core_id";
+  SELECT count(*) FROM public."wellbore_core" WHERE "wlbCoreIntervalBottom" IS NOT NULL;
+  ```
 
 ## SPARQL queries
 
 Every query is sent to `http://localhost:8080/sparql` with `Accept:
-application/sparql-results+json`, printed here exactly as `queries.py` builds it. Variable names
-follow the Indonesian vocabulary of the ontology.
+application/sparql-results+json`, printed here exactly as `queries.py` builds it. The vocabulary
+is the NPD ontology (`npdv:` = `http://sws.ifi.uio.no/vocab/npd-v2#`); `npdv:wlbMudPh` and
+`npdv:cmpCountryCode` are the properties ASCAM proposes for the two ADD scenarios (naming policy
+of `obdf-npd.yaml`).
 
-**`recipient`** (used by a001)
-
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama ?status WHERE { ?p a bansos:PenerimaBansos ; bansos:namaLengkap ?nama ; bansos:statusEkonomi ?status } ORDER BY ?p
-```
-
-**`email`** (used by a001)
+**`mud_ph`** (used by a001)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?email WHERE { ?p bansos:email ?email } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?m ?ph WHERE { ?m npdv:wlbMudPh ?ph }
 ```
 
-**`resident_link`** (used by a001, a007)
+**`mud_weight`** (used by a001, a004, a008)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
 ```
 
-**`count_per_class`** (used by a001, a002, a003, a004, a005, a006, a007, a008, a009)
+**`company_name`** (used by a001, a002, a006, a007, a009)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
 ```
 
-**`transaction_status`** (used by a001, a002, a003, a004, a005, a006, a007, a008, a009)
+**`well_licence`** (used by a001, a002, a003, a004, a005, a006, a007, a008, a009)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
 ```
 
-**`program_type`** (used by a002)
+**`well_name`** (used by a001, a002, a003, a004, a005, a006, a007, a008, a009)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?tipe WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
 ```
 
-**`program_name`** (used by a002, a009)
+**`lot_mud_density`** (used by a002)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?d WHERE { ?c npdv:LOTMudDensity ?d }
 ```
 
-**`transaction_program`** (used by a002, a009)
+**`casing_type`** (used by a002, a005)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }
 ```
 
-**`program_name`** (used by a003)
+**`drilling_operator`** (used by a003, a006)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }
 ```
 
-**`type_amount`** (used by a003)
+**`well_total_depth`** (used by a003)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?w ?d WHERE { ?w a npdv:ExplorationWellbore ; npdv:wellboreTotalDepth ?d }
 ```
 
-**`recipient_to_resident`** (used by a003, a004, a006)
+**`discovery_name`** (used by a003, a005)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }
 ```
 
-**`postal_code`** (used by a004)
+**`country_code`** (used by a004)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?w ?kode WHERE { ?w bansos:kodePos ?kode } ORDER BY ?w
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?cc WHERE { ?c npdv:cmpCountryCode ?cc }
 ```
 
-**`region`** (used by a004)
+**`company_short_name`** (used by a004, a006)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?w ?prov ?kab WHERE { ?w a bansos:Wilayah ; bansos:provinsi ?prov ; bansos:kabupaten ?kab } ORDER BY ?w
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }
 ```
 
-**`living_status`** (used by a005)
+**`discovery_year`** (used by a005)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; bansos:statusHidup ?status } ORDER BY ?s
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?d ?y WHERE { ?d a npdv:Discovery ; npdv:discoveryYear ?y }
 ```
 
-**`name_occupation`** (used by a005, a006)
+**`mud_viscosity`** (used by a007)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?m ?v WHERE { ?m npdv:mudViscosity ?v }
 ```
 
-**`family_region`** (used by a005, a008)
+**`mud_yield_point`** (used by a007)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?m ?y WHERE { ?m npdv:mudYieldPoint ?y }
 ```
 
-**`birth_date`** (used by a006)
+**`investment`** (used by a008)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?i ?x WHERE { ?i npdv:investmentNOK ?x }
 ```
 
-**`active_recipient_kk`** (used by a007)
+**`investment_year`** (used by a008)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; bansos:noKartuKeluarga ?kk }
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?i ?y WHERE { ?i a npdv:FieldInvestment ; npdv:productionYear ?y }
 ```
 
-**`active_recipient`** (used by a007)
+**`core_bottom`** (used by a009)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p WHERE { ?p a bansos:PenerimaAktif }
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?b WHERE { ?c npdv:coreIntervalBottom ?b }
 ```
 
-**`history_officer`** (used by a008)
+**`core_top`** (used by a009)
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?r ?petugas WHERE { ?r bansos:diubahOleh ?petugas }
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?c ?t WHERE { ?c a npdv:WellboreCore ; npdv:coreIntervalTop ?t }
 ```
 
-**`history_column`** (used by a008)
+Availability probe, sent about every 0.5 s during each treatment run (no scenario touches the
+licence table):
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?r ?kolom WHERE { ?r a bansos:RiwayatPerubahan ; bansos:kolomDiubah ?kolom }
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?l WHERE { ?l a npdv:ProductionLicence } LIMIT 1
 ```
 
-**`end_year`** (used by a009)
+## Offline check of the NPD adaptations
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th }
-```
+Before the evaluation on the running lab, the plans of the nine scenarios were checked without
+Docker (2 November 2026). Knowledge decided each scenario on the NPD metadata
+(`tests/test_case_study_npd.py`: `hitl` for A001 and A004, `auto` for A002, A003, A005–A008,
+`notify` for A009). The Executor's editors applied each plan to the VDB, the mapping, and the
+ontology. Ontop 4.1.1 then served the result over a PostgreSQL copy of the federation (schemas
+`reporting`, `registry`, `services`; keys only, as in the VDB) with the DDL of the scenario
+applied, and the 31 NPD queries and Q_k were compared with the base answers.
 
-**Availability probe** (run about every 0.5 s during each treatment run)
+| Scenario | Affected query, rows before → after | Other queries of Q_k | 31 NPD queries |
+|---|---|---|---|
+| A001 | `mud_ph`: 0 → 3 | identical | identical |
+| A002 | `lot_mud_density`: 5,254 → 0 | identical | identical |
+| A004 | `country_code`: 0 → 3 | identical | identical |
+| A005 | `discovery_year`: 421 → 0 | identical | identical |
+| A007 | `mud_viscosity`: 27,682 → 0 | identical | identical |
+| A008 | `investment`: 1,916 → 0 | identical | identical |
 
-```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?t WHERE { ?t a bansos:TransaksiBansos } LIMIT 1
-```
+A003 and A006 need Teiid (`NAMEINSOURCE`), and A009 changes no artifact, so they are left to the
+evaluation on the running lab. This check shows that the artifacts ASCAM writes are valid and
+change only what they should; it does not measure time or availability.
 
-## Results of the final evaluation
+## Results of the first case study (social assistance)
 
-Run `20261028T214208` on branch `eval/final` (commit `a1e9b0a`), 28 October 2026, 14:42–18:38 UTC,
+These results belong to the earlier case study (see Scenarios); the scenario codes and queries
+of that run are not those listed above. Run `20261028T214208` on branch `eval/final` (commit `a1e9b0a`), 28 October 2026, 14:42–18:38 UTC,
 on one Linux host with 72 logical CPUs (Intel Xeon E5-2695 v4, 2.1 GHz) and 125.5 GiB of memory;
 45 baseline runs (9 × 5) and 180 treatment runs (9 × 20), random-delay seed 1793198525. Every
 restore was detected, no run started from a tainted state, and there were no anomalies.
@@ -648,8 +660,10 @@ affected are kept as a record but are not used in the paper.
    comparison between the DBMSs reflects the monitor mechanism, not only ASCAM.
 3. **One test machine.** Absolute times depend on the hardware (`metadata.json` records it); what
    generalises is the share of each step and the comparison between scenarios.
-4. **Small data.** `validate` and the Ontop start-up grow with the size of ℳ and 𝒯, not with the
-   data; the verification queries grow with the data.
+4. **Size of the case study.** `validate` and the Ontop start-up grow with the size of ℳ and 𝒯
+   (NPD: 1,177 TriplesMaps), not with the data; the verification queries grow with the data
+   (257,271 rows over both sources). The verification is per predicate (ADR-0030), so Δt_adapt
+   includes one `COUNT` per candidate predicate through Teiid.
 5. **Resetting the infrastructure changes message identities.** `down -v` recreates the Kafka
    topics and the source databases. An idempotency key based on Kafka offsets then collides with old
    events, and new DDL is silently treated as a duplicate. Fixed by deriving the key from the DDL
@@ -659,6 +673,11 @@ affected are kept as a record but are not used in the paper.
    on every possible query.
 7. **Ontop–Teiid limits on views.** Queries over views run without `ORDER BY` (see below); this is a
    limit of Ontop 4.1.1 with Teiid, not of ASCAM.
+8. **The split of NPD is a modelling choice.** NPD ships as one database; which table goes to which
+   source follows the Norwegian systems that own the data (ADR-0027), but another split would give
+   other cross-source TriplesMaps. The three service views of A007–A009 are added to NPD.
+9. **Renames cannot be checked offline.** `NAMEINSOURCE` exists only in Teiid, so A003 and A006
+   are checked only on the running federation.
 
 ### Evaluation 20260922T150904
 

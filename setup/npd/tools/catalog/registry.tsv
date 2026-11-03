@@ -1,0 +1,502 @@
+apaAreaGross	1	apaMap_no	int		10	0	NO	
+apaAreaGross	2	apaAreaGeometry_KML_WGS84	text	65535			NO	
+apaAreaGross	3	apaAreaGross_id	bigint unsigned		20	0	NO	1
+apaAreaNet	1	blkId	int		10	0	NO	5
+apaAreaNet	2	blkLabel	varchar	40			NO	
+apaAreaNet	3	qdrName	varchar	40			NO	2
+apaAreaNet	4	blkName	varchar	40			NO	3
+apaAreaNet	5	prvName	varchar	2			NO	4
+apaAreaNet	6	apaAreaType	varchar	40			YES	
+apaAreaNet	7	urlNPD	varchar	200			NO	
+apaAreaNet	8	apaAreaNet_id	bigint unsigned		20	0	NO	1
+baaArea	1	baaNpdidBsnsArrArea	int		10	0	NO	1
+baaArea	2	baaNpdidBsnsArrAreaPoly	int		10	0	NO	2
+baaArea	3	baaName	varchar	40			NO	
+baaArea	4	baaKind	varchar	40			NO	
+baaArea	5	baaAreaPolyDateValidFrom	date				NO	
+baaArea	6	baaAreaPolyDateValidTo	date				YES	
+baaArea	7	baaAreaPolyActive	varchar	40			NO	
+baaArea	8	baaDateApproved	date				NO	
+baaArea	9	baaDateValidFrom	date				NO	
+baaArea	10	baaDateValidTo	date				YES	
+baaArea	11	baaActive	varchar	20			NO	
+baaArea	12	baaFactPageUrl	varchar	200			NO	
+baaArea	13	baaFactMapUrl	varchar	200			YES	
+bsns_arr_area	1	baaName	varchar	40			NO	
+bsns_arr_area	2	baaKind	varchar	40			NO	
+bsns_arr_area	3	baaDateApproved	date				NO	
+bsns_arr_area	4	baaDateValidFrom	date				NO	
+bsns_arr_area	5	baaDateValidTo	date				YES	
+bsns_arr_area	6	baaFactPageUrl	varchar	200			NO	
+bsns_arr_area	7	baaFactMapUrl	varchar	200			YES	
+bsns_arr_area	8	baaNpdidBsnsArrArea	int		10	0	NO	1
+bsns_arr_area	9	baaDateUpdated	date				YES	
+bsns_arr_area	10	baaDateUpdatedMax	date				YES	
+bsns_arr_area	11	dateSyncNPD	date				NO	
+bsns_arr_area_area_poly_hst	1	baaName	varchar	40			NO	
+bsns_arr_area_area_poly_hst	2	baaAreaPolyDateValidFrom	date				NO	4
+bsns_arr_area_area_poly_hst	3	baaAreaPolyDateValidTo	date				NO	5
+bsns_arr_area_area_poly_hst	4	baaAreaPolyNationCode2	varchar	2			NO	
+bsns_arr_area_area_poly_hst	5	baaAreaPolyBlockName	varchar	40			NO	2
+bsns_arr_area_area_poly_hst	6	baaAreaPolyNo	int		10	0	NO	3
+bsns_arr_area_area_poly_hst	7	baaAreaPolyArea	decimal		13	6	NO	
+bsns_arr_area_area_poly_hst	8	baaNpdidBsnsArrArea	int		10	0	NO	1
+bsns_arr_area_area_poly_hst	9	baaAreaPolyDateUpdated	date				YES	
+bsns_arr_area_area_poly_hst	10	dateSyncNPD	date				NO	
+bsns_arr_area_licensee_hst	1	baaName	varchar	40			NO	
+bsns_arr_area_licensee_hst	2	baaLicenseeDateValidFrom	date				NO	3
+bsns_arr_area_licensee_hst	3	baaLicenseeDateValidTo	date				NO	4
+bsns_arr_area_licensee_hst	4	cmpLongName	varchar	200			NO	
+bsns_arr_area_licensee_hst	5	baaLicenseeInterest	decimal		13	6	NO	
+bsns_arr_area_licensee_hst	6	baaLicenseeSdfi	decimal		13	6	YES	
+bsns_arr_area_licensee_hst	7	baaNpdidBsnsArrArea	int		10	0	NO	1
+bsns_arr_area_licensee_hst	8	cmpNpdidCompany	int		10	0	NO	2
+bsns_arr_area_licensee_hst	9	baaLicenseeDateUpdated	date				YES	
+bsns_arr_area_licensee_hst	10	dateSyncNPD	date				NO	
+bsns_arr_area_operator	1	baaName	varchar	40			NO	
+bsns_arr_area_operator	2	cmpLongName	varchar	200			NO	
+bsns_arr_area_operator	3	baaNpdidBsnsArrArea	int		10	0	NO	1
+bsns_arr_area_operator	4	cmpNpdidCompany	int		10	0	NO	
+bsns_arr_area_operator	5	baaOperatorDateUpdated	date				YES	
+bsns_arr_area_operator	6	dateSyncNPD	date				NO	
+bsns_arr_area_transfer_hst	1	baaName	varchar	40			NO	
+bsns_arr_area_transfer_hst	2	baaTransferDateValidFrom	date				NO	4
+bsns_arr_area_transfer_hst	3	baaTransferDirection	varchar	4			NO	2
+bsns_arr_area_transfer_hst	4	baaTransferKind	varchar	40			YES	
+bsns_arr_area_transfer_hst	5	cmpLongName	varchar	200			NO	
+bsns_arr_area_transfer_hst	6	baaTransferredInterest	decimal		13	6	NO	
+bsns_arr_area_transfer_hst	7	baaTransferSdfi	decimal		13	6	YES	
+bsns_arr_area_transfer_hst	8	baaNpdidBsnsArrArea	int		10	0	NO	1
+bsns_arr_area_transfer_hst	9	cmpNpdidCompany	int		10	0	NO	3
+bsns_arr_area_transfer_hst	10	baaTransferDateUpdated	date				YES	
+bsns_arr_area_transfer_hst	11	dateSyncNPD	date				NO	
+company	1	cmpLongName	varchar	200			NO	
+company	2	cmpOrgNumberBrReg	varchar	100			YES	
+company	3	cmpGroup	varchar	100			YES	
+company	4	cmpShortName	varchar	40			NO	
+company	5	cmpNpdidCompany	int		10	0	NO	1
+company	6	cmpLicenceOperCurrent	varchar	1			NO	
+company	7	cmpLicenceOperFormer	varchar	1			NO	
+company	8	cmpLicenceLicenseeCurrent	varchar	1			NO	
+company	9	cmpLicenceLicenseeFormer	varchar	1			NO	
+company	10	dateSyncNPD	date				NO	
+company_reserves	1	cmpLongName	varchar	200			NO	
+company_reserves	2	fldName	varchar	40			NO	
+company_reserves	3	cmpRecoverableOil	decimal		13	6	NO	
+company_reserves	4	cmpRecoverableGas	decimal		13	6	NO	
+company_reserves	5	cmpRecoverableNGL	decimal		13	6	NO	
+company_reserves	6	cmpRecoverableCondensate	decimal		13	6	NO	
+company_reserves	7	cmpRecoverableOE	decimal		13	6	NO	
+company_reserves	8	cmpRemainingOil	decimal		13	6	NO	
+company_reserves	9	cmpRemainingGas	decimal		13	6	NO	
+company_reserves	10	cmpRemainingNGL	decimal		13	6	NO	
+company_reserves	11	cmpRemainingCondensate	decimal		13	6	NO	
+company_reserves	12	cmpRemainingOE	decimal		13	6	NO	
+company_reserves	13	cmpDateOffResEstDisplay	date				NO	
+company_reserves	14	cmpShare	decimal		13	6	NO	
+company_reserves	15	fldNpdidField	int		10	0	NO	2
+company_reserves	16	cmpNpdidCompany	int		10	0	NO	1
+company_reserves	17	dateSyncNPD	date				NO	
+discovery	1	dscName	varchar	40			NO	
+discovery	2	cmpLongName	varchar	200			YES	
+discovery	3	dscCurrentActivityStatus	varchar	40			NO	
+discovery	4	dscHcType	varchar	40			YES	
+discovery	5	wlbName	varchar	60			YES	
+discovery	6	nmaName	varchar	40			YES	
+discovery	7	fldName	varchar	40			YES	
+discovery	8	dscDateFromInclInField	date				YES	
+discovery	9	dscDiscoveryYear	int		10	0	NO	
+discovery	10	dscResInclInDiscoveryName	varchar	40			YES	
+discovery	11	dscOwnerKind	varchar	40			YES	
+discovery	12	dscOwnerName	varchar	40			YES	
+discovery	13	dscNpdidDiscovery	int		10	0	NO	1
+discovery	14	fldNpdidField	int		10	0	YES	
+discovery	15	wlbNpdidWellbore	int		10	0	NO	
+discovery	16	dscFactPageUrl	varchar	200			NO	
+discovery	17	dscFactMapUrl	varchar	200			NO	
+discovery	18	dscDateUpdated	date				YES	
+discovery	19	dscDateUpdatedMax	date				YES	
+discovery	20	dateSyncNPD	date				NO	
+discovery_reserves	1	dscName	varchar	40			NO	
+discovery_reserves	2	dscReservesRC	varchar	40			NO	2
+discovery_reserves	3	dscRecoverableOil	decimal		13	6	NO	
+discovery_reserves	4	dscRecoverableGas	decimal		13	6	NO	
+discovery_reserves	5	dscRecoverableNGL	decimal		13	6	NO	
+discovery_reserves	6	dscRecoverableCondensate	decimal		13	6	NO	
+discovery_reserves	7	dscDateOffResEstDisplay	date				NO	
+discovery_reserves	8	dscNpdidDiscovery	int		10	0	NO	1
+discovery_reserves	9	dscReservesDateUpdated	date				NO	
+discovery_reserves	10	dateSyncNPD	date				NO	
+dscArea	1	fldNpdidField	int		10	0	YES	
+dscArea	2	fldName	varchar	40			YES	
+dscArea	3	dscNpdidDiscovery	int		10	0	NO	1
+dscArea	4	dscName	varchar	40			NO	
+dscArea	5	dscResInclInDiscoveryName	varchar	40			YES	
+dscArea	6	dscNpdidResInclInDiscovery	int		10	0	YES	
+dscArea	7	dscIncludedInFld	varchar	3			NO	
+dscArea	8	dscHcType	varchar	40			NO	2
+dscArea	9	fldHcType	varchar	40			YES	
+dscArea	10	dscCurrentActivityStatus	varchar	40			NO	
+dscArea	11	fldCurrentActivityStatus	varchar	40			YES	
+dscArea	12	flddscLabel	varchar	40			NO	
+dscArea	13	dscFactUrl	varchar	200			NO	
+dscArea	14	fldFactUrl	varchar	200			YES	
+facility_fixed	1	fclName	varchar	40			NO	
+facility_fixed	2	fclPhase	varchar	40			NO	
+facility_fixed	3	fclSurface	varchar	1			NO	
+facility_fixed	4	fclCurrentOperatorName	varchar	100			YES	
+facility_fixed	5	fclKind	varchar	40			NO	
+facility_fixed	6	fclBelongsToName	varchar	41			YES	
+facility_fixed	7	fclBelongsToKind	varchar	40			YES	
+facility_fixed	8	fclBelongsToS	int		10	0	YES	
+facility_fixed	9	fclStartupDate	date				YES	
+facility_fixed	10	fclGeodeticDatum	varchar	10			YES	
+facility_fixed	11	fclNsDeg	int		10	0	YES	
+facility_fixed	12	fclNsMin	int		10	0	YES	
+facility_fixed	13	fclNsSec	decimal		13	6	YES	
+facility_fixed	14	fclNsCode	varchar	1			NO	
+facility_fixed	15	fclEwDeg	int		10	0	YES	
+facility_fixed	16	fclEwMin	int		10	0	YES	
+facility_fixed	17	fclEwSec	decimal		13	6	YES	
+facility_fixed	18	fclEwCode	varchar	1			NO	
+facility_fixed	19	fclWaterDepth	decimal		13	6	NO	
+facility_fixed	20	fclFunctions	varchar	400			YES	
+facility_fixed	21	fclDesignLifetime	int		10	0	YES	
+facility_fixed	22	fclFactPageUrl	varchar	200			NO	
+facility_fixed	23	fclFactMapUrl	varchar	200			NO	
+facility_fixed	24	fclNpdidFacility	int		10	0	NO	1
+facility_fixed	25	fclDateUpdated	date				YES	
+facility_fixed	26	dateSyncNPD	date				NO	
+facility_moveable	1	fclName	varchar	40			NO	
+facility_moveable	2	fclCurrentRespCompanyName	varchar	100			YES	
+facility_moveable	3	fclKind	varchar	40			NO	
+facility_moveable	4	fclFunctions	varchar	400			YES	
+facility_moveable	5	fclNationName	varchar	40			NO	
+facility_moveable	6	fclFactPageUrl	varchar	200			NO	
+facility_moveable	7	fclNpdidFacility	int		10	0	NO	1
+facility_moveable	8	fclNpdidCurrentRespCompany	int		10	0	YES	
+facility_moveable	9	fclDateUpdated	date				YES	
+facility_moveable	10	dateSyncNPD	date				NO	
+fclPoint	1	fclNpdidFacility	int		10	0	NO	1
+fclPoint	2	fclSurface	varchar	1			NO	
+fclPoint	3	fclCurrentOperatorName	varchar	100			YES	
+fclPoint	4	fclName	varchar	40			NO	
+fclPoint	5	fclKind	varchar	40			NO	
+fclPoint	6	fclBelongsToName	varchar	41			YES	
+fclPoint	7	fclBelongsToKind	varchar	40			YES	
+fclPoint	8	fclBelongsToS	int		10	0	YES	
+fclPoint	9	fclStartupDate	date				NO	
+fclPoint	10	fclWaterDepth	decimal		13	6	NO	
+fclPoint	11	fclFunctions	varchar	400			YES	
+fclPoint	12	fclDesignLifetime	int		10	0	NO	
+fclPoint	13	fclFactPageUrl	varchar	200			NO	
+fclPoint	14	fclFactMapUrl	varchar	200			NO	
+field	1	fldName	varchar	40			NO	
+field	2	cmpLongName	varchar	200			YES	
+field	3	fldCurrentActivitySatus	varchar	40			NO	
+field	4	wlbName	varchar	60			YES	
+field	5	wlbCompletionDate	date				YES	
+field	6	fldOwnerKind	varchar	40			YES	
+field	7	fldOwnerName	varchar	40			YES	
+field	8	fldNpdidOwner	int		10	0	YES	
+field	9	fldNpdidField	int		10	0	NO	1
+field	10	wlbNpdidWellbore	int		10	0	NO	
+field	11	cmpNpdidCompany	int		10	0	YES	
+field	12	fldFactPageUrl	varchar	200			NO	
+field	13	fldFactMapUrl	varchar	200			NO	
+field	14	fldDateUpdated	date				YES	
+field	15	fldDateUpdatedMax	date				YES	
+field	16	dateSyncNPD	date				NO	
+field_activity_status_hst	1	fldName	varchar	40			NO	
+field_activity_status_hst	2	fldStatusFromDate	date				NO	3
+field_activity_status_hst	3	fldStatusToDate	date				NO	4
+field_activity_status_hst	4	fldStatus	varchar	40			NO	2
+field_activity_status_hst	5	fldNpdidField	int		10	0	NO	1
+field_activity_status_hst	6	fldStatusDateUpdated	date				YES	
+field_activity_status_hst	7	dateSyncNPD	date				NO	
+field_description	1	fldName	varchar	40			NO	
+field_description	2	fldDescriptionHeading	varchar	255			NO	2
+field_description	3	fldDescriptionText	longtext	4294967295			NO	
+field_description	4	fldNpdidField	int		10	0	NO	1
+field_description	5	fldDescriptionDateUpdated	date				NO	
+field_investment_yearly	1	prfInformationCarrier	varchar	40			NO	
+field_investment_yearly	2	prfYear	int		10	0	NO	2
+field_investment_yearly	3	prfInvestmentsMillNOK	decimal		13	6	NO	
+field_investment_yearly	4	prfNpdidInformationCarrier	int		10	0	NO	1
+field_investment_yearly	5	dateSyncNPD	date				NO	
+field_licensee_hst	1	fldName	varchar	40			NO	
+field_licensee_hst	2	fldOwnerName	varchar	40			NO	
+field_licensee_hst	3	fldOwnerKind	varchar	40			NO	
+field_licensee_hst	4	fldOwnerFrom	date				NO	
+field_licensee_hst	5	fldOwnerTo	date				YES	
+field_licensee_hst	6	fldLicenseeFrom	date				NO	3
+field_licensee_hst	7	fldLicenseeTo	date				NO	4
+field_licensee_hst	8	cmpLongName	varchar	200			NO	
+field_licensee_hst	9	fldCompanyShare	decimal		13	6	NO	
+field_licensee_hst	10	fldSdfiShare	decimal		13	6	YES	
+field_licensee_hst	11	fldNpdidField	int		10	0	NO	1
+field_licensee_hst	12	cmpNpdidCompany	int		10	0	NO	2
+field_licensee_hst	13	fldLicenseeDateUpdated	date				YES	
+field_licensee_hst	14	dateSyncNPD	date				NO	
+field_operator_hst	1	fldName	varchar	40			NO	
+field_operator_hst	2	cmpLongName	varchar	200			NO	
+field_operator_hst	3	fldOperatorFrom	date				NO	3
+field_operator_hst	4	fldOperatorTo	date				NO	4
+field_operator_hst	5	fldNpdidField	int		10	0	NO	1
+field_operator_hst	6	cmpNpdidCompany	int		10	0	NO	2
+field_operator_hst	7	fldOperatorDateUpdated	date				YES	
+field_operator_hst	8	dateSyncNPD	date				NO	
+field_owner_hst	1	fldName	varchar	40			NO	
+field_owner_hst	2	fldOwnerKind	varchar	40			NO	
+field_owner_hst	3	fldOwnerName	varchar	40			NO	
+field_owner_hst	4	fldOwnershipFromDate	date				NO	3
+field_owner_hst	5	fldOwnershipToDate	date				NO	4
+field_owner_hst	6	fldNpdidField	int		10	0	NO	1
+field_owner_hst	7	fldNpdidOwner	int		10	0	NO	2
+field_owner_hst	8	fldOwnerDateUpdated	date				YES	
+field_owner_hst	9	dateSyncNPD	date				NO	
+field_reserves	1	fldName	varchar	40			NO	
+field_reserves	2	fldRecoverableOil	decimal		13	6	NO	
+field_reserves	3	fldRecoverableGas	decimal		13	6	NO	
+field_reserves	4	fldRecoverableNGL	decimal		13	6	NO	
+field_reserves	5	fldRecoverableCondensate	decimal		13	6	NO	
+field_reserves	6	fldRecoverableOE	decimal		13	6	NO	
+field_reserves	7	fldRemainingOil	decimal		13	6	NO	
+field_reserves	8	fldRemainingGas	decimal		13	6	NO	
+field_reserves	9	fldRemainingNGL	decimal		13	6	NO	
+field_reserves	10	fldRemainingCondensate	decimal		13	6	NO	
+field_reserves	11	fldRemainingOE	decimal		13	6	NO	
+field_reserves	12	fldDateOffResEstDisplay	date				NO	
+field_reserves	13	fldNpdidField	int		10	0	NO	1
+field_reserves	14	dateSyncNPD	date				NO	
+fldArea	1	fldNpdidField	int		10	0	NO	
+fldArea	2	fldName	varchar	40			NO	
+fldArea	3	dscNpdidDiscovery	int		10	0	NO	1
+fldArea	4	dscName	varchar	40			NO	
+fldArea	5	dscResInclInDiscoveryName	varchar	40			YES	
+fldArea	6	dscNpdidResInclInDiscovery	int		10	0	YES	
+fldArea	7	dscIncludedInFld	varchar	3			NO	
+fldArea	8	dscHcType	varchar	40			NO	2
+fldArea	9	fldHcType	varchar	40			NO	
+fldArea	10	dscCurrentActivityStatus	varchar	40			NO	
+fldArea	11	fldCurrentActivityStatus	varchar	40			NO	
+fldArea	12	flddscLabel	varchar	40			NO	
+fldArea	13	dscFactUrl	varchar	200			NO	
+fldArea	14	fldFactUrl	varchar	200			NO	
+licence	1	prlName	varchar	50			NO	
+licence	2	prlLicensingActivityName	varchar	40			NO	
+licence	3	prlMainArea	varchar	40			YES	
+licence	4	prlStatus	varchar	40			NO	
+licence	5	prlDateGranted	date				NO	
+licence	6	prlDateValidTo	date				NO	
+licence	7	prlOriginalArea	decimal		13	6	NO	
+licence	8	prlCurrentArea	varchar	20			NO	
+licence	9	prlPhaseCurrent	varchar	40			YES	
+licence	10	prlNpdidLicence	int		10	0	NO	1
+licence	11	prlFactPageUrl	varchar	200			NO	
+licence	12	prlFactMapUrl	varchar	200			YES	
+licence	13	prlDateUpdated	date				YES	
+licence	14	prlDateUpdatedMax	date				YES	
+licence	15	dateSyncNPD	date				NO	
+licence_area_poly_hst	1	prlName	varchar	50			NO	
+licence_area_poly_hst	2	prlAreaPolyDateValidFrom	date				NO	4
+licence_area_poly_hst	3	prlAreaPolyDateValidTo	date				NO	5
+licence_area_poly_hst	4	prlAreaPolyNationCode	varchar	2			NO	
+licence_area_poly_hst	5	prlAreaPolyBlockName	varchar	40			NO	2
+licence_area_poly_hst	6	prlAreaPolyStratigraphical	varchar	4			NO	
+licence_area_poly_hst	7	prlAreaPolyPolyNo	int		10	0	NO	3
+licence_area_poly_hst	8	prlAreaPolyPolyArea	decimal		13	6	NO	
+licence_area_poly_hst	9	prlNpdidLicence	int		10	0	NO	1
+licence_area_poly_hst	10	prlAreaDateUpdated	date				YES	
+licence_area_poly_hst	11	dateSyncNPD	date				NO	
+licence_licensee_hst	1	prlName	varchar	50			NO	
+licence_licensee_hst	2	prlLicenseeDateValidFrom	date				NO	3
+licence_licensee_hst	3	prlLicenseeDateValidTo	date				NO	4
+licence_licensee_hst	4	cmpLongName	varchar	200			NO	
+licence_licensee_hst	5	prlLicenseeInterest	decimal		13	6	NO	
+licence_licensee_hst	6	prlLicenseeSdfi	decimal		13	6	YES	
+licence_licensee_hst	7	prlOperDateValidFrom	date				YES	
+licence_licensee_hst	8	prlOperDateValidTo	date				YES	
+licence_licensee_hst	9	prlNpdidLicence	int		10	0	NO	1
+licence_licensee_hst	10	cmpNpdidCompany	int		10	0	NO	2
+licence_licensee_hst	11	prlLicenseeDateUpdated	date				YES	
+licence_licensee_hst	12	dateSyncNPD	date				NO	
+licence_oper_hst	1	prlName	varchar	50			NO	
+licence_oper_hst	2	prlOperDateValidFrom	date				NO	3
+licence_oper_hst	3	prlOperDateValidTo	date				NO	4
+licence_oper_hst	4	cmpLongName	varchar	200			NO	
+licence_oper_hst	5	prlNpdidLicence	int		10	0	NO	1
+licence_oper_hst	6	cmpNpdidCompany	int		10	0	NO	2
+licence_oper_hst	7	prlOperDateUpdated	date				YES	
+licence_oper_hst	8	dateSyncNPD	date				NO	
+licence_petreg_licence	1	ptlName	varchar	40			NO	
+licence_petreg_licence	2	ptlDateAwarded	date				NO	
+licence_petreg_licence	3	ptlDateValidFrom	date				NO	
+licence_petreg_licence	4	ptlDateValidTo	date				NO	
+licence_petreg_licence	5	prlNpdidLicence	int		10	0	NO	1
+licence_petreg_licence	6	ptlDateUpdated	date				YES	
+licence_petreg_licence	7	ptlDateUpdatedMax	date				NO	
+licence_petreg_licence	8	dateSyncNPD	date				NO	
+licence_petreg_licence_licencee	1	ptlName	varchar	40			NO	
+licence_petreg_licence_licencee	2	cmpLongName	varchar	200			NO	
+licence_petreg_licence_licencee	3	ptlLicenseeInterest	decimal		13	6	NO	
+licence_petreg_licence_licencee	4	prlNpdidLicence	int		10	0	NO	1
+licence_petreg_licence_licencee	5	cmpNpdidCompany	int		10	0	NO	2
+licence_petreg_licence_licencee	6	ptlLicenseeDateUpdated	date				YES	
+licence_petreg_licence_licencee	7	dateSyncNPD	date				NO	
+licence_petreg_licence_oper	1	ptlName	varchar	40			NO	
+licence_petreg_licence_oper	2	cmpLongName	varchar	200			NO	
+licence_petreg_licence_oper	3	prlNpdidLicence	int		10	0	NO	1
+licence_petreg_licence_oper	4	cmpNpdidCompany	int		10	0	NO	
+licence_petreg_licence_oper	5	ptlOperDateUpdated	date				YES	
+licence_petreg_licence_oper	6	dateSyncNPD	date				NO	
+licence_petreg_message	1	prlName	varchar	50			NO	
+licence_petreg_message	2	ptlMessageDocumentNo	int		10	0	NO	2
+licence_petreg_message	3	ptlMessage	text	65535			NO	
+licence_petreg_message	4	ptlMessageRegisteredDate	date				NO	
+licence_petreg_message	5	ptlMessageKindDesc	varchar	100			NO	
+licence_petreg_message	6	ptlMessageDateUpdated	date				YES	
+licence_petreg_message	7	prlNpdidLicence	int		10	0	NO	1
+licence_petreg_message	8	dateSyncNPD	date				NO	
+licence_phase_hst	1	prlName	varchar	50			NO	
+licence_phase_hst	2	prlDatePhaseValidFrom	date				NO	3
+licence_phase_hst	3	prlDatePhaseValidTo	date				NO	4
+licence_phase_hst	4	prlPhase	varchar	40			NO	2
+licence_phase_hst	5	prlDateGranted	date				NO	
+licence_phase_hst	6	prlDateValidTo	date				NO	
+licence_phase_hst	7	prlDateInitialPeriodExpires	date				NO	
+licence_phase_hst	8	prlActiveStatusIndicator	varchar	40			NO	
+licence_phase_hst	9	prlNpdidLicence	int		10	0	NO	1
+licence_phase_hst	10	prlPhaseDateUpdated	date				YES	
+licence_phase_hst	11	dateSyncNPD	date				NO	
+licence_task	1	prlName	varchar	50			NO	
+licence_task	2	prlTaskName	varchar	40			NO	
+licence_task	3	prlTaskTypeNo	varchar	100			NO	
+licence_task	4	prlTaskTypeEn	varchar	200			NO	
+licence_task	5	prlTaskStatusNo	varchar	100			NO	
+licence_task	6	prlTaskStatusEn	varchar	40			NO	
+licence_task	7	prlTaskExpiryDate	date				NO	
+licence_task	8	wlbName	varchar	60			YES	
+licence_task	9	prlDateValidTo	date				NO	
+licence_task	10	prlLicensingActivityName	varchar	40			NO	
+licence_task	11	cmpLongName	varchar	200			YES	
+licence_task	12	cmpNpdidCompany	int		10	0	YES	
+licence_task	13	prlNpdidLicence	int		10	0	NO	1
+licence_task	14	prlTaskID	int		10	0	NO	2
+licence_task	15	prlTaskRefID	int		10	0	YES	
+licence_task	16	prlTaskDateUpdated	date				YES	
+licence_task	17	dateSyncNPD	date				NO	
+licence_transfer_hst	1	prlName	varchar	50			NO	
+licence_transfer_hst	2	prlTransferDateValidFrom	date				NO	4
+licence_transfer_hst	3	prlTransferDirection	varchar	4			NO	2
+licence_transfer_hst	4	prlTransferKind	varchar	40			YES	
+licence_transfer_hst	5	cmpLongName	varchar	200			NO	
+licence_transfer_hst	6	prlTransferredInterest	decimal		13	6	NO	
+licence_transfer_hst	7	prlTransferSdfi	decimal		13	6	YES	
+licence_transfer_hst	8	prlNpdidLicence	int		10	0	NO	1
+licence_transfer_hst	9	cmpNpdidCompany	int		10	0	NO	3
+licence_transfer_hst	10	prlTransferDateUpdated	date				YES	
+licence_transfer_hst	11	dateSyncNPD	date				NO	
+pipLine	1	pipNpdidPipe	int		10	0	NO	1
+pipLine	2	pipNpdidFromFacility	int		10	0	NO	
+pipLine	3	pipNpdidToFacility	int		10	0	NO	
+pipLine	4	pipNpdidOperator	int		10	0	YES	
+pipLine	5	pipName	varchar	50			NO	
+pipLine	6	pipNameFromFacility	varchar	50			NO	
+pipLine	7	pipNameToFacility	varchar	50			NO	
+pipLine	8	pipNameCurrentOperator	varchar	100			YES	
+pipLine	9	pipCurrentPhase	varchar	40			NO	
+pipLine	10	pipMedium	varchar	20			NO	
+pipLine	11	pipMainGrouping	varchar	20			NO	
+pipLine	12	pipDimension	decimal		13	6	NO	
+prlArea	1	prlName	varchar	50			NO	
+prlArea	2	prlActive	varchar	20			NO	
+prlArea	3	prlCurrentArea	varchar	20			NO	
+prlArea	4	prlDateGranted	date				NO	
+prlArea	5	prlDateValidTo	date				NO	
+prlArea	6	prlAreaPolyDateValidFrom	date				NO	3
+prlArea	7	prlAreaPolyDateValidTo	date				NO	4
+prlArea	8	prlAreaPolyFromZvalue	int		10	0	NO	
+prlArea	9	prlAreaPolyToZvalue	int		10	0	NO	
+prlArea	10	prlAreaPolyVertLimEn	text	65535			YES	
+prlArea	11	prlAreaPolyVertLimNo	text	65535			YES	
+prlArea	12	prlStratigraphical	varchar	3			NO	
+prlArea	13	prlAreaPolyStratigraphical	varchar	4			NO	
+prlArea	14	prlNpdidLicence	int		10	0	NO	2
+prlArea	15	prlLastOperatorNameShort	varchar	40			NO	
+prlArea	16	prlLastOperatorNameLong	varchar	200			NO	
+prlArea	17	prlLicensingActivityName	varchar	40			NO	
+prlArea	18	prlLastOperatorNpdidCompany	int		10	0	NO	
+prlArea	19	prlFactUrl	varchar	200			NO	
+prlArea	20	prlArea_id	bigint unsigned		20	0	NO	1
+prlAreaSplitByBlock	1	prlName	varchar	50			NO	
+prlAreaSplitByBlock	2	prlActive	varchar	20			NO	
+prlAreaSplitByBlock	3	prlCurrentArea	varchar	20			NO	
+prlAreaSplitByBlock	4	prlDateGranted	date				NO	
+prlAreaSplitByBlock	5	prlDateValidTo	date				NO	
+prlAreaSplitByBlock	6	prlAreaPolyDateValidFrom	date				NO	4
+prlAreaSplitByBlock	7	prlAreaPolyDateValidTo	date				NO	5
+prlAreaSplitByBlock	8	prlAreaPolyPolyNo	int		10	0	NO	3
+prlAreaSplitByBlock	9	prlAreaPolyPolyArea	decimal		13	6	NO	
+prlAreaSplitByBlock	10	blcName	varchar	40			NO	2
+prlAreaSplitByBlock	11	prlAreaPolyFromZvalue	int		10	0	NO	
+prlAreaSplitByBlock	12	prlAreaPolyToZvalue	int		10	0	NO	
+prlAreaSplitByBlock	13	prlAreaPolyVertLimEn	text	65535			YES	
+prlAreaSplitByBlock	14	prlAreaPolyVertLimNo	text	65535			YES	
+prlAreaSplitByBlock	15	prlStratigraphical	varchar	3			NO	
+prlAreaSplitByBlock	16	prlLastOperatorNpdidCompany	int		10	0	NO	
+prlAreaSplitByBlock	17	prlLastOperatorNameShort	varchar	40			NO	
+prlAreaSplitByBlock	18	prlLastOperatorNameLong	varchar	200			NO	
+prlAreaSplitByBlock	19	prlLicensingActivityName	varchar	40			NO	
+prlAreaSplitByBlock	20	prlFactUrl	varchar	200			NO	
+prlAreaSplitByBlock	21	prlAreaPolyStratigraphical	varchar	4			NO	
+prlAreaSplitByBlock	22	prlNpdidLicence	int		10	0	NO	1
+tuf_operator_hst	1	tufName	varchar	40			NO	
+tuf_operator_hst	2	cmpLongName	varchar	200			NO	
+tuf_operator_hst	3	tufOperDateValidFrom	date				NO	3
+tuf_operator_hst	4	tufOperDateValidTo	date				NO	4
+tuf_operator_hst	5	tufNpdidTuf	int		10	0	NO	1
+tuf_operator_hst	6	cmpNpdidCompany	int		10	0	NO	2
+tuf_operator_hst	7	dateSyncNPD	date				NO	
+tuf_owner_hst	1	tufName	varchar	40			NO	
+tuf_owner_hst	2	cmpLongName	varchar	200			NO	
+tuf_owner_hst	3	tufOwnerDateValidFrom	date				NO	3
+tuf_owner_hst	4	tufOwnerDateValidTo	date				NO	4
+tuf_owner_hst	5	tufOwnerShare	decimal		13	6	NO	
+tuf_owner_hst	6	tufNpdidTuf	int		10	0	NO	1
+tuf_owner_hst	7	cmpNpdidCompany	int		10	0	NO	2
+tuf_owner_hst	8	dateSyncNPD	date				NO	
+tuf_petreg_licence	1	ptlName	varchar	40			NO	
+tuf_petreg_licence	2	tufName	varchar	40			NO	
+tuf_petreg_licence	3	ptlDateValidFrom	date				NO	
+tuf_petreg_licence	4	ptlDateValidTo	date				NO	
+tuf_petreg_licence	5	tufNpdidTuf	int		10	0	NO	1
+tuf_petreg_licence	6	ptlDateUpdated	date				YES	
+tuf_petreg_licence	7	ptlDateUpdatedMax	date				NO	
+tuf_petreg_licence	8	dateSyncNPD	date				NO	
+tuf_petreg_licence_licencee	1	ptlName	varchar	40			NO	
+tuf_petreg_licence_licencee	2	cmpLongName	varchar	200			NO	
+tuf_petreg_licence_licencee	3	ptlLicenseeInterest	decimal		13	6	NO	
+tuf_petreg_licence_licencee	4	tufName	varchar	40			NO	
+tuf_petreg_licence_licencee	5	tufNpdidTuf	int		10	0	NO	1
+tuf_petreg_licence_licencee	6	cmpNpdidCompany	int		10	0	NO	2
+tuf_petreg_licence_licencee	7	ptlLicenseeDateUpdated	date				YES	
+tuf_petreg_licence_licencee	8	dateSyncNPD	date				NO	
+tuf_petreg_licence_oper	1	Textbox42	varchar	20			NO	
+tuf_petreg_licence_oper	2	Textbox2	varchar	20			NO	
+tuf_petreg_licence_oper	3	ptlName	varchar	40			NO	
+tuf_petreg_licence_oper	4	cmpLongName	varchar	200			NO	
+tuf_petreg_licence_oper	5	tufName	varchar	40			NO	
+tuf_petreg_licence_oper	6	tufNpdidTuf	int		10	0	NO	1
+tuf_petreg_licence_oper	7	cmpNpdidCompany	int		10	0	NO	
+tuf_petreg_licence_oper	8	ptlOperDateUpdated	date				YES	
+tuf_petreg_licence_oper	9	dateSyncNPD	date				NO	
+tuf_petreg_message	1	ptlName	varchar	40			NO	
+tuf_petreg_message	2	ptlMessageDocumentNo	int		10	0	NO	2
+tuf_petreg_message	3	ptlMessage	text	65535			NO	
+tuf_petreg_message	4	ptlMessageRegisteredDate	date				NO	
+tuf_petreg_message	5	ptlMessageKindDesc	varchar	100			NO	
+tuf_petreg_message	6	tufName	varchar	40			NO	
+tuf_petreg_message	7	ptlMessageDateUpdated	date				YES	
+tuf_petreg_message	8	tufNpdidTuf	int		10	0	NO	1
+tuf_petreg_message	9	dateSyncNPD	date				NO	

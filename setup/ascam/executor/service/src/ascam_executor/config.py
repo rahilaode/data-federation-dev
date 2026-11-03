@@ -21,7 +21,7 @@ class Settings:
                                    'http://ascam-knowledge-service:8000')
     token_file: str | None = os.getenv('ASCAM_EXEC_TOKEN_FILE')
     token_client: str = os.getenv('ASCAM_EXEC_TOKEN_CLIENT', 'executor')
-    obdf_name: str = os.getenv('ASCAM_EXEC_OBDF', 'bansos')
+    obdf_name: str = os.getenv('ASCAM_EXEC_OBDF', 'npd')
     teiid_password_file: str | None = os.getenv('ASCAM_EXEC_TEIID_PASSWORD_FILE')
     agent_token_file: str | None = os.getenv('ASCAM_EXEC_AGENT_TOKEN_FILE')
     teiid_jdbc_host: str = os.getenv('ASCAM_EXEC_TEIID_JDBC_HOST', 'teiid')
@@ -34,6 +34,9 @@ class Settings:
     # Form of the view adjustment (ADR-0023): 'alter' (ALTER VIEW) or 'recreate' (DROP VIEW then
     # CREATE VIEW), chosen from the results of feasibility experiment F0.8 on Teiid 16.
     view_statement: str = os.getenv('ASCAM_EXEC_VIEW_STATEMENT', 'alter')
+    # Graph fingerprint of the verify step (ADR-0030): 'whole' tries one query over the whole
+    # graph first and falls back to one query per predicate; 'per_predicate' starts there.
+    fingerprint: str = os.getenv('ASCAM_EXEC_FINGERPRINT', 'whole')
 
     def knowledge_token(self) -> str:
         if not self.token_file:

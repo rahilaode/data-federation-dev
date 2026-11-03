@@ -10,8 +10,10 @@ services:
     volumes:
       - ./pgsql:/docker-entrypoint-initdb.d
       - data-pgsql:/var/lib/postgresql/data
+      # NPD dump fetched by setup/npd/fetch-npd.sh (start.sh runs it); loaded on the first start
+      - ../npd/npd-benchmark/data/postgres/npd.psql:/npd/npd.psql:ro
     environment:
-      POSTGRES_DB: kemensos
+      POSTGRES_DB: reporting
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     
@@ -29,8 +31,9 @@ services:
     volumes:
       - ./mysql:/docker-entrypoint-initdb.d
       - data-mysql:/var/lib/mysql
+      - ../npd/npd-benchmark/data/mysql/original_npd/npd.mysql:/npd/npd.mysql:ro
     environment:
-      MYSQL_DATABASE: dukcapil
+      MYSQL_DATABASE: registry
       MYSQL_USER: mysql
       MYSQL_PASSWORD: mysql
       MYSQL_ROOT_PASSWORD: mysql

@@ -55,7 +55,7 @@ def lab(tmp_path):
     config = tmp_path / 'config'; config.mkdir()
     (config / 'mapping.ttl').write_text(MAPPING)
     (config / 'ontology_file.ttl').write_text(ONTOLOGY)
-    (config / 'government.docker.properties').write_text(PROPERTIES)
+    (config / 'npd.docker.properties').write_text(PROPERTIES)
     slots = tmp_path / 'slots'
     for color in ('blue', 'green'):
         (slots / color).mkdir(parents=True)
@@ -71,7 +71,7 @@ def lab(tmp_path):
 
 def test_pin_version_replaces_existing_version():
     pinned = pin_version(PROPERTIES, 3)
-    assert 'jdbc.url=jdbc:teiid:government@mm://teiid:31000;version=3' in pinned
+    assert 'jdbc.url=jdbc:teiid:npd@mm://teiid:31000;version=3' in pinned
     assert pin_version(pinned, 4).count(';version=') == 1 and ';version=4' in pin_version(pinned, 4)
     assert 'VERY-SECRET' in pinned                      # other lines are unchanged
     with pytest.raises(BlueGreenError):
@@ -88,7 +88,7 @@ def test_prepare_writes_standby_slot_only(lab):
     assert result.ok and result.color == 'green'
     green = cfg.slots_dir / 'green'
     assert (green / 'mapping.ttl').read_text() == 'M2' and (green / 'ontology_file.ttl').read_text() == 'T2'
-    assert ';version=2' in (green / 'government.docker.properties').read_text()
+    assert ';version=2' in (green / 'npd.docker.properties').read_text()
     assert cfg.path_of('r2rml').read_text() == MAPPING      # the active instance is untouched
     assert bg.state()['standby_vdb_version'] == '2'
 
@@ -101,7 +101,7 @@ def test_prepare_rejects_changed_active_artifact(lab):
 
 def test_validate_uses_standby_volumes(lab):
     bg, _, _ = lab
-    color, result = bg.validate('jdbc:teiid:government@mm://teiid:31000;version=2')
+    color, result = bg.validate('jdbc:teiid:npd@mm://teiid:31000;version=2')
     assert color == 'green' and result.ok
     assert bg.runner.containers == ['vkg-system-ontop-green']
 
@@ -172,7 +172,7 @@ def test_reset_rebuilds_active_from_canonical(lab):
     assert result.ok and result.color == 'green'
     green = cfg.slots_dir / 'green'
     assert (green / 'mapping.ttl').read_text() == MAPPING
-    assert ';version=1' in (green / 'government.docker.properties').read_text()
+    assert ';version=1' in (green / 'npd.docker.properties').read_text()
     assert bg.state() == {'active': 'green', 'vdb_version': '1'}
 
 
@@ -225,3 +225,25 @@ def test_legacy_reload_and_validate_target_active_instance(lab, monkeypatch):
         client.post('/api/v1/validate', json={})
     assert called == ['vkg-system-ontop-green']
     assert bg.runner.containers[-1] == 'vkg-system-ontop-green'
+
+
+def test_start_waits_with_the_configured_ready_query(lab):
+    """ADR-0030: the readiness check sends the configured query, not ASK { ?s ?p ?o }."""
+    bg, _, cfg = lab
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.params.get('query'))
+        return httpx.Response(200, json={'boolean': True})
+    cfg.ready_query = 'PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }'
+    bg.http = httpx.Client(transport=httpx.MockTransport(handler))
+    assert bg.start().ok
+    assert seen and set(seen) == {cfg.ready_query}
+
+
+def test_ready_query_comes_from_the_environment(monkeypatch, tmp_path):
+    from ascam_ontop_agent.config import from_env
+    monkeypatch.setenv('ASCAM_AGENT_READY_QUERY', 'ASK { ?w a <urn:x:C> }')
+    assert from_env().ready_query == 'ASK { ?w a <urn:x:C> }'
+    monkeypatch.delenv('ASCAM_AGENT_READY_QUERY')
+    assert from_env().ready_query == 'ASK { ?s ?p ?o }'          # unchanged default

@@ -25,8 +25,8 @@ import urllib.request
 
 CONNECT = 'http://localhost:8083'
 CONNECTORS = ['postgres-connector', 'mysql-connector']
-HISTORY_TOPIC = 'schema-monitor-dukcapil'
-SLOT, PUBLICATION = 'kemensos_slot', 'dbz_publication'
+HISTORY_TOPIC = 'schema-monitor-registry'
+SLOT, PUBLICATION = 'reporting_slot', 'dbz_publication'
 
 
 def rest(method: str, path: str) -> tuple[int, str]:
@@ -73,7 +73,7 @@ def main() -> int:
                                           '--bootstrap-server', 'localhost:9092', '--delete',
                                           '--topic', HISTORY_TOPIC) or 'deleted')
 
-    psql = ['exec', 'datasources-pgsql', 'psql', '-U', 'postgres', '-d', 'kemensos', '-tAc']
+    psql = ['exec', 'datasources-pgsql', 'psql', '-U', 'postgres', '-d', 'reporting', '-tAc']
     for _ in range(15):                                   # a slot can only be dropped when it is not active
         active = docker(*psql, f"SELECT active FROM pg_replication_slots WHERE slot_name='{SLOT}'")
         if active in ('', 'f'):
@@ -85,7 +85,7 @@ def main() -> int:
 
     print('\nDone. Continue with: ./restart-ascam.sh --chain-test')
     print('Check afterwards that both connectors are RUNNING and that the publication holds only ddl_event_log:')
-    print("  docker exec datasources-pgsql psql -U postgres -d kemensos -c "
+    print("  docker exec datasources-pgsql psql -U postgres -d reporting -c "
           "\"SELECT * FROM pg_publication_tables\"")
     return 0
 

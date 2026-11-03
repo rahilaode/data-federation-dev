@@ -1,0 +1,136 @@
+"""Generates setup/data-federation/deployments/npd-vdb.xml from the column catalogs of the two split sources.
+
+Usage (from setup/npd):
+    python3 tools/gen_vdb.py tools/catalog/reporting.tsv tools/catalog/registry.tsv \
+        > ../data-federation/deployments/npd-vdb.xml
+The catalogs come from catalog-pg.sql and catalog-mysql.sql run on the split sources (README.md).
+
+Design (same conventions as the VDB of the first case study, archive/bansos/data-federation/deployments/government-vdb.xml):
+ * one physical model per source, metadata written out as DDL (CREATE FOREIGN TABLE), because
+   ASCAM's Executor appends ALTER FOREIGN TABLE statements to that DDL (ADR-0002);
+ * every identifier double-quoted in the DDL (ADR-0003);
+ * the primary key of every table; foreign keys stay in the sources (Teiid does not enforce them,
+   and the 11 cross-source ones cannot exist in either DBMS);
+ * PostgreSQL folds unquoted identifiers to lower case, while NPD uses mixed case ("wlbPoint",
+   "wlbWellboreName"). Each table and column of "reporting" therefore carries a quoted
+   NAMEINSOURCE, the form Teiid's own importer produces (importer property quoteNameInSource,
+   default true). MySQL keeps the case of unquoted names, so "registry" needs none;
+ * a virtual model `services` with the views of tools/services.py (scenarios A007-A009).
+"""
+import os
+import sys
+from xml.sax.saxutils import escape
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from services import VIEWS  # noqa: E402
+
+# Text columns whose longest value exceeds Teiid's nominal string length (4000, system property
+# org.teiid.maxStringLength); "most operations in Teiid will truncate strings that are larger".
+# Measured on the NPD dump: apaAreaGross.apaAreaGeometry_KML_WGS84 holds up to 6 450 characters.
+# The other text columns hold at most 1 812.
+CLOB_COLUMNS = {('registry', 'apaAreaGross', 'apaAreaGeometry_KML_WGS84')}
+
+SOURCES = [
+    # model, catalog index, dbms, translator, JNDI name, quoted NAMEINSOURCE
+    ('reporting', 0, 'postgresql', 'postgresql', 'java:/pgsql-reporting', True),
+    ('registry', 1, 'mysql', 'mysql5', 'java:/mysql-registry', False),
+]
+
+
+def q(name):
+    return '"' + name.replace('"', '""') + '"'
+
+
+def teiid_type(model, table, column, native, length, precision, scale):
+    if (model, table, column) in CLOB_COLUMNS:
+        return 'clob'
+    if native in ('character varying', 'varchar', 'character', 'char'):
+        return f'string({length})'
+    if native in ('text', 'longtext'):
+        return 'string(4000)'
+    if native in ('integer', 'int'):
+        return 'integer'
+    if native in ('bigint', 'bigint unsigned'):
+        return 'long'          # surrogate keys of at most 5 digits; same Teiid type on both sources
+    if native in ('numeric', 'decimal'):
+        return f'bigdecimal({precision},{scale})'
+    if native == 'date':
+        return 'date'
+    raise SystemExit(f'no Teiid type for {model}.{table}.{column}: {native}')
+
+
+def read(path):
+    tables = {}
+    for line in open(path, encoding='utf-8'):
+        if not line.strip():
+            continue
+        t, pos, col, native, length, prec, scale, nullable, pk = line.rstrip('\n').split('\t')
+        tables.setdefault(t, []).append(dict(pos=int(pos), col=col, native=native, length=length,
+                                             prec=prec, scale=scale, null=nullable == 'YES',
+                                             pk=int(pk) if pk else None))
+    return tables
+
+
+def model_ddl(model, tables, quote_nis, indent='            '):
+    out = []
+    for table in sorted(tables, key=str.lower):
+        cols = sorted(tables[table], key=lambda c: c['pos'])
+        lines = []
+        for c in cols:
+            line = f"{q(c['col'])} {teiid_type(model, table, c['col'], c['native'], c['length'], c['prec'], c['scale'])}"
+            if not c['null']:
+                line += ' NOT NULL'
+            if quote_nis:
+                line += f" OPTIONS(NAMEINSOURCE '{q(c['col'])}')"
+            lines.append(line)
+        pk = [c['col'] for c in sorted((c for c in cols if c['pk']), key=lambda c: c['pk'])]
+        if not pk:
+            raise SystemExit(f'{model}.{table} has no primary key')
+        lines.append('PRIMARY KEY (' + ', '.join(q(p) for p in pk) + ')')
+        options = (f"NAMEINSOURCE '{q(table)}', " if quote_nis else '') + "UPDATABLE 'FALSE'"
+        body = (',\n' + indent + '  ').join(lines)
+        out.append(f'{indent}CREATE FOREIGN TABLE {q(table)} (\n{indent}  {body}\n{indent}) OPTIONS({options});')
+    return '\n\n'.join(out)
+
+
+def main(paths):
+    catalogs = [read(p) for p in paths]
+    total_tables = sum(len(c) for c in catalogs)
+    total_cols = sum(len(v) for c in catalogs for v in c.values())
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<!-- NPD federation: the NPD Benchmark dataset (Lanti et al., EDBT 2015) split over two',
+             f'     autonomous sources, {total_tables} tables and {total_cols} columns in all. Generated by',
+             '     setup/npd/tools/gen_vdb.py from the catalogs of the loaded sources; do not edit by hand. -->',
+             '<vdb name="npd" version="1">',
+             '    <description>NPD FactPages data federated over PostgreSQL (reporting) and MySQL (registry)</description>']
+    notes = {
+        'reporting': ('Source "reporting" (PostgreSQL): data reported by operators about wells, stratigraphy,\n'
+                      '         seismic surveys and production, the kind of data held in the Diskos national repository.'),
+        'registry': ('Source "registry" (MySQL): licences and the Petroleum Register, companies, fields,\n'
+                     '         discoveries, facilities, TUF, business arrangement areas, reserves and investments.'),
+    }
+    for model, index, dbms, translator, jndi, quote_nis in SOURCES:
+        tables = catalogs[index]
+        ncols = sum(len(v) for v in tables.values())
+        parts.append('')
+        parts.append(f'    <!-- {notes[model]}\n         {len(tables)} tables, {ncols} columns. -->')
+        parts.append(f'    <model visible="true" name="{model}">')
+        parts.append(f'        <source name="{model}" translator-name="{translator}" connection-jndi-name="{escape(jndi)}"/>')
+        ddl = model_ddl(model, tables, quote_nis)
+        assert ']]>' not in ddl
+        parts.append('        <metadata type="DDL"><![CDATA[\n' + ddl + '\n        ]]></metadata>')
+        parts.append('    </model>')
+    parts.append('')
+    parts.append('    <!-- Service views read by the mapping (scenarios A007-A009, ADR-0023); see\n'
+                 '         setup/npd/tools/services.py. -->')
+    parts.append('    <model visible="true" type="VIRTUAL" name="services">')
+    statements = [f'            CREATE VIEW "{name}" AS {body};' for name, body in VIEWS.items()]
+    assert all(']]>' not in x for x in statements)
+    parts.append('        <metadata type="DDL"><![CDATA[\n' + '\n\n'.join(statements) + '\n        ]]></metadata>')
+    parts.append('    </model>')
+    parts.append('</vdb>')
+    sys.stdout.write('\n'.join(parts) + '\n')
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:3])

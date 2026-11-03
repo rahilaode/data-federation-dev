@@ -235,3 +235,37 @@ def test_unrelated_baseline_failure_must_be_answered_after_adaptation():
     executor, _ = build_broken(BrokenSparql({}, failed=[fx.STATUS, nik]),
                                 BrokenSparql({nik: 15}, whole_fails=False))
     assert executor.execute(fx.plan_drop())['status'] == 'succeeded'
+
+
+class CountingSparql(BrokenSparql):
+    """Records whether the whole-graph fingerprint was ever asked for."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.whole_calls = 0
+
+    def fingerprint(self):
+        self.whole_calls += 1
+        return super().fingerprint()
+
+
+def test_per_predicate_mode_never_asks_for_the_whole_fingerprint():
+    """ADR-0030: with fingerprint='per_predicate' (a large mapping such as NPD, where the whole
+    query exceeds Teiid's message limit) both instances are checked per predicate from the start."""
+    nik = RDF_TYPE
+    active = CountingSparql({nik: 15, fx.STATUS: 3}, whole_fails=False)
+    standby = CountingSparql({nik: 15}, whole_fails=False)
+    knowledge, admin, agent = fx.FakeKnowledge(), fx.FakeAdmin(), FakeAgentBG()
+    executor = Executor(knowledge, admin, agent, active, obdf_id=1, sleep=lambda s: None,
+                        obda_strategy='bluegreen', sparql_for=lambda url: standby,
+                        fingerprint='per_predicate')
+    assert executor.execute(fx.plan_drop())['status'] == 'succeeded'
+    assert active.whole_calls == 0 and standby.whole_calls == 0
+    assert active.per_predicate and standby.per_predicate
+    details = next(s for s in knowledge.steps if s['name'] == 'verify')['detail']
+    assert details['fingerprint'] == 'per_predicate' and details['failed_before'] == []
+
+
+def test_unknown_fingerprint_mode_is_rejected():
+    with pytest.raises(ValueError, match='fingerprint mode'):
+        Executor(fx.FakeKnowledge(), fx.FakeAdmin(), FakeAgentBG(), BrokenSparql({}), obdf_id=1,
+                 obda_strategy='bluegreen', sparql_for=lambda url: None, fingerprint='sometimes')

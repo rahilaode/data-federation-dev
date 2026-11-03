@@ -37,7 +37,7 @@ def test_read_artifact_content(agent):
 
 
 def test_credentials_file_is_never_exposed(agent):
-    for kind in ('properties', 'government.docker.properties', '../government.docker.properties'):
+    for kind in ('properties', 'npd.docker.properties', '../npd.docker.properties'):
         r = agent.get(f'/api/v1/artifacts/{kind}')
         assert r.status_code == 404
         assert 'VERY-SECRET' not in r.text
@@ -53,9 +53,9 @@ def test_missing_artifact_reported(agent):
 
 
 def test_validate_passes_db_url(agent, runner):
-    ok = agent.post('/api/v1/validate', json={'db_url': 'jdbc:teiid:government@mm://teiid:31000;version=3'})
+    ok = agent.post('/api/v1/validate', json={'db_url': 'jdbc:teiid:npd@mm://teiid:31000;version=3'})
     assert ok.status_code == 200 and ok.json()['ok'] and ok.json()['duration_ms'] == 1200
-    assert runner.calls == ['jdbc:teiid:government@mm://teiid:31000;version=3']
+    assert runner.calls == ['jdbc:teiid:npd@mm://teiid:31000;version=3']
     agent.post('/api/v1/validate', json={})
     assert runner.calls[-1] is None
 
@@ -108,7 +108,7 @@ def test_runner_uses_volumes_from_and_ontop_network(tmp_path):
     expected_tail = ['validate',
                      '-m', '/opt/ontop/input/mapping.ttl',
                      '-t', '/opt/ontop/input/ontology_file.ttl',
-                     '-p', '/opt/ontop/input/government.docker.properties',
+                     '-p', '/opt/ontop/input/npd.docker.properties',
                      '--db-url', 'jdbc:teiid:x@mm://t:31000;version=2']
     cmd = kwargs['command']
     assert cmd[-len(expected_tail):] == expected_tail

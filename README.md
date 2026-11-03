@@ -8,8 +8,9 @@ change (new columns), or reports what a person has to repair. Adaptations are de
 side with the running version and switched over only after they have been verified, so SPARQL
 queries keep being answered while ASCAM works.
 
-This repository holds the whole laboratory of the thesis: a case-study OBDF for social
-assistance data (PostgreSQL and MySQL federated by Teiid and exposed as SPARQL by Ontop), the
+This repository holds the whole laboratory of the thesis: a case-study OBDF built from the NPD
+benchmark (data of the Norwegian Petroleum Directorate split over PostgreSQL and MySQL, federated
+by Teiid and exposed as SPARQL by Ontop with the benchmark's own ontology and R2RML mapping), the
 ASCAM services, and the evaluation harness.
 
 - [Architecture](#architecture)
@@ -26,9 +27,9 @@ ASCAM services, and the evaluation harness.
 ```mermaid
 flowchart LR
     subgraph OBDF["Case-study OBDF"]
-        PG[("PostgreSQL<br/>kemensos")]
-        MY[("MySQL<br/>dukcapil")]
-        TEIID["Teiid 16<br/>VDB government (Σ_S)"]
+        PG[("PostgreSQL<br/>reporting")]
+        MY[("MySQL<br/>registry")]
+        TEIID["Teiid 16<br/>VDB npd (Σ_S)"]
         PROXY["nginx proxy<br/>:8080/sparql"]
         BLUE["Ontop blue<br/>ℳ, 𝒯"]
         GREEN["Ontop green<br/>(standby)"]
@@ -77,16 +78,16 @@ The three adaptation patterns:
 
 | Pattern | Operation | What ASCAM does |
 |---|---|---|
-| P-001 | ADD COLUMN | Waits for the administrator. On approval: `ALTER FOREIGN TABLE ... ADD COLUMN`, a new `owl:DatatypeProperty`, and a predicate-object map on the TriplesMaps that pick up the column |
+| P-001 | ADD COLUMN | Waits for the administrator. On approval: `ALTER FOREIGN TABLE ... ADD COLUMN`, a new `owl:DatatypeProperty`, and a predicate-object map on the TriplesMaps that pick up the column; when every logical table lists its columns (as in NPD), a new TriplesMap over the table instead (ADR-0027) |
 | P-002 | DROP COLUMN | When every usage is a plain value or projection: `DROP COLUMN`, `ALTER VIEW` for views that pass the column on, removal of the predicate-object maps, and `owl:deprecated` on the property. Otherwise a notification |
-| P-003 | RENAME COLUMN | `ALTER COLUMN ... OPTIONS (SET NAMEINSOURCE '<new name>')`: the Teiid column keeps its name, so views, the mapping, and the ontology do not change |
+| P-003 | RENAME COLUMN | `ALTER COLUMN ... OPTIONS (SET NAMEINSOURCE '"<new name>"')`: the Teiid column keeps its name, so views, the mapping, and the ontology do not change |
 
 ### Containers and ports
 
 | Container | Component | Host port |
 |---|---|---|
-| `datasources-pgsql` | PostgreSQL 15, database `kemensos` | 15433 |
-| `datasources-mysql` | MySQL 8.0, database `dukcapil` | 13306 |
+| `datasources-pgsql` | PostgreSQL 15, database `reporting` (25 NPD tables) | 15433 |
+| `datasources-mysql` | MySQL 8.0, database `registry` (45 NPD tables) | 13306 |
 | `data-federation-teiid` | Teiid 16 on WildFly: JDBC, ODBC, management API, HTTP | 31000, 35432, 19990, 18080 |
 | `vkg-system-ontop-teiid` | nginx proxy in front of Ontop, the SPARQL endpoint | 8080 |
 | `vkg-system-ontop-blue`, `vkg-system-ontop-green` | Ontop 4.1.1 instances (one runs at a time) | – |
@@ -109,11 +110,13 @@ All containers share the external Docker network `ascam-networks`. Every compone
 - Docker Engine with `docker-compose` (the scripts also accept the `docker compose` plugin).
 - `git`, `curl`, and Python 3.10 or later on the host (the scripts and the harness use only the
   standard library; `plot.py` also needs matplotlib).
-- Internet access the first time, to pull images and to build the Teiid and ASCAM images
-  (Docker Hub, quay.io, Maven Central, PyPI).
+- Internet access the first time, to pull images, to build the Teiid and ASCAM images
+  (Docker Hub, quay.io, Maven Central, PyPI), and to fetch the NPD benchmark from GitHub
+  (`setup/npd/fetch-npd.sh`, run by `start.sh`).
 - The host ports listed above must be free. The lab creates 17 containers (the migration
   container exits after its run, and one Ontop instance stays stopped until an adaptation); give
-  Docker enough memory for two Ontop JVMs, Teiid, and Kafka.
+  Docker enough memory for two Ontop JVMs, Teiid (1 GB heap), and Kafka. The first start loads
+  the NPD dumps into both sources, which takes a few minutes.
 
 ## Setup and running
 
@@ -125,7 +128,8 @@ cd data-federation-dev
 
 `start.sh` builds the lab from scratch, in dependency order: it creates the secrets
 (`setup/ascam/knowledge/secrets/`, not committed), takes every container down **with its volumes**,
-restores the mapping and the ontology from git, starts the sources (rebuilt from `init.sql`),
+restores the mapping and the ontology from git, fetches the NPD benchmark at a fixed commit and
+checks its checksums, starts the sources (each loads the NPD dump and keeps its own tables),
 Teiid, the blue-green Ontop layer, Kafka and Debezium (and registers the connectors), the
 Knowledge Service, the Ontop agent, the Event Normalizer, the Executor, and the console, then runs
 an initial sync and the preflight checks, including a real DDL that travels through the whole
@@ -144,8 +148,8 @@ A first query:
 
 ```bash
 curl -s -G http://localhost:8080/sparql -H 'Accept: application/sparql-results+json' \
-  --data-urlencode 'query=PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p'
+  --data-urlencode 'query=PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c } LIMIT 10'
 ```
 
 Three scripts cover day-to-day use:
@@ -161,18 +165,19 @@ Three scripts cover day-to-day use:
 
 ### Trying a schema change by hand
 
-Rename a column that the mapping uses (scenario A003), then watch the console
-(Schema changes, Plans and executions):
+Rename a column that the mapping uses (scenario A003, the column that links exploration wells
+in `reporting` to their drilling company in `registry`), then watch the console (Schema changes,
+Plans and executions):
 
 ```bash
-docker exec datasources-pgsql psql -U postgres -d kemensos -c 'ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program'
+docker exec datasources-pgsql psql -U postgres -d reporting -c 'ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" TO "wlbDrillingCompany"'
 ```
 
-ASCAM decides `auto`, deploys a new VDB version with `SET NAMEINSOURCE 'judul_program'`, starts
-and verifies the standby Ontop instance, and switches to it; the query above keeps returning the
-same answers. An `ADD COLUMN`, for example
-`ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)`, appears under Approvals,
-where the proposed property can be approved or renamed. Renaming the column back is adapted the
+ASCAM decides `auto`, deploys a new VDB version with `SET NAMEINSOURCE '"wlbDrillingCompany"'`,
+starts and verifies the standby Ontop instance, and switches to it; the query above keeps
+returning the same answers. An `ADD COLUMN`, for example
+`ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2)`, appears under Approvals,
+with the proposed property and the new TriplesMap, which can be approved or renamed. Renaming the column back is adapted the
 same way; `./start.sh` returns the whole lab to its base state.
 
 ## Running the experiments
@@ -214,15 +219,15 @@ result names the code that produced it. Results of the earlier Indonesian-langua
 
 | Scenario | Source | Statement applied to the source |
 |---|---|---|
-| A001 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat ADD COLUMN email VARCHAR(100)` |
-| A002 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN tipe_program` |
-| A003 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos RENAME COLUMN nama_program TO judul_program` |
-| A004 | MySQL (dukcapil) | `ALTER TABLE master_wilayah ADD COLUMN kode_pos VARCHAR(10)` |
-| A005 | MySQL (dukcapil) | `ALTER TABLE master_penduduk DROP COLUMN status_hidup` |
-| A006 | MySQL (dukcapil) | `ALTER TABLE master_penduduk RENAME COLUMN tanggal_lahir TO tgl_lahir_ktp` |
-| A007 | PostgreSQL (kemensos) | `ALTER TABLE public.penerima_manfaat DROP COLUMN no_kartu_keluarga` |
-| A008 | MySQL (dukcapil) | `ALTER TABLE riwayat_perubahan_data DROP COLUMN diubah_oleh` |
-| A009 | PostgreSQL (kemensos) | `ALTER TABLE public.program_bansos DROP COLUMN periode_selesai` |
+| A001 | PostgreSQL (reporting) | `ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2)` |
+| A002 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_casing_and_lot" DROP COLUMN "wlbLotMudDencity"` |
+| A003 | PostgreSQL (reporting) | `ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" TO "wlbDrillingCompany"` |
+| A004 | MySQL (registry) | `ALTER TABLE company ADD COLUMN cmpCountryCode VARCHAR(2)` |
+| A005 | MySQL (registry) | `` ALTER TABLE `discovery` DROP COLUMN `dscDiscoveryYear` `` |
+| A006 | MySQL (registry) | `ALTER TABLE company RENAME COLUMN cmpLongName TO cmpFullName` |
+| A007 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_mud" DROP COLUMN "wlbMudViscosityAtMD"` |
+| A008 | MySQL (registry) | `` ALTER TABLE `field_investment_yearly` DROP COLUMN `prfInvestmentsMillNOK` `` |
+| A009 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_core" DROP COLUMN "wlbCoreIntervalBottom"` |
 
 Before a DROP the harness copies the column into a backup table (`ascam_backup_<column>`); after
 each run it puts the column back and waits for the monitor to report the restore. A001 and A004
@@ -238,346 +243,349 @@ Expected outcome per scenario:
 | A002, A005 | DROP of a plain column | `auto` | The predicate disappears; its query still runs and returns an empty answer set; the other queries still run |
 | A003, A006 | RENAME | `auto` | All answers identical |
 | A007, A008 | DROP of a column read through a view | `auto` (`ALTER VIEW`) | As for DROP |
-| A009 | DROP of a column used in a view expression | `notify`, no actions | Not adapted: the affected query fails, as without ASCAM, until a person repairs the view |
+| A009 | DROP of a column used in a view expression (`"wlbCoreIntervalBottom" * 0.3048`) | `notify`, no actions | Not adapted: the affected query fails, as without ASCAM, until a person repairs the view |
 
 ### SPARQL queries
 
 Every scenario runs five queries, before and after the change: q1 reads the changed column
 (affected), q2 another column of the same table or view (neighbour), and q3–q5 other tables
-(control). q4 `count_per_class` and q5 `transaction_status` are the same in every scenario. The
-queries are listed exactly as they are sent to `http://localhost:8080/sparql`; they are defined in
-`experiments/evaluation/queries.py` and also listed in
+(control). q4 `well_licence` (exploration wells in `reporting` joined to their licences in
+`registry`, a cross-source join no scenario touches) and q5 `well_name` are the same in every
+scenario. The queries have no `ORDER BY`, because the harness sorts every answer set before it
+compares. They are listed exactly as they are sent to `http://localhost:8080/sparql`; they are
+defined in `experiments/evaluation/queries.py` and also listed in
 [`docs/evaluation.md`](docs/evaluation.md#sparql-queries).
 
-- **A001**: ADD COLUMN email on penerima_manfaat (PostgreSQL)
-  - q1 `email` (affected)
+- **A001**: ADD COLUMN wlbMudPh on wellbore_mud (PostgreSQL)
+  - q1 `mud_ph` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?email WHERE { ?p bansos:email ?email } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?m ?ph WHERE { ?m npdv:wlbMudPh ?ph }
     ```
 
-  - q2 `recipient` (neighbour)
+  - q2 `mud_weight` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama ?status WHERE { ?p a bansos:PenerimaBansos ; bansos:namaLengkap ?nama ; bansos:statusEkonomi ?status } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
     ```
 
-  - q3 `resident_link` (control)
+  - q3 `company_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A002**: DROP COLUMN tipe_program on program_bansos (PostgreSQL)
-  - q1 `program_type` (affected)
+- **A002**: DROP COLUMN wlbLotMudDencity on wellbore_casing_and_lot (PostgreSQL)
+  - q1 `lot_mud_density` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?tipe WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?d WHERE { ?c npdv:LOTMudDensity ?d }
     ```
 
-  - q2 `program_name` (neighbour)
+  - q2 `casing_type` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }
     ```
 
-  - q3 `transaction_program` (control)
+  - q3 `company_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A003**: RENAME COLUMN nama_program on program_bansos (PostgreSQL)
-  - q1 `program_name` (affected)
+- **A003**: RENAME COLUMN wlbDrillingOperator on wellbore_exploration_all (PostgreSQL)
+  - q1 `drilling_operator` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }
     ```
 
-  - q2 `type_amount` (neighbour)
+  - q2 `well_total_depth` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?d WHERE { ?w a npdv:ExplorationWellbore ; npdv:wellboreTotalDepth ?d }
     ```
 
-  - q3 `recipient_to_resident` (control)
+  - q3 `discovery_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A004**: ADD COLUMN kode_pos on master_wilayah (MySQL)
-  - q1 `postal_code` (affected)
+- **A004**: ADD COLUMN cmpCountryCode on company (MySQL)
+  - q1 `country_code` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?w ?kode WHERE { ?w bansos:kodePos ?kode } ORDER BY ?w
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?cc WHERE { ?c npdv:cmpCountryCode ?cc }
     ```
 
-  - q2 `region` (neighbour)
+  - q2 `company_short_name` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?w ?prov ?kab WHERE { ?w a bansos:Wilayah ; bansos:provinsi ?prov ; bansos:kabupaten ?kab } ORDER BY ?w
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }
     ```
 
-  - q3 `recipient_to_resident` (control)
+  - q3 `mud_weight` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A005**: DROP COLUMN status_hidup on master_penduduk (MySQL)
-  - q1 `living_status` (affected)
+- **A005**: DROP COLUMN dscDiscoveryYear on discovery (MySQL)
+  - q1 `discovery_year` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; bansos:statusHidup ?status } ORDER BY ?s
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?d ?y WHERE { ?d a npdv:Discovery ; npdv:discoveryYear ?y }
     ```
 
-  - q2 `name_occupation` (neighbour)
+  - q2 `discovery_name` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }
     ```
 
-  - q3 `family_region` (control)
+  - q3 `casing_type` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A006**: RENAME COLUMN tanggal_lahir on master_penduduk (MySQL)
-  - q1 `birth_date` (affected)
+- **A006**: RENAME COLUMN cmpLongName on company (MySQL)
+  - q1 `company_name` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; bansos:tanggalLahir ?tgl } ORDER BY ?s
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
     ```
 
-  - q2 `name_occupation` (neighbour)
+  - q2 `company_short_name` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }
     ```
 
-  - q3 `recipient_to_resident` (control)
+  - q3 `drilling_operator` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . ?d bansos:namaPenduduk ?nama } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A007**: DROP COLUMN no_kartu_keluarga through view v_penerima_aktif (PostgreSQL)
-  - q1 `active_recipient_kk` (affected)
+- **A007**: DROP COLUMN wlbMudViscosityAtMD through view v_wellbore_mud (PostgreSQL)
+  - q1 `mud_viscosity` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; bansos:noKartuKeluarga ?kk }
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?m ?v WHERE { ?m npdv:mudViscosity ?v }
     ```
 
-  - q2 `active_recipient` (neighbour)
+  - q2 `mud_yield_point` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p WHERE { ?p a bansos:PenerimaAktif }
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?m ?y WHERE { ?m npdv:mudYieldPoint ?y }
     ```
 
-  - q3 `resident_link` (control)
+  - q3 `company_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A008**: DROP COLUMN diubah_oleh through view v_riwayat_perubahan (MySQL)
-  - q1 `history_officer` (affected)
+- **A008**: DROP COLUMN prfInvestmentsMillNOK through view v_field_investment (MySQL)
+  - q1 `investment` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?r ?petugas WHERE { ?r bansos:diubahOleh ?petugas }
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?i ?x WHERE { ?i npdv:investmentNOK ?x }
     ```
 
-  - q2 `history_column` (neighbour)
+  - q2 `investment_year` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?r ?kolom WHERE { ?r a bansos:RiwayatPerubahan ; bansos:kolomDiubah ?kolom }
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?i ?y WHERE { ?i a npdv:FieldInvestment ; npdv:productionYear ?y }
     ```
 
-  - q3 `family_region` (control)
+  - q3 `mud_weight` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-- **A009**: DROP COLUMN periode_selesai used in a view expression (PostgreSQL)
-  - q1 `end_year` (affected)
+- **A009**: DROP COLUMN wlbCoreIntervalBottom used in a view expression (PostgreSQL)
+  - q1 `core_bottom` (affected)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th }
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?b WHERE { ?c npdv:coreIntervalBottom ?b }
     ```
 
-  - q2 `program_name` (neighbour)
+  - q2 `core_top` (neighbour)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?t WHERE { ?c a npdv:WellboreCore ; npdv:coreIntervalTop ?t }
     ```
 
-  - q3 `transaction_program` (control)
+  - q3 `company_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
     ```
 
-  - q4 `count_per_class` (control)
+  - q4 `well_licence` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } GROUP BY ?kelas ORDER BY ?kelas
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
     ```
 
-  - q5 `transaction_status` (control)
+  - q5 `well_name` (control)
 
     ```sparql
-    PREFIX bansos: <http://bansos.go.id/ontology/>
-    SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; bansos:statusTransaksi ?status } ORDER BY ?t
+    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
     ```
 
-Availability probe, sent about every 0.5 s during each treatment run:
+Availability probe, sent about every 0.5 s during each treatment run (no scenario touches the
+licence table):
 
 ```sparql
-PREFIX bansos: <http://bansos.go.id/ontology/>
-SELECT ?t WHERE { ?t a bansos:TransaksiBansos } LIMIT 1
+PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
+SELECT ?l WHERE { ?l a npdv:ProductionLicence } LIMIT 1
 ```
 
 ## Knowledge Base and ERD
@@ -613,8 +621,8 @@ done
 python3 experiments/evaluation/self_test.py                    # evaluation harness
 ```
 
-At the time of writing: Knowledge 158 tests, Executor 70, Ontop agent 40, Event Normalizer 32,
-console 25.
+At the time of writing: Knowledge 180 tests, Executor 79, Ontop agent 42, Event Normalizer 32,
+console 27.
 
 ## Repository layout
 
@@ -625,8 +633,9 @@ console 25.
 ├── stop.sh                     stop everything (--volumes also deletes the data)
 ├── run-evaluation.sh           start.sh + evaluation + analysis
 ├── setup/
-│   ├── data-source/            PostgreSQL (kemensos) and MySQL (dukcapil) with schema monitors
-│   ├── data-federation/        Teiid image, datasources, VDB government (Σ_S)
+│   ├── npd/                    fetch-npd.sh and the generators of the split, the VDB, the mapping, the ontology
+│   ├── data-source/            PostgreSQL (reporting) and MySQL (registry) with schema monitors
+│   ├── data-federation/        Teiid image, datasources, VDB npd (Σ_S)
 │   ├── vkg-system/             Ontop blue/green instances, proxy, mapping.ttl (ℳ), ontology_file.ttl (𝒯)
 │   └── ascam/
 │       ├── schema-monitor/     Kafka, Kafka Connect, Debezium connector definitions
@@ -640,23 +649,26 @@ console 25.
 │   ├── reset_obdf.py           return the OBDF to its base state
 │   └── reset_connectors.py     recover Debezium connectors without replay
 ├── docs/                       architecture decisions, Knowledge Base and ERD, evaluation
-└── archive/                    retired iteration-1 code and the feasibility scripts, kept as evidence
+└── archive/                    retired iteration-1 code, the feasibility scripts, and the first case study (bansos/)
 ```
 
-The names of the case-study schemas, tables, columns, and ontology terms are Indonesian, because
-they come from the Indonesian social-assistance domain (Kemensos is the Ministry of Social
-Affairs, Dukcapil the civil registry). Everything else is in English.
+The table and column names (`wlbNpdidWellbore`, `cmpLongName`) and the ontology terms are those of
+the NPD benchmark (<https://github.com/ontop/npd-benchmark>; Lanti et al., EDBT 2015). The split
+into `reporting` and `registry` is a choice of this thesis (ADR-0027). The first case study, on
+Indonesian social-assistance data, is kept in `archive/bansos/`.
 
 ## Documentation
 
 | Document | Content |
 |---|---|
-| [`docs/design-decisions.md`](docs/design-decisions.md) | The 24 architecture decisions (ADR-0001 to ADR-0024) with their evidence |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | The 30 architecture decisions (ADR-0001 to ADR-0030) with their evidence |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | Knowledge Base: principles, schemas, ERD, integrity rules, decision matrix |
 | [`docs/evaluation.md`](docs/evaluation.md) | Evaluation protocol, all SQL and SPARQL, result files, threats to validity |
 | `setup/*/README.md`, `setup/ascam/*/README.md` | One README per component: what it does, how to run and test it |
+| [`setup/npd/README.md`](setup/npd/README.md) | The NPD case study: where the inputs come from, the split, and the generators |
 | [`archive/README.md`](archive/README.md) | What the archive holds and why |
 
-The code that produced the results reported in the paper is commit `a1e9b0a` on branch
-`eval/final`. This version differs from it only in language (identifiers, messages, comments,
-documentation) and in the documentation and helper scripts added around it; the logic is the same.
+The results of the first case study (social assistance) were produced by commit `a1e9b0a` on
+branch `eval/final`. Since then the code has been translated to English, three rules were
+corrected (ADR-0025, ADR-0026), and the case study was replaced by NPD (ADR-0027 to ADR-0030);
+the NPD evaluation is still to be run.

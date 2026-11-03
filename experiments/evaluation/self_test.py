@@ -35,9 +35,11 @@ def main() -> int:
 
     # In the base state a restore must send no DDL and must return 'clean'; otherwise the
     # harness waits for a restore event that never comes.
-    base_state = {'email': '0', 'tipe_program': '1', 'tgl_lahir_ktp': '0',
-                  'kode_pos': '0', 'status_hidup': '1', 'judul_program': '0',
-                  'no_kartu_keluarga': '1', 'diubah_oleh': '1', 'periode_selesai': '1'}
+    # keyed on the whole predicate, so that no column name matches inside another one
+    added = ('wlbMudPh', 'cmpCountryCode', 'wlbDrillingCompany', 'cmpFullName')   # ADD, new RENAME names
+    dropped = ('wlbLotMudDencity', 'dscDiscoveryYear', 'wlbMudViscosityAtMD', 'prfInvestmentsMillNOK',
+               'wlbCoreIntervalBottom')
+    base_state = {**{f"column_name='{c}'": '0' for c in added}, **{f"column_name='{c}'": '1' for c in dropped}}
     for code, sc in scenarios.SCENARIOS.items():
         commands: list[str] = []
 
@@ -58,9 +60,7 @@ def main() -> int:
 
     # After a treatment, on the other hand, the restore MUST run DDL and must not read as
     # "nothing changed", even when the client (like MySQL) prints nothing.
-    treated_state = {'email': '1', 'tipe_program': '0', 'tgl_lahir_ktp': '1',
-                     'kode_pos': '1', 'status_hidup': '0', 'judul_program': '1',
-                     'no_kartu_keluarga': '0', 'diubah_oleh': '0', 'periode_selesai': '0'}
+    treated_state = {k: '1' if v == '0' else '0' for k, v in base_state.items()}
     for code, sc in scenarios.SCENARIOS.items():
         commands = []
 

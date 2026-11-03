@@ -125,6 +125,21 @@ def test_ontop_sparql():
     assert not down.ok and down.summary == 'HTTP 503'
 
 
+def test_ontop_sparql_uses_configured_ready_query():
+    """ADR-0030: the target may name a cheap query in endpoint.options.ready_query."""
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.params.get('query'))
+        return httpx.Response(200, json={'boolean': True})
+    query = 'PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }'
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    assert connectors.check_ontop_sparql({'host': 'ontop', 'port': 8080,
+                                          'options': {'ready_query': query}}, http=http).ok
+    assert connectors.check_ontop_sparql({'host': 'ontop', 'port': 8080}, http=http).ok
+    assert seen == [query, 'ASK { ?s ?p ?o }']
+
+
 def test_ontop_agent_check_uses_token():
     ep = {'host': 'agent', 'port': 8000}
     ok = connectors.check_ontop_agent(ep, token='secret-token', http=agent_server())

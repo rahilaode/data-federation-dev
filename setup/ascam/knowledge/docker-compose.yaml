@@ -53,7 +53,7 @@ services:
       ASCAM_KNOWLEDGE_DB_PASSWORD_FILE: /run/secrets/knowledge_db_app_password
       ASCAM_KNOWLEDGE_ENCRYPTION_KEYS_FILE: /run/secrets/knowledge_encryption_keys
       ASCAM_KNOWLEDGE_API_TOKENS_FILE: /run/secrets/knowledge_api_tokens
-      ASCAM_KNOWLEDGE_BOOTSTRAP_CONFIG: /config/obdf-bansos.yaml
+      ASCAM_KNOWLEDGE_BOOTSTRAP_CONFIG: /config/obdf-npd.yaml
     secrets:
       - knowledge_db_app_password
       - knowledge_encryption_keys

@@ -11,7 +11,7 @@ services:
       ASCAM_UI_ORCHESTRATOR_URL: http://ascam-orchestrator:8000
       ASCAM_UI_EXECUTOR_URL: http://ascam-executor:8000
       ASCAM_UI_AGENT_URL: http://ascam-ontop-agent:8000
-      ASCAM_UI_OBDF: bansos
+      ASCAM_UI_OBDF: npd
       ASCAM_UI_ADMIN_USER: admin
       ASCAM_UI_TOKEN_FILE: /run/secrets/knowledge_api_tokens
       ASCAM_UI_PASSWORD_FILE: /run/secrets/ui_admin_password

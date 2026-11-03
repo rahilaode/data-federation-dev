@@ -123,6 +123,47 @@ def add_predicate_object_map(text: str, table: str | None, column: str, predicat
     return append_block(result, _pom_key(predicate_iri, str(tm)), block)
 
 
+def _turtle_string(value: str) -> str:
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def add_triples_map(text: str, triples_map_iri: str, sql_query: str, subject_template: str,
+                    predicate_iri: str, column: str, datatype_iri: str | None = None) -> str:
+    """Adds a NEW TriplesMap for a new column (pattern P-001, ADR-0027).
+
+    Used when every logical table of the table lists its columns, so no existing TriplesMap
+    gains the column. Knowledge gives the query (that of a class TriplesMap of the table, with
+    the column added) and the subject template of that TriplesMap; the TriplesMap is written as
+    a managed block, so the rest of the file is untouched.
+    """
+    graph = _graph(text)
+    if (URIRef(triples_map_iri), RR.logicalTable, None) in graph:
+        return text                                  # already present: idempotent
+    required = {'rr': str(RR)}
+    if datatype_iri:
+        required['xsd'] = 'http://www.w3.org/2001/XMLSchema#'
+    result = ensure_prefixes(text, required)
+    prefixes = prefix_map(result)
+    # the query projects the column as a delimited identifier, so the term map names it the same
+    # way: R2RML column names are SQL identifiers, and an undelimited wlbMudPh would mean
+    # wlbmudph on PostgreSQL
+    obj = 'rr:column %s' % _turtle_string('"' + column.replace('"', '""') + '"')
+    if datatype_iri:
+        obj += ' ; rr:datatype %s' % shorten(datatype_iri, prefixes)
+    block = '\n'.join([
+        '%s a rr:TriplesMap ;' % _reference(triples_map_iri, prefixes),
+        '    rr:logicalTable [ rr:sqlQuery %s ] ;' % _turtle_string(sql_query),
+        '    rr:subjectMap [ rr:template %s ; rr:termType rr:IRI ] ;' % _turtle_string(subject_template),
+        '    rr:predicateObjectMap [',
+        '        rr:predicate %s ;' % shorten(predicate_iri, prefixes),
+        '        rr:objectMap [ %s ]' % obj,
+        '    ] .',
+    ])
+    result = append_block(result, f'triples_map {triples_map_iri}', block)
+    _graph(result)                                   # the block must parse
+    return result
+
+
 def remove_predicate_object_map(text: str, predicate_iri: str, table: str | None = None,
                                 triples_map_iri: str | None = None) -> tuple[str, int]:
     """Removes the predicate-object maps of a given predicate (pattern P-002).
@@ -217,6 +258,10 @@ def apply_actions(text: str, actions: list[dict]) -> str:
             result = add_predicate_object_map(result, action.get('table'), action['column'],
                                              action['predicate_iri'], action.get('datatype_iri'),
                                              action.get('triples_map_iri'))
+        elif operation == 'add_triples_map':
+            result = add_triples_map(result, action['triples_map_iri'], action['sql_query'],
+                                     action['subject_template'], action['predicate_iri'],
+                                     action['column'], action.get('datatype_iri'))
         elif operation == 'rewrite_logical_table':
             result, changed = rewrite_logical_table(result, action['triples_map_iri'],
                                                   action['column'])

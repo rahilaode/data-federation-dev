@@ -52,6 +52,21 @@ def build_index(db: Session, version_id: int) -> SigmaIndex:
     return index
 
 
+def _logical_column(logical_ids: dict[str, int], reference: str) -> int | None:
+    """Logical-table column named by a term-map column reference (ADR-0028).
+
+    A delimited reference ("wlbNsMin") is matched exactly, as SQL does. An undelimited one is
+    matched exactly first and otherwise ignoring case, but only when that match is unique:
+    whether the database folds it to upper or lower case is not known here."""
+    name = r2rml.column_name(reference)
+    if name in logical_ids:
+        return logical_ids[name]
+    if reference.strip().startswith('"'):
+        return None
+    folded = [i for n, i in logical_ids.items() if n.lower() == name.lower()]
+    return folded[0] if len(folded) == 1 else None
+
+
 def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
                   index: SigmaIndex, issues: list[dict]) -> dict[str, int]:
     specs = r2rml.parse(content)
@@ -148,7 +163,7 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
             db.flush()
             counts['term_maps'] += 1
             for position, column in enumerate(term.columns, start=1):
-                logical_id = logical_ids.get(column)
+                logical_id = _logical_column(logical_ids, column)
                 if logical_id is None:
                     issues.append({'code': 'logical_column_unresolved', 'severity': 'error',
                                    'subject_kind': 'term_map', 'subject_ref': f'{tm.iri} {term.value}',
@@ -159,7 +174,8 @@ def store_mapping(db: Session, version_id: int, artifact_id: int, content: str,
                                           template_position=position if term.value_kind == 'template' else None))
             for join in term.joins:
                 db.add(spec.JoinCondition(spec_version_id=version_id, term_map_id=term_row.id,
-                                          child_column=join['child'], parent_column=join['parent'],
+                                          child_column=r2rml.column_name(join['child']),
+                                          parent_column=r2rml.column_name(join['parent']),
                                           parent_triples_map_iri=term.value))
             return term_row
 

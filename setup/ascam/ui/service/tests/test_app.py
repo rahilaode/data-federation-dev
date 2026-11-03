@@ -99,7 +99,7 @@ def test_health_aggregates_services_and_tolerates_failures(logged_in):
 
 def test_overview_combines_knowledge_views(logged_in):
     r = logged_in.get('/api/ui/overview').json()
-    assert r['obdf']['name'] == 'bansos'
+    assert r['obdf']['name'] == 'npd'
     assert set(r) >= {'active_version', 'events', 'pending', 'executions', 'notifications'}
 
 

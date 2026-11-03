@@ -9,7 +9,7 @@ class Settings:
     token_file: str | None = os.getenv('ASCAM_ORCH_TOKEN_FILE')
     token: str | None = os.getenv('ASCAM_ORCH_TOKEN')
     token_client: str = os.getenv('ASCAM_ORCH_TOKEN_CLIENT', 'orchestrator')
-    obdf_name: str = os.getenv('ASCAM_ORCH_OBDF', 'bansos')
+    obdf_name: str = os.getenv('ASCAM_ORCH_OBDF', 'npd')
     group_id: str = os.getenv('ASCAM_ORCH_GROUP_ID', 'ascam-orchestrator')
     # Starting point of a NEW consumer group: 'earliest' reads the whole topic history, 'latest'
     # only messages after the Orchestrator connects. After Knowledge is reset, 'latest' prevents

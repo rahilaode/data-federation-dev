@@ -17,6 +17,7 @@ are in Indonesian and their paths may point to the old layout (for example `expe
 | `experiments/queries/`, `*.py`, `*.sh` | Iteration-1 experiment runner, aggregation, and SPARQL helpers |
 | `example/` | Stand-alone example of a Teiid multi-source model, separate from the case-study OBDF |
 | `scripts/` | Iteration-1 start, reset, and stop scripts (replaced by `start.sh`, `restart-ascam.sh`, and `stop.sh`) |
+| `bansos/` | The first case study (social assistance: PostgreSQL `kemensos`, MySQL `dukcapil`, VDB `government`, its mapping, ontology, Knowledge configuration, and sample Debezium events), used for the evaluation of 28 October 2026 and replaced by NPD (ADR-0027). The paths inside mirror `setup/`; the Knowledge tests still read these files |
 
 The architecture decision records themselves were condensed into `docs/design-decisions.md`; the
 original files are in the git history (`docs/adr/`, commit `a1e9b0a`).

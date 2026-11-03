@@ -46,7 +46,7 @@ def reload_ontop(cfg: AgentConfig, docker_client=None, http: httpx.Client | None
     try:
         while time.perf_counter() - stopped < ready_timeout:
             try:
-                response = client.get(url, params={'query': 'ASK { ?s ?p ?o }'},
+                response = client.get(url, params={'query': cfg.ready_query},
                                       headers={'Accept': 'application/sparql-results+json'})
                 if response.status_code == 200:
                     now = time.perf_counter()

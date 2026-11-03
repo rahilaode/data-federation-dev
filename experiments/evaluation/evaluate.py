@@ -129,8 +129,9 @@ def ms_between(start_iso: str, end_iso: str | None) -> int | None:
 def restore_all() -> tuple[bool, list[str]]:
     """Restores the columns of ALL scenarios, not only the one about to run.
 
-    In the 3 x 2 design two scenarios can share a table (A002 and A003 on program_bansos, A006
-    and A005 on master_penduduk). If each run restored only its own column, what another
+    In the 3 x 2 design two scenarios can share a table (in the first case study A002 and A003 on
+    program_bansos, A006 and A005 on master_penduduk; in NPD A004 and A006 on company, A001 and
+    A007 on wellbore_mud). If each run restored only its own column, what another
     scenario left behind would leak into the next run: in evaluation 20260930T091536 the A002
     and A003 (then numbered A006) neighbour queries already failed BEFORE the treatment DDL.
     Every restore waits for its own event (see the note on the MySQL monitor in prepare)."""

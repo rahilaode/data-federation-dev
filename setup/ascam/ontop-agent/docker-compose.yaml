@@ -12,6 +12,10 @@ services:
       ASCAM_AGENT_ONTOP_CONTAINER: vkg-system-ontop-teiid
       ASCAM_AGENT_ONTOP_IMAGE: ontop/ontop-endpoint:4.1.1
       ASCAM_AGENT_API_TOKENS_FILE: /run/secrets/ontop_agent_api_tokens
+      ASCAM_AGENT_PROPERTIES_NAME: npd.docker.properties
+      # readiness of an Ontop instance (ADR-0030): one class of the NPD graph, through Teiid and the
+      # source reporting; ASK { ?s ?p ?o } takes 184 s on the NPD mapping
+      ASCAM_AGENT_READY_QUERY: 'PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }'
       # Blue-green OBDA layer (ADR-0022). ASCAM_AGENT_ONTOP_CONTAINER above now points to the
       # proxy; validation and start-up use the instances <prefix>-blue / <prefix>-green.
       ASCAM_AGENT_SLOTS_DIR: /vkg/slots

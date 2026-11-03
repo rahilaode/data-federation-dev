@@ -51,6 +51,17 @@ class TriplesMapSpec:
     poms: list[PomSpec] = field(default_factory=list)
 
 
+def column_name(reference: str) -> str:
+    """The column name of an R2RML column reference (`rr:column`, a template variable,
+    `rr:child`/`rr:parent`). R2RML takes these as SQL identifiers, so a delimited identifier such
+    as `"wlbNsMin"` (the NPD mapping writes them this way) names the column `wlbNsMin`;
+    a doubled quote inside it stands for one quote (ADR-0028)."""
+    value = reference.strip()
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1].replace('""', '"')
+    return value
+
+
 def template_columns(template: str) -> list[str]:
     """Column names inside an R2RML template; `\\{` and `\\}` are ordinary characters."""
     columns, current, inside, escaped = [], '', False, False

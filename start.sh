@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # start.sh — clean restart of the whole OBDF and ASCAM, in dependency order.
-# WARNING: every container and volume is removed, source data included (rebuilt from init.sql).
+# WARNING: every container and volume is removed, source data included (reloaded from the NPD dumps).
 # Works with docker-compose v1 and Compose v2: the --wait option is not used.
 set -Eeuo pipefail
 cd "$(dirname "$0")"
@@ -37,7 +37,7 @@ up() {  # $1 compose file, $2 display name; build if needed, then wait until hea
 teiid_active() {
   curl -sf --digest -u "admin:$(head -n1 "$SECRETS/obdf_teiid_mgmt_password")" -H 'Content-Type: application/json' \
     -d '{"operation":"list-vdbs","address":[{"subsystem":"teiid"}]}' http://localhost:19990/management \
-    | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; sys.exit(0 if any(v.get("vdb-name")=="government" and v.get("status")=="ACTIVE" for v in r) else 1)'
+    | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; sys.exit(0 if any(v.get("vdb-name")=="npd" and v.get("status")=="ACTIVE" for v in r) else 1)'
 }
 connector_running() {
   curl -sf "$CONNECT/connectors/$1/status" \
@@ -46,6 +46,7 @@ connector_running() {
 
 step "1/9 prerequisites (Compose: ${DC[*]})"
 docker info >/dev/null
+setup/npd/fetch-npd.sh | sed 's/^/  /'     # NPD dumps for the two sources (ADR-0027)
 docker network create ascam-networks >/dev/null 2>&1 || true
 setup/ascam/knowledge/scripts/init-secrets.sh | sed 's/^/  /'
 
@@ -61,21 +62,26 @@ step "3/9 restoring the mapping, the ontology, and the VDB deployment marker"
 git checkout -- setup/vkg-system/config/mapping.ttl setup/vkg-system/config/ontology_file.ttl
 DEP=setup/data-federation/deployments
 rm -f "$DEP"/*.dodeploy "$DEP"/*.isdeploying "$DEP"/*.deployed "$DEP"/*.failed "$DEP"/*.undeployed "$DEP"/*.pending
-touch "$DEP"/government-vdb.xml.dodeploy && chmod 777 "$DEP"
+touch "$DEP"/npd-vdb.xml.dodeploy && chmod 777 "$DEP"
 rm -rf setup/vkg-system/slots setup/vkg-system/proxy/runtime    # blue-green slots are recreated (ADR-0022)
 
 step "4/9 data sources (PostgreSQL, MySQL)"
 compose setup/data-source/docker-compose.yaml up -d >/dev/null
-wait_for "PostgreSQL (init.sql)" 300 docker exec datasources-pgsql psql -U postgres -d kemensos -tAc \
+# Over TCP on purpose: the temporary server of the init scripts listens on the socket only, so
+# these succeed only once the dump, the split, the monitor and the checks have all finished.
+wait_for "PostgreSQL reporting (NPD dump + split)" 900 docker exec -e PGPASSWORD=postgres datasources-pgsql psql -h 127.0.0.1 -U postgres -d reporting -tAc \
   "SELECT 1 FROM schema_monitor.ddl_event_log LIMIT 1"
-wait_for "MySQL (init.sql)" 300 docker exec datasources-mysql sh -c \
-  'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1 FROM dukcapil.ddl_event_log LIMIT 1"'
+wait_for "MySQL registry (NPD dump + split)" 900 docker exec datasources-mysql sh -c \
+  'mysql -h127.0.0.1 --protocol=TCP -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1 FROM registry.ddl_event_log LIMIT 1"'
 
 step "5/9 Teiid and Ontop (proxy + active blue-green instance)"
-compose setup/data-federation/docker-compose.yaml up -d >/dev/null
-wait_for "VDB government (ACTIVE)" 300 teiid_active
+compose setup/data-federation/docker-compose.yaml up -d --build >/dev/null   # setup.cli is baked into the image
+wait_for "VDB npd (ACTIVE)" 300 teiid_active
 setup/vkg-system/up.sh --reset | sed 's/^/  /'
-wait_for "SPARQL endpoint (through the proxy)" 240 curl -sf -G http://localhost:8080/sparql --data-urlencode 'query=ASK { ?s ?p ?o }'
+# Not ASK { ?s ?p ?o }: over the NPD mapping that query unfolds into 5,525 UNION branches (ADR-0030)
+READY_QUERY='PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }'
+wait_for "SPARQL endpoint (through the proxy)" 300 curl -sf -G http://localhost:8080/sparql \
+  -H 'Accept: application/sparql-results+json' --data-urlencode "query=$READY_QUERY"
 
 step "6/9 Kafka and Debezium"
 compose setup/ascam/schema-monitor/docker-compose.yaml up -d >/dev/null
@@ -100,7 +106,7 @@ up setup/ascam/ui/docker-compose.yaml "administrator console"
 step "9/9 initial sync and chain test"
 TOKEN="$(grep '^ui:' "$SECRETS/knowledge_api_tokens" | cut -d: -f2)"
 OBDF_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" "$KNOWLEDGE/api/v1/obdf" \
-  | python3 -c 'import json,sys; print(next(o["id"] for o in json.load(sys.stdin) if o["name"]=="bansos"))')"
+  | python3 -c 'import json,sys; print(next(o["id"] for o in json.load(sys.stdin) if o["name"]=="npd"))')"
 curl -sf -X POST -H "Authorization: Bearer $TOKEN" -H 'X-ASCAM-User: start.sh' "$KNOWLEDGE/api/v1/obdf/$OBDF_ID/sync" \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts") or {}; print("  version %s: %s tables, %s columns, %s TriplesMaps" % (d.get("version_no"), c.get("tables"), c.get("columns"), c.get("triples_maps")))'
 python3 experiments/evaluation/preflight.py

@@ -13,7 +13,7 @@ the Knowledge URL, the token file, and the OBDF name are set here.
 |---|---|---|
 | `ASCAM_ORCH_KNOWLEDGE_URL` | `http://ascam-knowledge-service:8000` | Knowledge Service |
 | `ASCAM_ORCH_TOKEN_FILE`, `ASCAM_ORCH_TOKEN_CLIENT` | –, `orchestrator` | Token file and client name |
-| `ASCAM_ORCH_OBDF` | `bansos` | Name of the OBDF |
+| `ASCAM_ORCH_OBDF` | `npd` | Name of the OBDF |
 | `ASCAM_ORCH_GROUP_ID` | `ascam-orchestrator` | Kafka consumer group; the start scripts use a new group each time |
 | `ASCAM_ORCH_OFFSET_RESET` | `earliest` | Where a new group starts; the start scripts use `latest` so that old DDL is not replayed |
 

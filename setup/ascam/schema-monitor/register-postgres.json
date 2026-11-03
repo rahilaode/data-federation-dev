@@ -6,9 +6,9 @@
     "database.port": "5432",
     "database.user": "postgres",
     "database.password": "postgres",
-    "database.dbname": "kemensos",
-    "topic.prefix": "kemensos",
-    "slot.name": "kemensos_slot",
+    "database.dbname": "reporting",
+    "topic.prefix": "reporting",
+    "slot.name": "reporting_slot",
     "publication.autocreate.mode": "filtered",
     "table.include.list": "schema_monitor.ddl_event_log",
     "snapshot.mode": "no_data"

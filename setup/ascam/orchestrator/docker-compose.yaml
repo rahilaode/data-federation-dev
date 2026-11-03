@@ -11,7 +11,7 @@ services:
       ASCAM_ORCH_KNOWLEDGE_URL: http://ascam-knowledge-service:8000
       ASCAM_ORCH_TOKEN_FILE: /run/secrets/knowledge_api_tokens
       ASCAM_ORCH_TOKEN_CLIENT: orchestrator
-      ASCAM_ORCH_OBDF: bansos
+      ASCAM_ORCH_OBDF: npd
       # restart-ascam.sh gives a new group on every reset and starts from the latest message
       ASCAM_ORCH_GROUP_ID: '${ASCAM_ORCH_GROUP_ID:-ascam-orchestrator}'
       ASCAM_ORCH_OFFSET_RESET: '${ASCAM_ORCH_OFFSET_RESET:-earliest}'

@@ -20,102 +20,92 @@ import urllib.parse
 import urllib.request
 
 SPARQL = 'http://localhost:8080/sparql'
-B = 'PREFIX bansos: <http://bansos.go.id/ontology/>\n'
+N = 'PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>\n'
 
+# NPD case study (ADR-0027). No query has ORDER BY: run() sorts the answer set before it is
+# compared, and for a view without a key Ontop 4.1.1 adds SELECT DISTINCT, with which Teiid rejects
+# ORDER BY over an IRI expression that is not projected (TEIID30088, found with A007 of the first
+# case study).
 CONTROL = {
-    'count_per_class': ('control', B + 'SELECT ?kelas (COUNT(?s) AS ?n) WHERE { ?s a ?kelas } '
-                                   'GROUP BY ?kelas ORDER BY ?kelas'),
-    'transaction_status': ('control', B + 'SELECT ?t ?status WHERE { ?t a bansos:TransaksiBansos ; '
-                                      'bansos:statusTransaksi ?status } ORDER BY ?t'),
+    # cross-source: exploration wells (reporting) joined to their licences (registry) on
+    # prlNpdidProductionLicence = prlNpdidLicence, a pair of columns no scenario touches
+    'well_licence': ('control', N + 'SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }'),
+    'well_name': ('control', N + 'SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }'),
 }
+COMPANY_NAME = N + 'SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }'
+MUD_WEIGHT = N + 'SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }'
+CASING_TYPE = N + 'SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }'
+DISCOVERY_NAME = N + 'SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }'
+DRILLING_OPERATOR = N + 'SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }'
 
 Q = {
+    # reporting (PostgreSQL)
     'a001': {
-        'recipient': ('neighbour', B + 'SELECT ?p ?nama ?status WHERE { ?p a bansos:PenerimaBansos ; '
-                                   'bansos:namaLengkap ?nama ; bansos:statusEkonomi ?status } ORDER BY ?p'),
-        'email': ('affected', B + 'SELECT ?p ?email WHERE { ?p bansos:email ?email } ORDER BY ?p'),
-        'resident_link': ('control', B + 'SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } '
-                                     'ORDER BY ?p'),
+        'mud_ph': ('affected', N + 'SELECT ?m ?ph WHERE { ?m npdv:wlbMudPh ?ph }'),
+        'mud_weight': ('neighbour', MUD_WEIGHT),
+        'company_name': ('control', COMPANY_NAME),
         **CONTROL,
     },
     'a002': {
-        'program_type': ('affected', B + 'SELECT ?p ?tipe WHERE { ?p a bansos:ProgramBansos ; '
-                                     'bansos:tipeProgram ?tipe } ORDER BY ?p'),
-        'program_name': ('neighbour', B + 'SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; '
-                                      'bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p'),
-        'transaction_program': ('control', B + 'SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } '
-                                           'ORDER BY ?t'),
+        'lot_mud_density': ('affected', N + 'SELECT ?c ?d WHERE { ?c npdv:LOTMudDensity ?d }'),
+        'casing_type': ('neighbour', CASING_TYPE),
+        'company_name': ('control', COMPANY_NAME),
         **CONTROL,
     },
     'a003': {
-        'program_name': ('affected', B + 'SELECT ?p ?nama WHERE { ?p a bansos:ProgramBansos ; '
-                                     'bansos:namaProgram ?nama } ORDER BY ?p'),
-        'type_amount': ('neighbour', B + 'SELECT ?p ?tipe ?nominal WHERE { ?p a bansos:ProgramBansos ; '
-                                     'bansos:tipeProgram ?tipe ; bansos:nominal ?nominal } ORDER BY ?p'),
-        'recipient_to_resident': ('control', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
-                                             '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
+        # the renamed column joins wells (reporting) to companies (registry)
+        'drilling_operator': ('affected', DRILLING_OPERATOR),
+        'well_total_depth': ('neighbour', N + 'SELECT ?w ?d WHERE { ?w a npdv:ExplorationWellbore ; '
+                                              'npdv:wellboreTotalDepth ?d }'),
+        'discovery_name': ('control', DISCOVERY_NAME),
         **CONTROL,
     },
+    # registry (MySQL)
     'a004': {
-        'postal_code': ('affected', B + 'SELECT ?w ?kode WHERE { ?w bansos:kodePos ?kode } ORDER BY ?w'),
-        'region': ('neighbour', B + 'SELECT ?w ?prov ?kab WHERE { ?w a bansos:Wilayah ; '
-                                'bansos:provinsi ?prov ; bansos:kabupaten ?kab } ORDER BY ?w'),
-        'recipient_to_resident': ('control', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
-                                             '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
+        'country_code': ('affected', N + 'SELECT ?c ?cc WHERE { ?c npdv:cmpCountryCode ?cc }'),
+        'company_short_name': ('neighbour', N + 'SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }'),
+        'mud_weight': ('control', MUD_WEIGHT),
         **CONTROL,
     },
     'a005': {
-        'living_status': ('affected', B + 'SELECT ?s ?status WHERE { ?s a bansos:Penduduk ; '
-                                      'bansos:statusHidup ?status } ORDER BY ?s'),
-        'name_occupation': ('neighbour', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
-                                         'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
-        # The only cross-source query touches master_penduduk, so the A005 control uses another
-        # MySQL table (a limitation of the mapping, reported as a threat to validity).
-        'family_region': ('control', B + 'SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k'),
+        'discovery_year': ('affected', N + 'SELECT ?d ?y WHERE { ?d a npdv:Discovery ; npdv:discoveryYear ?y }'),
+        'discovery_name': ('neighbour', DISCOVERY_NAME),
+        'casing_type': ('control', CASING_TYPE),
         **CONTROL,
     },
     'a006': {
-        'birth_date': ('affected', B + 'SELECT ?s ?tgl WHERE { ?s a bansos:Penduduk ; '
-                                   'bansos:tanggalLahir ?tgl } ORDER BY ?s'),
-        'name_occupation': ('neighbour', B + 'SELECT ?s ?nama ?kerja WHERE { ?s a bansos:Penduduk ; '
-                                         'bansos:namaPenduduk ?nama ; bansos:pekerjaan ?kerja } ORDER BY ?s'),
-        'recipient_to_resident': ('control', B + 'SELECT ?p ?nama WHERE { ?p bansos:memilikDataKependudukan ?d . '
-                                             '?d bansos:namaPenduduk ?nama } ORDER BY ?p'),
+        # the renamed column gives company names and is the target of the wells -> company join
+        'company_name': ('affected', COMPANY_NAME),
+        'company_short_name': ('neighbour', N + 'SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }'),
+        'drilling_operator': ('control', DRILLING_OPERATOR),
         **CONTROL,
     },
-    # A007-A009: the affected query reads a predicate built from a VIEW; the neighbour query reads
-    # another column of the same view (A007, A008) or of the same base table (A009).
-    # No ORDER BY: for a view without a key Ontop 4.1.1 adds SELECT DISTINCT, and Teiid rejects
-    # ORDER BY over an IRI expression that is not projected (TEIID30088). Order is not needed,
-    # because run() sorts the answer set before it is compared.
+    # through the service views (A007-A009); the neighbour reads another column of the same view
+    # (A007) or of the same base table (A008, A009)
     'a007': {
-        'active_recipient_kk': ('affected', B + 'SELECT ?p ?kk WHERE { ?p a bansos:PenerimaAktif ; '
-                                            'bansos:noKartuKeluarga ?kk }'),
-        'active_recipient': ('neighbour', B + 'SELECT ?p WHERE { ?p a bansos:PenerimaAktif }'),
-        'resident_link': ('control', B + 'SELECT ?p ?d WHERE { ?p bansos:memilikDataKependudukan ?d } '
-                                     'ORDER BY ?p'),
+        'mud_viscosity': ('affected', N + 'SELECT ?m ?v WHERE { ?m npdv:mudViscosity ?v }'),
+        'mud_yield_point': ('neighbour', N + 'SELECT ?m ?y WHERE { ?m npdv:mudYieldPoint ?y }'),
+        'company_name': ('control', COMPANY_NAME),
         **CONTROL,
     },
     'a008': {
-        'history_officer': ('affected', B + 'SELECT ?r ?petugas WHERE { ?r bansos:diubahOleh ?petugas }'),
-        'history_column': ('neighbour', B + 'SELECT ?r ?kolom WHERE { ?r a bansos:RiwayatPerubahan ; '
-                                        'bansos:kolomDiubah ?kolom }'),
-        'family_region': ('control', B + 'SELECT ?k ?w WHERE { ?k bansos:berdomisiliDi ?w } ORDER BY ?k'),
+        'investment': ('affected', N + 'SELECT ?i ?x WHERE { ?i npdv:investmentNOK ?x }'),
+        'investment_year': ('neighbour', N + 'SELECT ?i ?y WHERE { ?i a npdv:FieldInvestment ; '
+                                             'npdv:productionYear ?y }'),
+        'mud_weight': ('control', MUD_WEIGHT),
         **CONTROL,
     },
     'a009': {
-        'end_year': ('affected', B + 'SELECT ?p ?th WHERE { ?p bansos:tahunBerakhir ?th }'),
-        'program_name': ('neighbour', B + 'SELECT ?p ?nama ?nominal WHERE { ?p a bansos:ProgramBansos ; '
-                                      'bansos:namaProgram ?nama ; bansos:nominal ?nominal } ORDER BY ?p'),
-        'transaction_program': ('control', B + 'SELECT ?t ?prog WHERE { ?t bansos:terdaftarPadaProgram ?prog } '
-                                           'ORDER BY ?t'),
+        'core_bottom': ('affected', N + 'SELECT ?c ?b WHERE { ?c npdv:coreIntervalBottom ?b }'),
+        'core_top': ('neighbour', N + 'SELECT ?c ?t WHERE { ?c a npdv:WellboreCore ; npdv:coreIntervalTop ?t }'),
+        'company_name': ('control', COMPANY_NAME),
         **CONTROL,
     },
 }
 
 # Light query used to watch endpoint availability during an adaptation: no scenario touches the
-# transaksi_bansos table, so a failure means the endpoint itself is not available.
-AVAILABILITY = B + 'SELECT ?t WHERE { ?t a bansos:TransaksiBansos } LIMIT 1'
+# licence table (registry), so a failure means the endpoint itself is not available.
+AVAILABILITY = N + 'SELECT ?l WHERE { ?l a npdv:ProductionLicence } LIMIT 1'
 
 
 def pattern(code: str) -> str:

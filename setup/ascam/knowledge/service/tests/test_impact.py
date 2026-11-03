@@ -219,12 +219,39 @@ def test_add_is_hitl_when_no_mapping_exposes_new_columns(api, obdf):
     broken = broken.replace('rr:logicalTable [ rr:tableName "kemensos.penerima_manfaat" ]',
                             'rr:logicalTable [ rr:sqlQuery "SELECT penerima_id FROM '
                             'kemensos.penerima_manfaat" ]')
-    set_clients(api, agent=fx.FakeAgent(mapping=broken))
+    # without rr:class no TriplesMap can be the basis of a new one either (ADR-0027)
+    no_class = broken.replace('rr:class bansos:PenerimaBansos', 'rr:termType rr:IRI')
+    set_clients(api, agent=fx.FakeAgent(mapping=no_class))
     api.post(f'/api/v1/obdf/{obdf}/sync')
     out = impact(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')
     assert out['decision'] == 'hitl'
     assert any('explicit column lists' in r for r in out['reasons'])
+    assert not [a for a in out['actions'] if a['artifact'] != 'vdb']
+
+
+def test_add_proposes_new_triples_map_when_columns_are_listed(api, obdf):
+    """ADR-0027: every logical table of the table lists its columns (the NPD style), but one
+    gives its subjects a class, so ASCAM proposes a new TriplesMap with that subject template."""
+    listed = fx.MAPPING_TTL.replace('SELECT * FROM kemensos.penerima_manfaat',
+                                    'SELECT penerima_id, nik FROM kemensos.penerima_manfaat')
+    listed = listed.replace('rr:logicalTable [ rr:tableName "kemensos.penerima_manfaat" ]',
+                            'rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, nik FROM '
+                            'kemensos.penerima_manfaat" ]')
+    set_clients(api, agent=fx.FakeAgent(mapping=listed))
+    api.post(f'/api/v1/obdf/{obdf}/sync')
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['decision'] == 'hitl'
+    assert any('NEW TriplesMap' in r for r in out['reasons'])
+    new = [a for a in out['actions'] if a['operation'] == 'add_triples_map']
+    assert len(new) == 1
+    assert new[0]['sql_query'] == 'SELECT penerima_id, nik, "alamat" FROM kemensos.penerima_manfaat'
+    assert new[0]['subject_template'] == 'http://bansos.go.id/resource/penerima/{penerima_id}'
+    assert new[0]['triples_map_iri'] == 'urn:ascam:mapping#ascam-penerima_manfaat-alamat'
+    assert out['add_options']['classes'] == ['http://bansos.go.id/ontology/PenerimaBansos']
+    ontology = [a for a in out['actions'] if a['operation'] == 'add_datatype_property']
+    assert ontology and ontology[0]['domain'] == ['http://bansos.go.id/ontology/PenerimaBansos']
 
 
 def test_add_refuses_iri_already_used_as_object_property(api, obdf):

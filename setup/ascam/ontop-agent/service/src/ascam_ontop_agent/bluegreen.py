@@ -276,7 +276,7 @@ class BlueGreen:
         start, error = time.perf_counter(), None
         while time.perf_counter() - start < timeout:
             try:
-                response = self.http.get(url, params={'query': 'ASK { ?s ?p ?o }'},
+                response = self.http.get(url, params={'query': self.cfg.ready_query},
                                          headers={'Accept': 'application/sparql-results+json'})
                 if response.status_code == 200:
                     return True, None

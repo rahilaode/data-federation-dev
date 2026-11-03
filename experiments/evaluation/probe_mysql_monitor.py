@@ -30,7 +30,7 @@ SETTLE = 25                         # > 2 x polling interval
 def mysql(sql: str) -> list[list[str]]:
     result = subprocess.run(
         ['docker', 'exec', '-i', 'datasources-mysql', 'sh', '-c',
-         'mysql -N -B -uroot -p"$MYSQL_ROOT_PASSWORD" dukcapil 2>/dev/null'],
+         'mysql -N -B -uroot -p"$MYSQL_ROOT_PASSWORD" registry 2>/dev/null'],
         input=sql, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(result.stderr or result.stdout)
@@ -56,9 +56,9 @@ def prepare() -> None:
         DELETE FROM ddl_column_snapshot WHERE table_name = '{TABLE}';
         INSERT INTO ddl_column_snapshot (db_name, table_name, column_name, column_type, ordinal_pos)
             SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, ORDINAL_POSITION
-            FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'dukcapil' AND TABLE_NAME = '{TABLE}';
+            FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'registry' AND TABLE_NAME = '{TABLE}';
         INSERT INTO captured_tables_ref (db_name, table_name, description)
-            VALUES ('dukcapil', '{TABLE}', 'temporary monitor probe');
+            VALUES ('registry', '{TABLE}', 'temporary monitor probe');
     """)
     time.sleep(SETTLE)              # let one scan run with no change
 

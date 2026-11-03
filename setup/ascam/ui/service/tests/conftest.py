@@ -38,7 +38,7 @@ class FakeKnowledge:
         if path == '/ready':
             return httpx.Response(200, json={'status': 'ok'})
         if path == '/api/v1/obdf':
-            return httpx.Response(200, json=[{'id': 1, 'name': 'bansos'}])
+            return httpx.Response(200, json=[{'id': 1, 'name': 'npd'}])
         if path.startswith('/api/v1/versions/') and '/artifacts/' in path:
             parts = path.split('/')
             content = ARTIFACTS.get((int(parts[4]), parts[6]))

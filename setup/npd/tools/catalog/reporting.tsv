@@ -1,0 +1,460 @@
+field_production_monthly	1	prfInformationCarrier	character varying	40			NO	
+field_production_monthly	2	prfYear	integer		32	0	NO	2
+field_production_monthly	3	prfMonth	integer		32	0	NO	3
+field_production_monthly	4	prfPrdOilNetMillSm3	numeric		13	6	NO	
+field_production_monthly	5	prfPrdGasNetBillSm3	numeric		13	6	NO	
+field_production_monthly	6	prfPrdNGLNetMillSm3	numeric		13	6	NO	
+field_production_monthly	7	prfPrdCondensateNetMillSm3	numeric		13	6	NO	
+field_production_monthly	8	prfPrdOeNetMillSm3	numeric		13	6	NO	
+field_production_monthly	9	prfPrdProducedWaterInFieldMillSm3	numeric		13	6	NO	
+field_production_monthly	10	prfNpdidInformationCarrier	integer		32	0	NO	1
+field_production_totalt_NCS_month	1	prfYear	integer		32	0	NO	1
+field_production_totalt_NCS_month	2	prfMonth	integer		32	0	NO	2
+field_production_totalt_NCS_month	3	prfPrdOilNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_month	4	prfPrdGasNetBillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_month	5	prfPrdNGLNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_month	6	prfPrdCondensateNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_month	7	prfPrdOeNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_month	8	prfPrdProducedWaterInFieldMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_year	1	prfYear	integer		32	0	NO	1
+field_production_totalt_NCS_year	2	prfPrdOilNetMillSm	numeric		13	6	NO	
+field_production_totalt_NCS_year	3	prfPrdGasNetBillSm	numeric		13	6	NO	
+field_production_totalt_NCS_year	4	prfPrdCondensateNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_year	5	prfPrdNGLNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_year	6	prfPrdOeNetMillSm3	numeric		13	6	NO	
+field_production_totalt_NCS_year	7	prfPrdProducedWaterInFieldMillSm3	numeric		13	6	NO	
+field_production_yearly	1	prfInformationCarrier	character varying	40			NO	
+field_production_yearly	2	prfYear	integer		32	0	NO	2
+field_production_yearly	3	prfPrdOilNetMillSm3	numeric		13	6	NO	
+field_production_yearly	4	prfPrdGasNetBillSm3	numeric		13	6	NO	
+field_production_yearly	5	prfPrdNGLNetMillSm3	numeric		13	6	NO	
+field_production_yearly	6	prfPrdCondensateNetMillSm3	numeric		13	6	NO	
+field_production_yearly	7	prfPrdOeNetMillSm3	numeric		13	6	NO	
+field_production_yearly	8	prfPrdProducedWaterInFieldMillSm3	numeric		13	6	NO	
+field_production_yearly	9	prfNpdidInformationCarrier	integer		32	0	NO	1
+seaArea	1	seaSurveyName	character varying	100			NO	2
+seaArea	2	seaNpdidSurvey	integer		32	0	NO	
+seaArea	3	seaFactMapUrl	character varying	260			YES	
+seaArea	4	seaFactPageUrl	character varying	200			YES	
+seaArea	5	seaStatus	character varying	100			NO	
+seaArea	6	seaGeographicalArea	character varying	100			NO	
+seaArea	7	seaMarketAvailable	character varying	20			NO	
+seaArea	8	seaSurveyTypeMain	character varying	100			NO	
+seaArea	9	seaSurveyTypePart	character varying	100			YES	
+seaArea	10	seaCompanyReported	character varying	100			NO	
+seaArea	11	seaSourceType	character varying	100			YES	
+seaArea	12	seaSourceNumber	character varying	100			YES	
+seaArea	13	seaSourceSize	character varying	100			YES	
+seaArea	14	seaSourcePressure	character varying	100			YES	
+seaArea	15	seaSensorType	character varying	100			YES	
+seaArea	16	seaSensorNumbers	character varying	40			YES	
+seaArea	17	seaSensorLength	character varying	100			YES	
+seaArea	18	seaPlanFromDate	date				NO	
+seaArea	19	seaDateStarting	date				YES	
+seaArea	20	seaPlanToDate	date				NO	
+seaArea	21	seaDateFinalized	date				YES	
+seaArea	22	seaPlanCdpKm	integer		32	0	YES	
+seaArea	23	seaCdpTotalKm	integer		32	0	YES	
+seaArea	24	seaPlanBoatKm	integer		32	0	YES	
+seaArea	25	seaBoatTotalKm	integer		32	0	YES	
+seaArea	26	sea3DKm2	numeric		13	6	YES	
+seaArea	27	seaPolygonKind	character varying	100			NO	
+seaArea	28	seaArea_id	bigint		64	0	NO	1
+seaMultiline	1	seaSurveyName	character varying	100			NO	1
+seaMultiline	2	seaFactMapUrl	character varying	260			YES	
+seaMultiline	3	seaFactPageUrl	character varying	200			YES	
+seaMultiline	4	seaStatus	character varying	100			NO	
+seaMultiline	5	seaMarketAvailable	character varying	20			NO	
+seaMultiline	6	seaSurveyTypeMain	character varying	100			NO	
+seaMultiline	7	seaSurveyTypePart	character varying	100			NO	
+seaMultiline	8	seaCompanyReported	character varying	100			NO	
+seaMultiline	9	seaSourceType	character varying	100			NO	
+seaMultiline	10	seaSourceNumber	character varying	100			YES	
+seaMultiline	11	seaSourceSize	character varying	100			YES	
+seaMultiline	12	seaSourcePressure	character varying	100			YES	
+seaMultiline	13	seaSensorType	character varying	100			NO	
+seaMultiline	14	seaSensorNumbers	character varying	40			NO	
+seaMultiline	15	seaSensorLength	character varying	100			NO	
+seaMultiline	16	seaPlanFromDate	date				NO	
+seaMultiline	17	seaDateStarting	date				YES	
+seaMultiline	18	seaPlanToDate	date				NO	
+seaMultiline	19	seaDateFinalized	date				YES	
+seaMultiline	20	seaPlanCdpKm	integer		32	0	NO	
+seaMultiline	21	seaCdpTotalKm	integer		32	0	YES	
+seaMultiline	22	seaPlanBoatKm	integer		32	0	NO	
+seaMultiline	23	seaBoatTotalKm	integer		32	0	YES	
+seis_acquisition	1	seaName	character varying	100			NO	2
+seis_acquisition	2	seaPlanFromDate	date				NO	
+seis_acquisition	3	seaNpdidSurvey	integer		32	0	NO	1
+seis_acquisition	4	seaStatus	character varying	100			NO	
+seis_acquisition	5	seaGeographicalArea	character varying	100			NO	
+seis_acquisition	6	seaSurveyTypeMain	character varying	100			NO	
+seis_acquisition	7	seaSurveyTypePart	character varying	100			YES	
+seis_acquisition	8	seaCompanyReported	character varying	100			NO	
+seis_acquisition	9	seaPlanToDate	date				NO	
+seis_acquisition	10	seaDateStarting	date				YES	
+seis_acquisition	11	seaDateFinalized	date				YES	
+seis_acquisition	12	seaCdpTotalKm	integer		32	0	YES	
+seis_acquisition	13	seaBoatTotalKm	integer		32	0	YES	
+seis_acquisition	14	sea3DKm2	numeric		13	6	YES	
+seis_acquisition	15	seaSampling	character varying	20			YES	
+seis_acquisition	16	seaShallowDrilling	character varying	20			YES	
+seis_acquisition	17	seaGeotechnical	character varying	20			YES	
+seis_acquisition	18	dateSyncNPD	date				NO	
+seis_acquisition_coordinates_inc_turnarea	1	seaSurveyName	character varying	100			NO	1
+seis_acquisition_coordinates_inc_turnarea	2	seaNpdidSurvey	integer		32	0	NO	
+seis_acquisition_coordinates_inc_turnarea	3	seaPolygonPointNumber	integer		32	0	NO	2
+seis_acquisition_coordinates_inc_turnarea	4	seaPolygonNSDeg	integer		32	0	NO	
+seis_acquisition_coordinates_inc_turnarea	5	seaPolygonNSMin	integer		32	0	NO	
+seis_acquisition_coordinates_inc_turnarea	6	seaPolygonNSSec	numeric		13	6	NO	
+seis_acquisition_coordinates_inc_turnarea	7	seaPolygonEWDeg	integer		32	0	NO	
+seis_acquisition_coordinates_inc_turnarea	8	seaPolygonEWMin	integer		32	0	NO	
+seis_acquisition_coordinates_inc_turnarea	9	seaPolygonEWSec	numeric		13	6	NO	
+seis_acquisition_coordinates_inc_turnarea	10	dateSyncNPD	date				NO	
+seis_acquisition_progress	1	seaProgressDate	date				NO	
+seis_acquisition_progress	2	seaProgressText2	character varying	40			NO	2
+seis_acquisition_progress	3	seaProgressText	text				NO	
+seis_acquisition_progress	4	seaProgressDescription	text				YES	
+seis_acquisition_progress	5	seaNpdidSurvey	integer		32	0	NO	
+seis_acquisition_progress	6	seis_acquisition_progress_id	bigint		64	0	NO	1
+strat_litho_wellbore	1	wlbName	character varying	60			NO	
+strat_litho_wellbore	2	lsuTopDepth	numeric		13	6	NO	3
+strat_litho_wellbore	3	lsuBottomDepth	numeric		13	6	NO	4
+strat_litho_wellbore	4	lsuName	character varying	20			NO	
+strat_litho_wellbore	5	lsuLevel	character varying	9			NO	
+strat_litho_wellbore	6	lsuNpdidLithoStrat	integer		32	0	NO	2
+strat_litho_wellbore	7	wlbCompletionDate	date				NO	
+strat_litho_wellbore	8	wlbNpdidWellbore	integer		32	0	NO	1
+strat_litho_wellbore	9	lsuWellboreUpdatedDate	date				YES	
+strat_litho_wellbore	10	dateSyncNPD	date				NO	
+strat_litho_wellbore_core	1	wlbName	character varying	60			NO	
+strat_litho_wellbore_core	2	lsuCoreLenght	numeric		13	6	NO	
+strat_litho_wellbore_core	3	lsuName	character varying	20			NO	
+strat_litho_wellbore_core	4	lsuLevel	character varying	9			NO	
+strat_litho_wellbore_core	5	wlbCompletionDate	date				NO	
+strat_litho_wellbore_core	6	lsuNpdidLithoStrat	integer		32	0	NO	2
+strat_litho_wellbore_core	7	wlbNpdidWellbore	integer		32	0	NO	1
+strat_litho_wellbore_core	8	dateSyncNPD	date				NO	
+wellbore_casing_and_lot	1	wlbName	character varying	60			NO	
+wellbore_casing_and_lot	2	wlbCasingType	character varying	10			YES	
+wellbore_casing_and_lot	3	wlbCasingDiameter	character varying	6			YES	
+wellbore_casing_and_lot	4	wlbCasingDepth	numeric		13	6	NO	
+wellbore_casing_and_lot	5	wlbHoleDiameter	character varying	6			YES	
+wellbore_casing_and_lot	6	wlbHoleDepth	numeric		13	6	NO	
+wellbore_casing_and_lot	7	wlbLotMudDencity	numeric		13	6	NO	
+wellbore_casing_and_lot	8	wlbNpdidWellbore	integer		32	0	NO	2
+wellbore_casing_and_lot	9	wlbCasingDateUpdated	date				YES	
+wellbore_casing_and_lot	10	dateSyncNPD	date				NO	
+wellbore_casing_and_lot	11	wellbore_casing_and_lot_id	bigint		64	0	NO	1
+wellbore_coordinates	1	wlbWellboreName	character varying	40			NO	
+wellbore_coordinates	2	wlbDrillingOperator	character varying	60			NO	
+wellbore_coordinates	3	wlbProductionLicence	character varying	40			YES	
+wellbore_coordinates	4	wlbWellType	character varying	20			YES	
+wellbore_coordinates	5	wlbPurposePlanned	character varying	40			YES	
+wellbore_coordinates	6	wlbContent	character varying	40			YES	
+wellbore_coordinates	7	wlbEntryDate	date				YES	
+wellbore_coordinates	8	wlbCompletionDate	date				YES	
+wellbore_coordinates	9	wlbField	character varying	40			YES	
+wellbore_coordinates	10	wlbMainArea	character varying	40			NO	
+wellbore_coordinates	11	wlbGeodeticDatum	character varying	6			YES	
+wellbore_coordinates	12	wlbNsDeg	integer		32	0	NO	
+wellbore_coordinates	13	wlbNsMin	integer		32	0	NO	
+wellbore_coordinates	14	wlbNsSec	numeric		13	6	NO	
+wellbore_coordinates	15	wlbNsCode	character varying	1			YES	
+wellbore_coordinates	16	wlbEwDeg	integer		32	0	NO	
+wellbore_coordinates	17	wlbEwMin	integer		32	0	NO	
+wellbore_coordinates	18	wlbEwSec	numeric		13	6	NO	
+wellbore_coordinates	19	wlbEwCode	character varying	1			YES	
+wellbore_coordinates	20	wlbNsDecDeg	numeric		13	6	NO	
+wellbore_coordinates	21	wlbEwDesDeg	numeric		13	6	NO	
+wellbore_coordinates	22	wlbNsUtm	numeric		13	6	NO	
+wellbore_coordinates	23	wlbEwUtm	numeric		13	6	NO	
+wellbore_coordinates	24	wlbUtmZone	integer		32	0	NO	
+wellbore_coordinates	25	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_coordinates	26	dateSyncNPD	date				NO	
+wellbore_core	1	wlbName	character varying	60			NO	
+wellbore_core	2	wlbCoreNumber	integer		32	0	NO	3
+wellbore_core	3	wlbCoreIntervalTop	numeric		13	6	YES	
+wellbore_core	4	wlbCoreIntervalBottom	numeric		13	6	YES	
+wellbore_core	5	wlbCoreIntervalUom	character varying	6			YES	
+wellbore_core	6	wlbTotalCoreLength	numeric		13	6	NO	
+wellbore_core	7	wlbNumberOfCores	integer		32	0	NO	
+wellbore_core	8	wlbCoreSampleAvailable	character varying	3			NO	
+wellbore_core	9	wlbNpdidWellbore	integer		32	0	NO	2
+wellbore_core	10	wlbCoreDateUpdated	date				YES	
+wellbore_core	11	dateSyncNPD	date				NO	
+wellbore_core	12	wellbore_core_id	bigint		64	0	NO	1
+wellbore_core_photo	1	wlbName	character varying	60			NO	
+wellbore_core_photo	2	wlbCoreNumber	integer		32	0	NO	3
+wellbore_core_photo	3	wlbCorePhotoTitle	character varying	200			NO	4
+wellbore_core_photo	4	wlbCorePhotoImgUrl	character varying	200			NO	
+wellbore_core_photo	5	wlbNpdidWellbore	integer		32	0	NO	2
+wellbore_core_photo	6	wlbCorePhotoDateUpdated	date				YES	
+wellbore_core_photo	7	wellbore_core_photo_id	bigint		64	0	NO	1
+wellbore_development_all	1	wlbWellboreName	character varying	40			NO	
+wellbore_development_all	2	wlbWell	character varying	40			NO	
+wellbore_development_all	3	wlbDrillingOperator	character varying	60			NO	
+wellbore_development_all	4	wlbDrillingOperatorGroup	character varying	20			NO	
+wellbore_development_all	5	wlbProductionLicence	character varying	40			NO	
+wellbore_development_all	6	wlbPurposePlanned	character varying	40			YES	
+wellbore_development_all	7	wlbContent	character varying	40			YES	
+wellbore_development_all	8	wlbWellType	character varying	20			NO	
+wellbore_development_all	9	wlbEntryDate	date				YES	
+wellbore_development_all	10	wlbCompletionDate	date				YES	
+wellbore_development_all	11	wlbField	character varying	40			NO	
+wellbore_development_all	12	wlbDrillPermit	character varying	10			NO	
+wellbore_development_all	13	wlbDiscovery	character varying	40			NO	
+wellbore_development_all	14	wlbDiscoveryWellbore	character varying	3			NO	
+wellbore_development_all	15	wlbKellyBushElevation	numeric		13	6	NO	
+wellbore_development_all	16	wlbFinalVerticalDepth	numeric		13	6	YES	
+wellbore_development_all	17	wlbTotalDepth	numeric		13	6	NO	
+wellbore_development_all	18	wlbWaterDepth	numeric		13	6	NO	
+wellbore_development_all	19	wlbMainArea	character varying	40			NO	
+wellbore_development_all	20	wlbDrillingFacility	character varying	50			YES	
+wellbore_development_all	21	wlbFacilityTypeDrilling	character varying	40			YES	
+wellbore_development_all	22	wlbProductionFacility	character varying	50			YES	
+wellbore_development_all	23	wlbLicensingActivity	character varying	40			NO	
+wellbore_development_all	24	wlbMultilateral	character varying	3			NO	
+wellbore_development_all	25	wlbContentPlanned	character varying	40			YES	
+wellbore_development_all	26	wlbEntryYear	integer		32	0	NO	
+wellbore_development_all	27	wlbCompletionYear	integer		32	0	NO	
+wellbore_development_all	28	wlbReclassFromWellbore	character varying	40			YES	
+wellbore_development_all	29	wlbPlotSymbol	integer		32	0	NO	
+wellbore_development_all	30	wlbGeodeticDatum	character varying	6			YES	
+wellbore_development_all	31	wlbNsDeg	integer		32	0	NO	
+wellbore_development_all	32	wlbNsMin	integer		32	0	NO	
+wellbore_development_all	33	wlbNsSec	numeric		13	6	NO	
+wellbore_development_all	34	wlbNsCode	character varying	1			NO	
+wellbore_development_all	35	wlbEwDeg	integer		32	0	NO	
+wellbore_development_all	36	wlbEwMin	integer		32	0	NO	
+wellbore_development_all	37	wlbEwSec	numeric		13	6	NO	
+wellbore_development_all	38	wlbEwCode	character varying	1			YES	
+wellbore_development_all	39	wlbNsDecDeg	numeric		13	6	NO	
+wellbore_development_all	40	wlbEwDesDeg	numeric		13	6	NO	
+wellbore_development_all	41	wlbNsUtm	numeric		13	6	NO	
+wellbore_development_all	42	wlbEwUtm	numeric		13	6	NO	
+wellbore_development_all	43	wlbUtmZone	integer		32	0	NO	
+wellbore_development_all	44	wlbNamePart1	integer		32	0	NO	
+wellbore_development_all	45	wlbNamePart2	integer		32	0	NO	
+wellbore_development_all	46	wlbNamePart3	character varying	1			NO	
+wellbore_development_all	47	wlbNamePart4	integer		32	0	NO	
+wellbore_development_all	48	wlbNamePart5	character varying	2			YES	
+wellbore_development_all	49	wlbNamePart6	character varying	2			YES	
+wellbore_development_all	50	wlbFactPageUrl	character varying	200			NO	
+wellbore_development_all	51	wlbFactMapUrl	character varying	200			NO	
+wellbore_development_all	52	wlbDiskosWellboreType	character varying	20			NO	
+wellbore_development_all	53	wlbDiskosWellboreParent	character varying	40			YES	
+wellbore_development_all	54	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_development_all	55	dscNpdidDiscovery	integer		32	0	NO	
+wellbore_development_all	56	fldNpdidField	integer		32	0	NO	
+wellbore_development_all	57	wlbWdssQcdate	date				YES	
+wellbore_development_all	58	prlNpdidProductionLicence	integer		32	0	NO	
+wellbore_development_all	59	fclNpdidFacilityDrilling	integer		32	0	YES	
+wellbore_development_all	60	fclNpdidFacilityProducing	integer		32	0	YES	
+wellbore_development_all	61	wlbNpdidWellboreReclass	integer		32	0	NO	
+wellbore_development_all	62	wlbDiskosWellOperator	character varying	40			NO	
+wellbore_development_all	63	wlbDateUpdated	date				NO	
+wellbore_development_all	64	wlbDateUpdatedMax	date				NO	
+wellbore_development_all	65	dateSyncNPD	date				NO	
+wellbore_document	1	wlbName	character varying	60			NO	
+wellbore_document	2	wlbDocumentType	character varying	40			NO	
+wellbore_document	3	wlbDocumentName	character varying	200			NO	3
+wellbore_document	4	wlbDocumentUrl	character varying	200			NO	
+wellbore_document	5	wlbDocumentFormat	character varying	40			NO	
+wellbore_document	6	wlbDocumentSize	numeric		13	6	NO	
+wellbore_document	7	wlbNpdidWellbore	integer		32	0	NO	2
+wellbore_document	8	wlbDocumentDateUpdated	date				YES	
+wellbore_document	9	dateSyncNPD	date				NO	
+wellbore_document	10	wellbore_document_id	bigint		64	0	NO	1
+wellbore_dst	1	wlbName	character varying	60			NO	
+wellbore_dst	2	wlbDstTestNumber	numeric		13	6	NO	2
+wellbore_dst	3	wlbDstFromDepth	numeric		13	6	NO	
+wellbore_dst	4	wlbDstToDepth	numeric		13	6	NO	
+wellbore_dst	5	wlbDstChokeSize	numeric		13	6	NO	
+wellbore_dst	6	wlbDstFinShutInPress	numeric		13	6	NO	
+wellbore_dst	7	wlbDstFinFlowPress	numeric		13	6	NO	
+wellbore_dst	8	wlbDstBottomHolePress	numeric		13	6	NO	
+wellbore_dst	9	wlbDstOilProd	integer		32	0	NO	
+wellbore_dst	10	wlbDstGasProd	integer		32	0	NO	
+wellbore_dst	11	wlbDstOilDensity	numeric		13	6	NO	
+wellbore_dst	12	wlbDstGasDensity	numeric		13	6	NO	
+wellbore_dst	13	wlbDstGasOilRelation	integer		32	0	NO	
+wellbore_dst	14	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_dst	15	wlbDstDateUpdated	date				YES	
+wellbore_dst	16	dateSyncNPD	date				NO	
+wellbore_exploration_all	1	wlbWellboreName	character varying	40			NO	
+wellbore_exploration_all	2	wlbWell	character varying	40			NO	
+wellbore_exploration_all	3	wlbDrillingOperator	character varying	60			NO	
+wellbore_exploration_all	4	wlbDrillingOperatorGroup	character varying	20			NO	
+wellbore_exploration_all	5	wlbProductionLicence	character varying	40			NO	
+wellbore_exploration_all	6	wlbPurpose	character varying	40			NO	
+wellbore_exploration_all	7	wlbStatus	character varying	40			YES	
+wellbore_exploration_all	8	wlbContent	character varying	40			YES	
+wellbore_exploration_all	9	wlbWellType	character varying	20			NO	
+wellbore_exploration_all	10	wlbEntryDate	date				YES	
+wellbore_exploration_all	11	wlbCompletionDate	date				YES	
+wellbore_exploration_all	12	wlbField	character varying	40			YES	
+wellbore_exploration_all	13	wlbDrillPermit	character varying	10			NO	
+wellbore_exploration_all	14	wlbDiscovery	character varying	40			YES	
+wellbore_exploration_all	15	wlbDiscoveryWellbore	character varying	3			NO	
+wellbore_exploration_all	16	wlbBottomHoleTemperature	integer		32	0	YES	
+wellbore_exploration_all	17	wlbSeismicLocation	character varying	200			YES	
+wellbore_exploration_all	18	wlbMaxInclation	numeric		13	6	YES	
+wellbore_exploration_all	19	wlbKellyBushElevation	numeric		13	6	NO	
+wellbore_exploration_all	20	wlbFinalVerticalDepth	numeric		13	6	YES	
+wellbore_exploration_all	21	wlbTotalDepth	numeric		13	6	NO	
+wellbore_exploration_all	22	wlbWaterDepth	numeric		13	6	NO	
+wellbore_exploration_all	23	wlbAgeAtTd	character varying	40			YES	
+wellbore_exploration_all	24	wlbFormationAtTd	character varying	40			YES	
+wellbore_exploration_all	25	wlbMainArea	character varying	40			NO	
+wellbore_exploration_all	26	wlbDrillingFacility	character varying	50			NO	
+wellbore_exploration_all	27	wlbFacilityTypeDrilling	character varying	40			NO	
+wellbore_exploration_all	28	wlbLicensingActivity	character varying	40			NO	
+wellbore_exploration_all	29	wlbMultilateral	character varying	3			NO	
+wellbore_exploration_all	30	wlbPurposePlanned	character varying	40			NO	
+wellbore_exploration_all	31	wlbEntryYear	integer		32	0	NO	
+wellbore_exploration_all	32	wlbCompletionYear	integer		32	0	NO	
+wellbore_exploration_all	33	wlbReclassFromWellbore	character varying	40			YES	
+wellbore_exploration_all	34	wlbReentryExplorationActivity	character varying	40			YES	
+wellbore_exploration_all	35	wlbPlotSymbol	integer		32	0	NO	
+wellbore_exploration_all	36	wlbFormationWithHc1	character varying	20			YES	
+wellbore_exploration_all	37	wlbAgeWithHc1	character varying	20			YES	
+wellbore_exploration_all	38	wlbFormationWithHc2	character varying	20			YES	
+wellbore_exploration_all	39	wlbAgeWithHc2	character varying	20			YES	
+wellbore_exploration_all	40	wlbFormationWithHc3	character varying	20			YES	
+wellbore_exploration_all	41	wlbAgeWithHc3	character	20			YES	
+wellbore_exploration_all	42	wlbDrillingDays	integer		32	0	NO	
+wellbore_exploration_all	43	wlbReentry	character varying	3			NO	
+wellbore_exploration_all	44	wlbGeodeticDatum	character varying	6			YES	
+wellbore_exploration_all	45	wlbNsDeg	integer		32	0	NO	
+wellbore_exploration_all	46	wlbNsMin	integer		32	0	NO	
+wellbore_exploration_all	47	wlbNsSec	numeric		13	6	NO	
+wellbore_exploration_all	48	wlbNsCode	character varying	1			NO	
+wellbore_exploration_all	49	wlbEwDeg	integer		32	0	NO	
+wellbore_exploration_all	50	wlbEwMin	integer		32	0	NO	
+wellbore_exploration_all	51	wlbEwSec	numeric		13	6	NO	
+wellbore_exploration_all	52	wlbEwCode	character varying	1			NO	
+wellbore_exploration_all	53	wlbNsDecDeg	numeric		13	6	NO	
+wellbore_exploration_all	54	wlbEwDesDeg	numeric		13	6	NO	
+wellbore_exploration_all	55	wlbNsUtm	numeric		13	6	NO	
+wellbore_exploration_all	56	wlbEwUtm	numeric		13	6	NO	
+wellbore_exploration_all	57	wlbUtmZone	integer		32	0	NO	
+wellbore_exploration_all	58	wlbNamePart1	integer		32	0	NO	
+wellbore_exploration_all	59	wlbNamePart2	integer		32	0	NO	
+wellbore_exploration_all	60	wlbNamePart3	character varying	1			YES	
+wellbore_exploration_all	61	wlbNamePart4	integer		32	0	NO	
+wellbore_exploration_all	62	wlbNamePart5	character varying	2			YES	
+wellbore_exploration_all	63	wlbNamePart6	character varying	2			YES	
+wellbore_exploration_all	64	wlbPressReleaseUrl	character varying	200			YES	
+wellbore_exploration_all	65	wlbFactPageUrl	character varying	200			NO	
+wellbore_exploration_all	66	wlbFactMapUrl	character varying	200			NO	
+wellbore_exploration_all	67	wlbDiskosWellboreType	character varying	20			NO	
+wellbore_exploration_all	68	wlbDiskosWellboreParent	character varying	40			YES	
+wellbore_exploration_all	69	wlbWdssQcDate	date				YES	
+wellbore_exploration_all	70	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_exploration_all	71	dscNpdidDiscovery	integer		32	0	YES	
+wellbore_exploration_all	72	fldNpdidField	integer		32	0	YES	
+wellbore_exploration_all	73	fclNpdidFacilityDrilling	integer		32	0	NO	
+wellbore_exploration_all	74	wlbNpdidWellboreReclass	integer		32	0	NO	
+wellbore_exploration_all	75	prlNpdidProductionLicence	integer		32	0	NO	
+wellbore_exploration_all	76	wlbDiskosWellOperator	character varying	40			NO	
+wellbore_exploration_all	77	wlbDateUpdated	date				NO	
+wellbore_exploration_all	78	wlbDateUpdatedMax	date				NO	
+wellbore_exploration_all	79	dateSyncNPD	date				NO	
+wellbore_formation_top	1	wlbName	character varying	60			NO	
+wellbore_formation_top	2	lsuTopDepth	numeric		13	6	NO	3
+wellbore_formation_top	3	lsuBottomDepth	numeric		13	6	NO	4
+wellbore_formation_top	4	lsuName	character varying	20			NO	
+wellbore_formation_top	5	lsuLevel	character varying	9			NO	
+wellbore_formation_top	6	lsuNameParent	character varying	20			YES	
+wellbore_formation_top	7	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_formation_top	8	lsuNpdidLithoStrat	integer		32	0	NO	2
+wellbore_formation_top	9	lsuNpdidLithoStratParent	integer		32	0	YES	
+wellbore_formation_top	10	lsuWellboreUpdatedDate	date				YES	
+wellbore_formation_top	11	dateSyncNPD	date				NO	
+wellbore_mud	1	wlbName	character varying	60			NO	
+wellbore_mud	2	wlbMD	numeric		13	6	NO	
+wellbore_mud	3	wlbMudWeightAtMD	numeric		13	6	NO	
+wellbore_mud	4	wlbMudViscosityAtMD	numeric		13	6	NO	
+wellbore_mud	5	wlbYieldPointAtMD	numeric		13	6	NO	
+wellbore_mud	6	wlbMudType	character varying	40			YES	
+wellbore_mud	7	wlbMudDateMeasured	date				YES	
+wellbore_mud	8	wlbNpdidWellbore	integer		32	0	NO	2
+wellbore_mud	9	wlbMudDateUpdated	date				YES	
+wellbore_mud	10	dateSyncNPD	date				NO	
+wellbore_mud	11	wellbore_mud_id	bigint		64	0	NO	1
+wellbore_npdid_overview	1	wlbWellboreName	character varying	40			NO	
+wellbore_npdid_overview	2	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_npdid_overview	3	wlbWell	character varying	40			NO	
+wellbore_npdid_overview	4	wlbWellType	character varying	20			YES	
+wellbore_npdid_overview	5	dateSyncNPD	date				NO	
+wellbore_oil_sample	1	wlbName	character varying	60			NO	
+wellbore_oil_sample	2	wlbOilSampleTestType	character varying	4			YES	
+wellbore_oil_sample	3	wlbOilSampleTestNumber	character varying	10			YES	
+wellbore_oil_sample	4	wlbOilSampleTopDepth	numeric		13	6	NO	
+wellbore_oil_sample	5	wlbOilSampleBottomDepth	numeric		13	6	NO	
+wellbore_oil_sample	6	wlbOilSampleFluidType	character varying	20			YES	
+wellbore_oil_sample	7	wlbOilSampleTestDate	date				YES	
+wellbore_oil_sample	8	wlbOilSampledateReceivedDate	date				YES	
+wellbore_oil_sample	9	wlbNpdidWellbore	integer		32	0	NO	2
+wellbore_oil_sample	10	wlbOilSampleDateUpdated	date				YES	
+wellbore_oil_sample	11	dateSyncNPD	date				NO	
+wellbore_oil_sample	12	wellbore_oil_sample_id	bigint		64	0	NO	1
+wellbore_shallow_all	1	wlbWellboreName	character varying	40			NO	
+wellbore_shallow_all	2	wlbNpdidWellbore	integer		32	0	NO	1
+wellbore_shallow_all	3	wlbWell	character varying	40			NO	
+wellbore_shallow_all	4	wlbDrillingOperator	character varying	60			NO	
+wellbore_shallow_all	5	wlbProductionLicence	character varying	40			YES	
+wellbore_shallow_all	6	wlbDrillingFacility	character varying	50			YES	
+wellbore_shallow_all	7	wlbEntryDate	date				YES	
+wellbore_shallow_all	8	wlbCompletionDate	date				YES	
+wellbore_shallow_all	9	wlbDrillPermit	character varying	10			NO	
+wellbore_shallow_all	10	wlbTotalDepth	numeric		13	6	NO	
+wellbore_shallow_all	11	wlbWaterDepth	numeric		13	6	NO	
+wellbore_shallow_all	12	wlbMainArea	character varying	40			NO	
+wellbore_shallow_all	13	wlbEntryYear	integer		32	0	NO	
+wellbore_shallow_all	14	wlbCompletionYear	integer		32	0	NO	
+wellbore_shallow_all	15	wlbSeismicLocation	character varying	200			YES	
+wellbore_shallow_all	16	wlbGeodeticDatum	character varying	6			YES	
+wellbore_shallow_all	17	wlbNsDeg	integer		32	0	NO	
+wellbore_shallow_all	18	wlbNsMin	integer		32	0	NO	
+wellbore_shallow_all	19	wlbNsSec	numeric		13	6	NO	
+wellbore_shallow_all	20	wlbNsCode	character varying	1			YES	
+wellbore_shallow_all	21	wlbEwDeg	integer		32	0	NO	
+wellbore_shallow_all	22	wlbEwMin	integer		32	0	NO	
+wellbore_shallow_all	23	wlbEwSec	numeric		13	6	NO	
+wellbore_shallow_all	24	wlbEwCode	character varying	1			YES	
+wellbore_shallow_all	25	wlbNsDecDeg	numeric		13	6	NO	
+wellbore_shallow_all	26	wlbEwDesDeg	numeric		13	6	NO	
+wellbore_shallow_all	27	wlbNsUtm	numeric		13	6	NO	
+wellbore_shallow_all	28	wlbEwUtm	numeric		13	6	NO	
+wellbore_shallow_all	29	wlbUtmZone	integer		32	0	NO	
+wellbore_shallow_all	30	wlbNamePart1	integer		32	0	NO	
+wellbore_shallow_all	31	wlbNamePart2	integer		32	0	NO	
+wellbore_shallow_all	32	wlbNamePart3	character varying	1			NO	
+wellbore_shallow_all	33	wlbNamePart4	integer		32	0	NO	
+wellbore_shallow_all	34	wlbNamePart5	character varying	2			YES	
+wellbore_shallow_all	35	wlbNamePart6	character varying	2			YES	
+wellbore_shallow_all	36	wlbDateUpdated	date				NO	
+wellbore_shallow_all	37	wlbDateUpdatedMax	date				NO	
+wellbore_shallow_all	38	dateSyncNPD	date				NO	
+wlbPoint	1	wlbNpdidWellbore	integer		32	0	NO	1
+wlbPoint	2	wlbWellName	character varying	40			NO	
+wlbPoint	3	wlbWellboreName	character varying	40			NO	
+wlbPoint	4	wlbField	character varying	40			YES	
+wlbPoint	5	wlbProductionLicence	character varying	40			YES	
+wlbPoint	6	wlbWellType	character varying	20			YES	
+wlbPoint	7	wlbDrillingOperator	character varying	60			NO	
+wlbPoint	8	wlbMultilateral	character varying	3			NO	
+wlbPoint	9	wlbDrillingFacility	character varying	50			YES	
+wlbPoint	10	wlbProductionFacility	character varying	50			YES	
+wlbPoint	11	wlbEntryDate	date				YES	
+wlbPoint	12	wlbCompletionDate	date				YES	
+wlbPoint	13	wlbContent	character varying	40			YES	
+wlbPoint	14	wlbStatus	character varying	40			YES	
+wlbPoint	15	wlbSymbol	integer		32	0	NO	
+wlbPoint	16	wlbPurpose	character varying	40			YES	
+wlbPoint	17	wlbWaterDepth	numeric		13	6	NO	
+wlbPoint	18	wlbFactPageUrl	character varying	200			YES	
+wlbPoint	19	wlbFactMapUrl	character varying	200			YES	
+wlbPoint	20	wlbDiscoveryWellbore	character varying	3			NO	

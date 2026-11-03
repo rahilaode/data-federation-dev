@@ -19,13 +19,18 @@ The rules follow the feasibility experiments:
           templates, join keys, SQL clauses, primary-key columns, and paths through a view
           expression lead to a notification (experiment F0.7 v2-v4).
   ADD     always waits for approval; name and domain collisions are stated in the reasons.
+          When no logical table exposes the new column by itself (every logical table of the
+          table lists its columns, as in NPD), ASCAM proposes a NEW TriplesMap for it, built from
+          a TriplesMap that gives the table's subjects a class (ADR-0027).
 """
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import sqlglot
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlglot import exp
 
 from .db import registry, spec
 from .views import plan_view_drops
@@ -201,6 +206,75 @@ def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dic
                              .filter_by(triples_map_id=triples_map_id)).scalars().all()
         found.append({'id': triples_map_id, 'iri': iri, 'classes': list(classes)})
     return found
+
+
+MAPPING_BASE = 'urn:ascam:mapping'
+
+
+def _new_triples_map_options(db: Session, version_id: int, model: str, table: str,
+                             column: str) -> list[dict]:
+    """Proposed NEW TriplesMaps for a new column when no logical table exposes it (ADR-0027).
+
+    A candidate is a TriplesMap that reads only this table through an rr:sqlQuery that can be
+    parsed, gives its subjects a class, and builds them from an IRI template whose columns are
+    plain columns of the table. The new TriplesMap keeps its subject template and its query
+    (FROM and WHERE, so the same subjects), with the new column added to the projection: the
+    style of mappings that list their columns, one TriplesMap per property (NPD). One option per
+    (template, class); the administrator's choice of domain selects among them.
+    """
+    rows = db.execute(
+        select(spec.TriplesMap.id, spec.TriplesMap.iri, spec.TriplesMap.sql_query)
+        .join(spec.LogicalSource, spec.LogicalSource.triples_map_id == spec.TriplesMap.id)
+        .join(spec.TeiidTable, spec.TeiidTable.id == spec.LogicalSource.teiid_table_id)
+        .where(spec.TriplesMap.spec_version_id == version_id,
+               spec.TriplesMap.logical_table_kind == 'sql_query',
+               spec.TriplesMap.sql_parse_status == 'ok',
+               spec.TeiidTable.name == table)).all()
+    options, seen = [], set()
+    for triples_map_id, iri, sql in sorted(rows, key=lambda r: r[1]):
+        sources = db.execute(select(func.count()).select_from(spec.LogicalSource)
+                             .filter_by(triples_map_id=triples_map_id)).scalar()
+        classes = sorted(db.execute(select(spec.SubjectClass.class_iri)
+                                    .filter_by(triples_map_id=triples_map_id)).scalars().all())
+        subject = db.execute(select(spec.TermMap).where(
+            spec.TermMap.triples_map_id == triples_map_id, spec.TermMap.position == 'subject')
+        ).scalars().first()
+        if sources != 1 or not classes or subject is None or subject.value_kind != 'template':
+            continue
+        kinds = db.execute(
+            select(spec.LogicalColumn.expression_kind)
+            .join(spec.TermMapColumn, spec.TermMapColumn.logical_column_id == spec.LogicalColumn.id)
+            .where(spec.TermMapColumn.term_map_id == subject.id)).scalars().all()
+        if not kinds or any(k != 'passthrough' for k in kinds):
+            continue
+        new_sql = _query_with_column(sql, column)
+        if new_sql is None:
+            continue
+        for class_iri in classes:
+            if (subject.value, class_iri) in seen:
+                continue
+            seen.add((subject.value, class_iri))
+            options.append({'iri': None, 'classes': [class_iri], 'new': True,
+                            'subject_template': subject.value, 'sql_query': new_sql,
+                            'based_on': iri, 'model': model})
+    for index, option in enumerate(options):
+        suffix = f'-{index + 1}' if len(options) > 1 else ''
+        option['iri'] = f'{MAPPING_BASE}#ascam-{table}-{column}{suffix}'
+    return options
+
+
+def _query_with_column(sql: str, column: str) -> str | None:
+    """`sql` with the new column added to its projection, as a delimited identifier; None when
+    the query is not a single SELECT over one table (a join or a set operation)."""
+    try:
+        tree = sqlglot.parse_one(sql)
+    except Exception:                                   # noqa: BLE001
+        return None
+    if not isinstance(tree, exp.Select) or tree.args.get('joins') or len(list(tree.find_all(exp.Table))) != 1:
+        return None
+    if any((item.alias_or_name or '') == column for item in tree.expressions):
+        return None
+    return tree.select(exp.column(column, quoted=True)).sql()
 
 
 def analyze(db: Session, obdf_id: int, event: dict) -> ImpactReport:
@@ -456,7 +530,18 @@ def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
            if domain is None or not tm['classes'] or domain in tm['classes']]
     actions = [{'artifact': 'ontology', 'operation': 'add_datatype_property',
                 'iri': iri, 'domain': [domain] if domain else [], 'column': column}]
+    written_templates = set()
     for tm in tms:
+        if tm.get('new'):
+            # one new TriplesMap per subject template, even if several classes share it
+            if tm['subject_template'] in written_templates:
+                continue
+            written_templates.add(tm['subject_template'])
+            actions.append({'artifact': 'r2rml', 'operation': 'add_triples_map',
+                            'triples_map_iri': tm['iri'], 'sql_query': tm['sql_query'],
+                            'subject_template': tm['subject_template'],
+                            'predicate_iri': iri, 'column': column, 'table': options['table']})
+            continue
         actions.append({'artifact': 'r2rml', 'operation': 'add_predicate_object_map',
                         'predicate_iri': iri, 'column': column, 'table': options['table'],
                         'triples_map_iri': tm['iri']})
@@ -480,21 +565,30 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report,
         report.reasons.append(f'column name {column} already exists in Teiid table {target_table.table}')
 
     exposing = _exposing_triples_maps(db, version.id, target_table.table)
+    new_maps = [] if exposing else _new_triples_map_options(
+        db, version.id, target_table.model, target_table.table, event.get('column') or '')
     naming = db.get(registry.NamingPolicy, obdf_id)
     namespace = _setting(db, obdf_id, 'ontology.namespace', None)
-    classes = sorted({c for tm in exposing for c in tm['classes']})
+    classes = sorted({c for tm in exposing + new_maps for c in tm['classes']})
     options = {'column': event.get('column'), 'table': target_table.table,
                'namespace': namespace,
                'iri_template': naming.property_iri_template if naming else None,
-               'triples_maps': [{'iri': tm['iri'], 'classes': tm['classes']} for tm in exposing],
+               'triples_maps': [{'iri': tm['iri'], 'classes': tm['classes']} for tm in exposing]
+               + new_maps,
                'classes': classes, 'proposed_iri': None, 'proposed_domain': None,
                'range_iri': expected_range(db, obdf_id, dbms, event.get('column_type'))}
     report.add_options = options
-    if not exposing:
+    if not exposing and not new_maps:
         report.reasons.append(
             f'no TriplesMap exposes a new column of {target_table.table} by itself '
-            '(the logical tables use explicit column lists); only the VDB column can be added')
+            '(the logical tables use explicit column lists), and none gives its subjects a class '
+            'from which a new TriplesMap can be built; only the VDB column can be added')
         return report
+    if new_maps:
+        report.reasons.append(
+            f'the logical tables of {target_table.table} list their columns, so the column is '
+            'mapped by a NEW TriplesMap that reuses the subject template of the class '
+            'TriplesMap of the chosen domain (ADR-0027)')
     if naming is None or not namespace:
         report.reasons.append('the naming policy or the ontology namespace is not set')
         return report

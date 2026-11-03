@@ -150,6 +150,8 @@ function explain(a, plan) {
       return [`Keep ${short(p.predicate_iri)}`, 'This property is still used by another mapping'];
     case 'r2rml:add_predicate_object_map':
       return [`Map column ${p.column} to property ${short(p.predicate_iri)}`, `In TriplesMap ${short(p.triples_map_iri) || p.table}; added as a managed block without rewriting the mapping`];
+    case 'r2rml:add_triples_map':
+      return [`Map column ${p.column} to property ${short(p.predicate_iri)} in a new TriplesMap`, `${short(p.triples_map_iri)}: subjects from template ${p.subject_template}; query ${p.sql_query}; added as a managed block without rewriting the mapping`];
     case 'r2rml:remove_predicate_object_map':
       return [`Remove the mapping of ${short(p.predicate_iri)}`, `From ${short(p.triples_map_iri) || 'every TriplesMap'}`];
     case 'r2rml:rewrite_logical_table':

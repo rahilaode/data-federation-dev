@@ -221,3 +221,44 @@ def test_drop_plan_rewrites_query_and_removes_mapping():
          'column': 'tipe_program'}])
     assert TIPE_PROGRAM not in r2rml.predicates_of(result)
     assert 'tipe_program' not in logical_query(result).lower()
+
+
+NPD_STYLE = '''@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> .
+
+<Mapping:00857:Table:npdv:WellboreDrillingMudSample> a rr:TriplesMap ;
+  rr:logicalTable [ a rr:R2RMLView ;
+      rr:sqlQuery "SELECT \\"wellbore_mud_id\\", \\"wlbNpdidWellbore\\" FROM \\"reporting\\".\\"wellbore_mud\\" AS \\"wellbore_mud\\"" ] ;
+  rr:subjectMap [ rr:class npdv:WellboreDrillingMudSample ;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/wellbore/{\\"wlbNpdidWellbore\\"}/test/mud/{wellbore_mud_id}" ] .
+'''
+
+
+def test_add_triples_map_writes_a_managed_block_that_parses():
+    """ADR-0027: a new column of a table whose logical tables list their columns gets its own
+    TriplesMap, with the subject template of the class TriplesMap and the column added."""
+    from rdflib import Graph, Namespace, URIRef
+    RR = Namespace('http://www.w3.org/ns/r2rml#')
+    sql = ('SELECT "wellbore_mud_id", "wlbNpdidWellbore", "wlbMudPh" '
+           'FROM "reporting"."wellbore_mud" AS "wellbore_mud"')
+    template = 'http://sws.ifi.uio.no/data/npd-v2/wellbore/{"wlbNpdidWellbore"}/test/mud/{wellbore_mud_id}'
+    iri = 'urn:ascam:mapping#ascam-wellbore_mud-wlbMudPh'
+    out = r2rml.apply_actions(NPD_STYLE, [{
+        'operation': 'add_triples_map', 'triples_map_iri': iri, 'sql_query': sql,
+        'subject_template': template, 'predicate_iri': 'http://sws.ifi.uio.no/vocab/npd-v2#wlbMudPh',
+        'column': 'wlbMudPh', 'datatype_iri': 'http://www.w3.org/2001/XMLSchema#decimal'}])
+    assert NPD_STYLE.split('\n\n', 1)[1].rstrip() in out     # the original TriplesMap is untouched
+    assert '# ascam:begin triples_map ' + iri in out and '<#ascam-wellbore_mud-wlbMudPh>' in out
+    g = Graph().parse(data=out, format='turtle', publicID='urn:ascam:mapping')
+    tm = URIRef(iri)
+    assert str(g.value(g.value(tm, RR.logicalTable), RR.sqlQuery)) == sql
+    assert str(g.value(g.value(tm, RR.subjectMap), RR.template)) == template
+    pom = g.value(tm, RR.predicateObjectMap)
+    assert str(g.value(pom, RR.predicate)).endswith('#wlbMudPh')
+    assert str(g.value(g.value(pom, RR.objectMap), RR.column)) == '"wlbMudPh"'   # delimited, as in the query
+    # applying the same action again changes nothing
+    again = r2rml.apply_actions(out, [{
+        'operation': 'add_triples_map', 'triples_map_iri': iri, 'sql_query': sql,
+        'subject_template': template, 'predicate_iri': 'http://sws.ifi.uio.no/vocab/npd-v2#wlbMudPh',
+        'column': 'wlbMudPh'}])
+    assert again == out

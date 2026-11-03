@@ -1,6 +1,6 @@
 # Design decisions
 
-This file condenses the 24 architecture decision records (ADRs) written while ASCAM was built.
+This file condenses the 30 architecture decision records (ADRs) written while ASCAM was built.
 Each entry keeps its original number, because the code, the commit history, and the thesis
 refer to decisions by that number (for example "ADR-0022"). The full records, with every
 measurement table, are in the git history under `docs/adr/` (last present in commit `a1e9b0a`,
@@ -42,6 +42,10 @@ Some later decisions revise earlier ones. Where that happens the entry says so, 
 | [0024](#adr-0024-approval-only-for-add-notification-for-unsafe-dropping-and-renaming) | Approval only for ADD; notification for unsafe DROP/RENAME; lineage in the console | Plan, Knowledge | F6 | Yes |
 | [0025](#adr-0025-repeated-changes-to-the-same-column) | A re-added column withdraws ASCAM's deprecation; one status block per property; same range required | Plan, Execute | F6 | Yes |
 | [0026](#adr-0026-columns-that-a-view-projects-and-filters-on-r2rml-datatypes) | A column a view projects and filters on is a predicate; XSD datatypes follow R2RML §10.2 | Knowledge, Analyze, Plan | F6 | Yes |
+| [0027](#adr-0027-npd-as-the-case-study-new-triplesmap-for-add) | The NPD benchmark, split over PostgreSQL and MySQL, replaces the social-assistance case study; P-001 proposes a new TriplesMap when no logical table exposes the column | Analyze, Plan, Execute | NPD E2E | Yes |
+| [0028](#adr-0028-delimited-identifiers-in-r2rml-term-maps) | Delimited identifiers in `rr:column` and templates are unquoted before lineage binding | Knowledge | NPD E2E | Yes |
+| [0029](#adr-0029-quoted-nameinsource-and-identifier-case-per-source) | `NAMEINSOURCE` is always a delimited identifier; identifier case is configured per source | Plan, Execute, Knowledge | NPD sandbox | Yes |
+| [0030](#adr-0030-readiness-query-per-predicate-fingerprint-teiid-thread-stack) | Configurable readiness query, per-predicate fingerprint, `-Xss16m` for Teiid | Execute | NPD sandbox | Yes |
 
 ---
 
@@ -639,3 +643,114 @@ configuration test. 166 Knowledge tests pass.
 
 **Effect on the evaluation.** None on A001-A009: no case-study view projects a column it filters
 on, and no scenario adds a floating-point column.
+
+## ADR-0027: NPD as the case study; new TriplesMap for ADD
+
+*2026-11-01. Analyze, Plan, Execute.*
+
+**Context.** The first case study (social assistance: 2 sources, 14 tables, 10 rows per table,
+a hand-written mapping) was built for this thesis, so a reviewer cannot tell whether ASCAM only
+works on a mapping that was written with ASCAM in mind. The NPD benchmark (Lanti, Rezk, Xiao,
+Calvanese, EDBT 2015; <https://github.com/ontop/npd-benchmark>) is the reference OBDA workload of
+the Ontop group: real data of the Norwegian Petroleum Directorate, an OWL 2 QL ontology, an
+R2RML mapping of 1,177 TriplesMaps, and 31 SPARQL queries. It ships as one relational database,
+not as a federation.
+
+**Decision.**
+
+- The 70 NPD tables are split between two sources by the system that owns the data in Norway:
+  well, seismic, stratigraphy and production reports (`reporting`, PostgreSQL, 25 tables,
+  184,275 rows) and the petroleum register of licences, fields, discoveries, companies and
+  facilities (`registry`, MySQL, 45 tables, 72,996 rows). This is a modelling choice of the
+  thesis, not part of NPD. 19 foreign keys stay inside `reporting`, 59 inside `registry`, and
+  the 11 that cross the sources are dropped (Teiid joins across sources without them). Of the
+  1,177 TriplesMaps, 684 read only `reporting`, 476 only `registry`, and 17 both; 11 of the 31
+  NPD queries need both sources.
+- The inputs are fetched by `setup/npd/fetch-npd.sh` at a fixed commit and checked against
+  SHA-256 sums; the split, the VDB, the qualified mapping and the Turtle ontology are generated
+  by `setup/npd/tools/`, and the generated files are committed.
+- Three Teiid views in the virtual model `services` carry the view scenarios A007–A009
+  (ADR-0023). Seven TriplesMaps are pointed at them; every redirected TriplesMap returns the
+  same rows as before (1,111 query pairs, 3,171,165 rows compared).
+- The social-assistance artifacts are moved to `archive/bansos/`, and their tests keep running.
+- **P-001 when no logical table exposes the column.** NPD lists its columns explicitly in all
+  1,177 logical tables, so after `ADD COLUMN` no TriplesMap picks up the new column and the old
+  plan had nothing to attach the property to. Knowledge now proposes a new TriplesMap
+  `urn:ascam:mapping#ascam-<table>-<column>`, built from an existing TriplesMap over the same
+  single table: same subject template and class, logical table `SELECT <subject columns>,
+  "<column>" FROM <table>`. Only TriplesMaps over one table whose subject columns are plain
+  columns are used; one proposal is made per subject template. The decision stays `hitl`
+  (ADR-0021): the administrator sees the proposed TriplesMap before anything is written.
+
+**Evidence.** `tests/test_case_study_npd.py` (Knowledge) runs lineage and the decision of all
+nine scenarios on the NPD metadata; `test_add_proposes_new_triples_map_when_columns_are_listed`
+and `test_add_triples_map_writes_a_managed_block_that_parses` cover the new action. An offline
+end-to-end run (the plan of each scenario applied by the Executor's editors, the result served
+by Ontop over a PostgreSQL copy of the federation) answered all 76 base queries; after each
+adaptation only the affected query changed.
+
+**Effect on the evaluation.** The scenarios, queries and expected outcomes are redefined on NPD
+(`docs/evaluation.md`); the results of the first case study stay in `results/` and on the tag
+`eval-2026-10-28`.
+
+## ADR-0028: Delimited identifiers in R2RML term maps
+
+*2026-11-01. Knowledge.*
+
+**Context.** NPD's mapping writes column names as SQL delimited identifiers
+(`rr:column "\"wlbNsMin\""`, template `{"wlbNpdidWellbore"}`), which R2RML allows: a column
+name is an SQL identifier, and a quoted (delimited) identifier is case sensitive while an
+unquoted one is not (R2RML, <https://www.w3.org/TR/r2rml/>, definition of *column name*; working
+group resolution of ISSUE-35, <https://www.w3.org/2001/sw/rdb2rdf/track/issues/35>). Knowledge
+compared the raw text with the Teiid column name, so no NPD term map was linked to its column
+and every change looked like it touched nothing.
+
+**Decision.** `mapping.column_name()` removes the delimiters and turns `""` into `"`. A
+delimited name must then match exactly; an undelimited one matches exactly first, then without
+case when exactly one column matches. Join conditions are read the same way.
+
+**Evidence.** The NPD case-study tests fail when the change is reverted and pass with it.
+
+## ADR-0029: Quoted NAMEINSOURCE and identifier case per source
+
+*2026-11-01. Plan, Execute, Knowledge.*
+
+**Context.** NPD names are mixed case (`wlbPoint`, `wlbMudWeightAtMD`). PostgreSQL folds an
+unquoted name to lower case, so `NAMEINSOURCE 'wlbMudPh'` points at a column that does not
+exist. MySQL is not case sensitive for column names.
+
+**Decision.** The Executor always writes `NAMEINSOURCE` as a delimited identifier
+(`'"wlbDrillingCompany"'`), for RENAME and for a new column (`ADD COLUMN` is followed by
+`ALTER COLUMN ... OPTIONS (SET NAMEINSOURCE '"c"')`). The source definition in Knowledge takes
+`identifier_case` (`preserve` for `reporting`); the generated VDB uses quoted `NAMEINSOURCE` for
+every `reporting` table and column.
+
+**Evidence.** `test_source_names_are_delimited_identifiers` (Executor); the NPD VDB deploys and
+answers the 31 NPD queries in the sandbox.
+
+## ADR-0030: Readiness query, per-predicate fingerprint, Teiid thread stack
+
+*2026-11-01. Execute.*
+
+**Context.** Measured on the NPD sandbox: `ASK { ?s ?p ?o }` unfolds into 5,525 UNION branches
+(0.51 MB of SQL) and took 184 s through Teiid; `SELECT ?s ?p ?o` produces 2.13 MB of SQL, above
+Teiid's default `org.teiid.maxMessageSize` of 2 MiB (TEIID40166); with the limit raised, Teiid
+fails with `StackOverflowError` (TEIID30019), because it resolves and rewrites a UNION chain
+recursively. The agent used `ASK { ?s ?p ?o }` to see whether an Ontop instance is ready (5 s
+per request), and the Executor's whole-graph fingerprint is one `GROUP BY ?p` over all triples.
+
+**Decision.**
+
+- The readiness query is configurable (`ASCAM_AGENT_READY_QUERY`, and `options.ready_query` of
+  the SPARQL endpoint in Knowledge). For NPD it is `ASK { ?w a npdv:Wellbore }` (6 UNION
+  branches). The default stays `ASK { ?s ?p ?o }`.
+- The Executor takes the fingerprint per predicate from the start when
+  `ASCAM_EXEC_FINGERPRINT=per_predicate` (one `COUNT` per candidate predicate, 8 in parallel);
+  `whole` keeps the old behaviour with its fallback. The comparison rules do not change.
+- Teiid runs with `-Xss16m -Xmx1g`, so that queries with large unions (`?s a ?c`, 1,489
+  branches) still work for users.
+
+**Evidence.** Sandbox: after `-Xss16m`, `ASK { ?s ?p ?o }` returns `true` and the `rdf:type`
+count (1,025,884 triples) takes 10.9 s. On a PostgreSQL copy, the whole fingerprint took 264 s
+and the per-predicate one 4.1 s for 327 predicates. Two agent tests and two Executor tests.
+The per-predicate time through Teiid has not been measured yet; it is part of Δt_adapt.

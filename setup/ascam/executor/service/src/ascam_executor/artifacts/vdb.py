@@ -60,10 +60,30 @@ def statement_drop_column(table: str, column: str) -> str:
     return f'ALTER FOREIGN TABLE {quote(table)} DROP COLUMN {quote(column)};'
 
 
+def source_identifier(name: str) -> str:
+    """A source column name as a NAMEINSOURCE value: always a delimited identifier (ADR-0029).
+
+    Teiid puts NAMEINSOURCE into the source SQL as it is. Without quotes PostgreSQL folds the
+    name to lower case, so a mixed-case column such as "wlbDrillingOperator" (NPD) would not be
+    found. Double quotes are understood by PostgreSQL and by MySQL in the ANSI session mode that
+    every Teiid connection to MySQL uses (setup/data-federation/virtual-db-config/setup.cli).
+    A value that is already delimited is kept."""
+    if len(name) >= 2 and name[0] == name[-1] == '"':
+        return name
+    return quote(name)
+
+
 def statement_set_name_in_source(table: str, column: str, name_in_source: str) -> str:
-    escaped = name_in_source.replace("'", "''")
+    escaped = source_identifier(name_in_source).replace("'", "''")
     return (f'ALTER FOREIGN TABLE {quote(table)} ALTER COLUMN {quote(column)} '
             f"OPTIONS (SET NAMEINSOURCE '{escaped}');")
+
+
+def statements_add_column(table: str, column: str, teiid_type: str) -> list[str]:
+    """ADD COLUMN, then the column's source name (ADR-0029). The name is set with a separate
+    statement in the form already used for RENAME, not with an OPTIONS clause on ADD COLUMN."""
+    return [statement_add_column(table, column, teiid_type),
+            statement_set_name_in_source(table, column, column)]
 
 
 def statement_alter_view(view: str, body: str) -> str:
@@ -137,7 +157,9 @@ def apply_actions(xml: str, actions: list[dict], type_lookup=None,
             teiid_type = (type_lookup or (lambda t: t))(action.get('column_type'))
             if not teiid_type:
                 raise VdbError(f"unknown column type for {table}.{action['column']}")
-            statement = statement_add_column(table, action['column'], teiid_type)
+            per_model.setdefault(model, []).extend(
+                statements_add_column(table, action['column'], teiid_type))
+            continue
         elif operation == 'drop_column':
             statement = statement_drop_column(table, action['column'])
         elif operation == 'alter_view' and view_statement == 'recreate':

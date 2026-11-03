@@ -57,7 +57,7 @@ def http(base: str, path: str, bearer: str | None = None):
 
 def pg(sql: str) -> str:
     result = subprocess.run(['docker', 'exec', 'datasources-pgsql', 'psql', '-U', 'postgres',
-                             '-d', 'kemensos', '-tAc', sql], capture_output=True, text=True)
+                             '-d', 'reporting', '-tAc', sql], capture_output=True, text=True)
     return (result.stdout or result.stderr).strip()
 
 
@@ -109,7 +109,7 @@ def check(quiet: bool = False) -> tuple[bool, list[str]]:
     if agent.get('status') != 'ok':
         problems.append('the Ontop agent is not healthy')
 
-    # View case study (A007-A009): the predicates built from views of the `layanan` model must be
+    # View scenarios (A007-A009): the predicates read through the views of the `services` model must be
     # answered in the base state. If not, the OBDF runs with an old VDB or mapping: run start.sh.
     import queries
     for view_scenario in ('a007', 'a008', 'a009'):
@@ -121,7 +121,7 @@ def check(quiet: bool = False) -> tuple[bool, list[str]]:
         if not result['ok'] or not result['n']:
             from scenarios import SCENARIOS, _my_exists, _pg_exists
             sc = SCENARIOS[view_scenario]
-            exists = (_pg_exists if sc.source == 'kemensos' else _my_exists)(sc.table, sc.column)
+            exists = (_pg_exists if sc.source == 'reporting' else _my_exists)(sc.table, sc.column)
             if not exists:
                 # left over from a run that stopped before the restore: the source is not in its base state
                 problems.append(f'source column {sc.table}.{sc.column} ({view_scenario}) is missing; '

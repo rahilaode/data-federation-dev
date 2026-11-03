@@ -48,6 +48,7 @@ from rdflib import OWL, RDF, Graph, Namespace
 from .artifacts import ontology, r2rml, vdb
 
 log = logging.getLogger('ascam.executor')
+FINGERPRINT_MODES = ('whole', 'per_predicate')
 # Transient errors while recording the result of an execution: network, 5xx, and 409 from a read
 # that overtook the commit of the previous request (finding of evaluation F6).
 FINISH_ATTEMPTS = 3
@@ -135,11 +136,14 @@ def _xsd_for(type_mappings: list[dict], native_type: str | None) -> str | None:
 class Executor:
     def __init__(self, knowledge, admin, agent, sparql, obdf_id: int, *, sleep=time.sleep,
                  teiid_jdbc_host: str = 'teiid', teiid_jdbc_port: int = 31000,
-                 obda_strategy: str = 'restart', sparql_for=None, view_statement: str = 'alter'):
+                 obda_strategy: str = 'restart', sparql_for=None, view_statement: str = 'alter',
+                 fingerprint: str = 'whole'):
         if obda_strategy not in ('restart', 'bluegreen'):
             raise ValueError(f'unknown OBDA strategy: {obda_strategy!r}')
         if obda_strategy == 'bluegreen' and sparql_for is None:
             raise ValueError('the bluegreen strategy requires sparql_for (a SPARQL client per instance)')
+        if fingerprint not in FINGERPRINT_MODES:
+            raise ValueError(f'unknown fingerprint mode: {fingerprint!r}')
         self.knowledge = knowledge
         self.admin = admin
         self.agent = agent
@@ -150,6 +154,10 @@ class Executor:
         self.obda_strategy = obda_strategy
         self.sparql_for = sparql_for
         self.view_statement = view_statement
+        # 'per_predicate' starts with the per-predicate fingerprint instead of trying the whole
+        # one first (ADR-0030): over a large mapping the whole query cannot succeed (NPD: 2.1 MB
+        # of SQL, above Teiid's 2 MiB message limit, and 5 525 UNION branches).
+        self.fingerprint = fingerprint
 
     # ── reporting ───────────────────────────────────────────────────────────────
     def _step(self, ctx: Context, seq: int, name: str, status: str, started: float,
@@ -181,6 +189,8 @@ class Executor:
                 # only a fallback for older plans that do not carry it yet
                 action_copy.setdefault('table', (plan['impact']['targets'] or [{}])[0].get('table')
                                        or _table_from_vdb(plan))
+                action_copy['datatype_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
+            elif action['operation'] == 'add_triples_map':           # ADR-0027
                 action_copy['datatype_iri'] = _expand(_xsd_for(type_mappings, _column_type(plan)))
             mapping_actions.append(action_copy)
         ontology_actions = []
@@ -280,7 +290,8 @@ class Executor:
                           vdb_name=active_version['teiid_vdb_name'],
                           old_version=str(active_version['teiid_vdb_version']),
                           new_version=artifacts['vdb_version'],
-                          deployment=f"{active_version['teiid_vdb_name']}-{artifacts['vdb_version']}-vdb.xml")
+                          deployment=f"{active_version['teiid_vdb_name']}-{artifacts['vdb_version']}-vdb.xml",
+                          per_predicate=self.fingerprint == 'per_predicate')
             started_total = time.perf_counter()
             if self.obda_strategy == 'bluegreen':
                 return self._run_bluegreen(ctx, artifacts, started_total)

@@ -10,7 +10,7 @@ ADR-0007, ADR-0008, ADR-0012 to ADR-0016, ADR-0023, ADR-0024
 ```
 knowledge/
 ├── docker-compose.yaml       knowledge-db, knowledge-migrate (runs once), knowledge-service
-├── config/obdf-bansos.yaml   declarative configuration of the case-study OBDF, applied at start-up
+├── config/obdf-npd.yaml      declarative configuration of the case-study OBDF (NPD), applied at start-up
 ├── db-init/                  creates the application role ascam_app on first initialisation
 ├── scripts/init-secrets.sh   writes the secret files in secrets/ (not committed)
 └── service/
@@ -78,7 +78,7 @@ stores them as one specification version when the content changed (ADR-0012).
 
 ```bash
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"operation":"drop","source":"kemensos","table":"penerima_manfaat","column":"status_ekonomi"}' \
+  -d '{"operation":"drop","source":"registry","table":"discovery","column":"dscDiscoveryYear"}' \
   http://127.0.0.1:18000/api/v1/obdf/1/impact
 ```
 
@@ -95,10 +95,15 @@ applied with `POST /api/v1/config/apply` or `ascam-knowledge apply-config <file>
 
 Placeholders of `property_iri_template`: `{namespace}`, `{column}`, `{column_camel}`.
 
+A source may set `identifier_case` (`upper`, `lower`, or `preserve`; the default follows the DBMS).
+`obdf-npd.yaml` sets `preserve` for `reporting`, because NPD names are mixed case (ADR-0029). The
+`ontop_sparql` target may set `options.ready_query`, the query that tells whether an Ontop
+instance is ready (ADR-0030); NPD uses `ASK { ?w a npdv:Wellbore }`.
+
 ## Tests
 
 ```bash
-setup/ascam/knowledge/service/scripts/test.sh          # needs Docker; 158 tests
+setup/ascam/knowledge/service/scripts/test.sh          # needs Docker; 180 tests
 ```
 
 ## Adding a table to the `spec` schema

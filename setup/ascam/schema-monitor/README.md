@@ -9,9 +9,9 @@
 
 `register-postgres.json` and `register-mysql.json` register one Debezium connector per source.
 Both capture only the monitor log table (`table.include.list` = `schema_monitor.ddl_event_log`
-and `dukcapil.ddl_event_log`) and use `snapshot.mode = no_data`, so only DDL recorded after the
-registration is published. The topics are `kemensos.schema_monitor.ddl_event_log` and
-`dukcapil.dukcapil.ddl_event_log`.
+and `registry.ddl_event_log`) and use `snapshot.mode = no_data`, so only DDL recorded after the
+registration is published. The topics are `reporting.schema_monitor.ddl_event_log` and
+`registry.registry.ddl_event_log`.
 
 ```bash
 docker-compose -f setup/ascam/schema-monitor/docker-compose.yaml up -d

@@ -40,7 +40,7 @@ def test_version_is_bumped_once_for_multiple_models():
          'column': 'email', 'column_type': 'string(100)'},
         {'operation': 'drop_column', 'model': 'dukcapil', 'table': 'master_penduduk',
          'column': 'nik'}], new_version='2')
-    assert vdb.version_of(result) == '2' and len(statements) == 2
+    assert vdb.version_of(result) == '2' and len(statements) == 3     # ADD sets the source name too
     assert result.count('version="2"') == 1
 
 
@@ -48,7 +48,7 @@ def test_identifiers_are_quoted_even_for_keywords():
     statement = vdb.statement_add_column('order', 'precision', 'integer')
     assert statement == 'ALTER FOREIGN TABLE "order" ADD COLUMN "precision" integer;'
     assert vdb.statement_set_name_in_source('t', 'c', "odd'name") == (
-        'ALTER FOREIGN TABLE "t" ALTER COLUMN "c" OPTIONS (SET NAMEINSOURCE \'odd\'\'name\');')
+        'ALTER FOREIGN TABLE "t" ALTER COLUMN "c" OPTIONS (SET NAMEINSOURCE \'"odd\'\'name"\');')
 
 
 def test_type_lookup_is_used_for_add():
@@ -57,6 +57,25 @@ def test_type_lookup_is_used_for_add():
                'column': 'email', 'column_type': 'character varying'}],
         type_lookup=lambda t: {'character varying': 'string'}.get(t))
     assert 'ADD COLUMN "email" string;' in result
+
+
+def test_source_names_are_delimited_identifiers():
+    """ADR-0029: PostgreSQL folds an undelimited NAMEINSOURCE to lower case, so a mixed-case
+    NPD column renamed or added by ASCAM must reach the source in double quotes."""
+    assert vdb.statement_set_name_in_source('wellbore_exploration_all', 'wlbDrillingOperator',
+                                            'wlbDrillingOperatorRenamed') == (
+        'ALTER FOREIGN TABLE "wellbore_exploration_all" ALTER COLUMN "wlbDrillingOperator" '
+        'OPTIONS (SET NAMEINSOURCE \'"wlbDrillingOperatorRenamed"\');')
+    # a value that is already delimited is not quoted twice; an inner quote is doubled
+    assert "NAMEINSOURCE '\"a\"'" in vdb.statement_set_name_in_source('t', 'c', '"a"')
+    assert vdb.source_identifier('we"ird') == '"we""ird"'
+    result, statements = vdb.apply_actions(
+        VDB, [{'operation': 'add_column', 'model': 'kemensos', 'table': 'penerima_manfaat',
+               'column': 'wlbMudPh', 'column_type': 'bigdecimal'}])
+    assert statements == [
+        'ALTER FOREIGN TABLE "penerima_manfaat" ADD COLUMN "wlbMudPh" bigdecimal;',
+        'ALTER FOREIGN TABLE "penerima_manfaat" ALTER COLUMN "wlbMudPh" '
+        'OPTIONS (SET NAMEINSOURCE \'"wlbMudPh"\');']
 
 
 def test_errors_are_explicit():
@@ -81,7 +100,8 @@ def test_repeated_adaptation_accumulates_statements():
     twice, _ = vdb.apply_actions(once, [{'operation': 'drop_column', 'model': 'kemensos',
                                        'table': 'penerima_manfaat', 'column': 'nik'}],
                                new_version='3')
-    assert twice.count('ALTER FOREIGN TABLE') == 2 and vdb.version_of(twice) == '3'
+    # ADD (2 statements, ADR-0029) + DROP
+    assert twice.count('ALTER FOREIGN TABLE') == 3 and vdb.version_of(twice) == '3'
 
 
 def test_xml_declaration_and_indentation_are_preserved():

@@ -9,7 +9,7 @@ from ascam_ontop_agent.security import TokenRegistry
 TOKEN = 'token-test'
 MAPPING = '@prefix rr: <http://www.w3.org/ns/r2rml#> .\n<#MapA> a rr:TriplesMap .\n'
 ONTOLOGY = '@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<http://example.org/ont> a owl:Ontology .\n'
-PROPERTIES = 'jdbc.url=jdbc:teiid:government@mm://teiid:31000\njdbc.password=VERY-SECRET\n'
+PROPERTIES = 'jdbc.url=jdbc:teiid:npd@mm://teiid:31000\njdbc.password=VERY-SECRET\n'
 
 
 class FakeRunner:
@@ -28,7 +28,7 @@ class FakeRunner:
 def artifacts_dir(tmp_path):
     (tmp_path / 'mapping.ttl').write_text(MAPPING)
     (tmp_path / 'ontology_file.ttl').write_text(ONTOLOGY)
-    (tmp_path / 'government.docker.properties').write_text(PROPERTIES)
+    (tmp_path / 'npd.docker.properties').write_text(PROPERTIES)
     return tmp_path
 
 

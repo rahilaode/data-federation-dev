@@ -10,13 +10,16 @@ services:
       ASCAM_EXEC_KNOWLEDGE_URL: http://ascam-knowledge-service:8000
       ASCAM_EXEC_TOKEN_FILE: /run/secrets/knowledge_api_tokens
       ASCAM_EXEC_TOKEN_CLIENT: executor
-      ASCAM_EXEC_OBDF: bansos
+      ASCAM_EXEC_OBDF: npd
       ASCAM_EXEC_TEIID_PASSWORD_FILE: /run/secrets/obdf_teiid_mgmt_password
       ASCAM_EXEC_AGENT_TOKEN_FILE: /run/secrets/obdf_ontop_agent_token
       # Blue-green OBDA layer (ADR-0022); 'restart' = the older design with a single Ontop
       ASCAM_EXEC_OBDA_STRATEGY: bluegreen
       # alter | recreate (ADR-0023); chosen from the results of feasibility experiment F0.8
       ASCAM_EXEC_VIEW_STATEMENT: ${ASCAM_EXEC_VIEW_STATEMENT:-alter}
+      # ADR-0030: over the NPD mapping the whole-graph fingerprint cannot succeed (2.1 MB of SQL,
+      # above Teiid's 2 MiB message limit), so the verify step works per predicate from the start
+      ASCAM_EXEC_FINGERPRINT: ${ASCAM_EXEC_FINGERPRINT:-per_predicate}
       ASCAM_EXEC_TEIID_JDBC_HOST: teiid
       # Observation mode: run with ASCAM_EXEC_ENABLED=false docker-compose up -d
       ASCAM_EXEC_ENABLED: '${ASCAM_EXEC_ENABLED:-true}'

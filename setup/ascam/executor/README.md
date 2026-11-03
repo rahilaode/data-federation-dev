@@ -39,7 +39,7 @@ verification that fails, this is recorded as a `rollback` step. Users see no cha
 |---|---|---|
 | `ASCAM_EXEC_KNOWLEDGE_URL` | `http://ascam-knowledge-service:8000` | Knowledge Service |
 | `ASCAM_EXEC_TOKEN_FILE`, `ASCAM_EXEC_TOKEN_CLIENT` | –, `executor` | Token file and client name for Knowledge |
-| `ASCAM_EXEC_OBDF` | `bansos` | Name of the OBDF |
+| `ASCAM_EXEC_OBDF` | `npd` | Name of the OBDF |
 | `ASCAM_EXEC_TEIID_PASSWORD_FILE` | – | Teiid ManagementRealm password |
 | `ASCAM_EXEC_AGENT_TOKEN_FILE` | – | Token for the Ontop agent |
 | `ASCAM_EXEC_TEIID_JDBC_HOST`, `ASCAM_EXEC_TEIID_JDBC_PORT` | `teiid`, `31000` | Teiid address used in the validation JDBC URL |
@@ -47,6 +47,7 @@ verification that fails, this is recorded as a `rollback` step. Users see no cha
 | `ASCAM_EXEC_ENABLED` | `true` | `false` starts the service without executing plans |
 | `ASCAM_EXEC_OBDA_STRATEGY` | `bluegreen` | `bluegreen` or `restart` |
 | `ASCAM_EXEC_VIEW_STATEMENT` | `alter` | `alter` (`ALTER VIEW`) or `recreate` (`DROP VIEW` + `CREATE VIEW`), ADR-0023 |
+| `ASCAM_EXEC_FINGERPRINT` | `whole` (`per_predicate` in `docker-compose.yaml`) | `whole`: one `GROUP BY ?p` over the graph, per predicate only if that fails; `per_predicate`: one `COUNT` per candidate predicate from the start (ADR-0030) |
 
 Addresses of the OBDF components come from Knowledge; passwords and tokens come from the
 Executor's own Docker secrets, because Knowledge never returns secrets.

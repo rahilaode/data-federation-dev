@@ -1,4 +1,5 @@
-"""Case-study views (scenarios A007-A009) over the REAL artifacts in the repository (ADR-0023).
+"""Case-study views (scenarios A007-A009) over the artifacts of the social-assistance case study
+(archive/bansos; ADR-0023). The NPD case study has its own tests in test_case_study_npd.py.
 
 The VDB, mapping, and ontology are read from setup/; the Teiid runtime metadata (SYS.*,
 SYSADMIN.Views, SYSADMIN.Usage) is built from that VDB following the semantics observed in F0.7
@@ -22,9 +23,10 @@ from test_impact import impact
 from test_sync import new_obdf_with_sources, set_clients
 
 REPO = pathlib.Path(__file__).resolve().parents[5]
-VDB_XML = (REPO / 'setup/data-federation/deployments/government-vdb.xml').read_text()
-MAPPING = (REPO / 'setup/vkg-system/config/mapping.ttl').read_text()
-ONTOLOGY = (REPO / 'setup/vkg-system/config/ontology_file.ttl').read_text()
+# the social-assistance case study, kept in archive/bansos since NPD replaced it (ADR-0027)
+VDB_XML = (REPO / 'archive/bansos/data-federation/deployments/government-vdb.xml').read_text()
+MAPPING = (REPO / 'archive/bansos/vkg-system/config/mapping.ttl').read_text()
+ONTOLOGY = (REPO / 'archive/bansos/vkg-system/config/ontology_file.ttl').read_text()
 TYPES = {'varchar': 'string', 'integer': 'integer', 'date': 'date', 'timestamp': 'timestamp',
         'boolean': 'boolean'}
 B = 'http://bansos.go.id/ontology/'

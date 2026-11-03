@@ -25,7 +25,7 @@ class Settings:
     orchestrator_url: str = os.getenv('ASCAM_UI_ORCHESTRATOR_URL', 'http://ascam-orchestrator:8000')
     executor_url: str = os.getenv('ASCAM_UI_EXECUTOR_URL', 'http://ascam-executor:8000')
     agent_url: str = os.getenv('ASCAM_UI_AGENT_URL', 'http://ascam-ontop-agent:8000')
-    obdf_name: str = os.getenv('ASCAM_UI_OBDF', 'bansos')
+    obdf_name: str = os.getenv('ASCAM_UI_OBDF', 'npd')
     admin_user: str = os.getenv('ASCAM_UI_ADMIN_USER', 'admin')
     knowledge_token: str | None = field(default_factory=lambda: read_secret(
         os.getenv('ASCAM_UI_TOKEN_FILE'), 'ui'))

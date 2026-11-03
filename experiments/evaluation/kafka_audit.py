@@ -7,7 +7,7 @@ Runs INSIDE a container attached to the ascam-networks network (see evaluate.py)
 
 Classes of message:
   log            a ddl_event_log row (N_log, positive control)
-  production     a row of another source table, e.g. penerima_manfaat (N_prod, must be 0)
+  production     a row of another source table, e.g. wellbore_mud (N_prod, must be 0)
   schema_change  a Debezium schema event (DDL text, no data row)
   tombstone      an empty delete marker
   other          a shape that is not recognised (reported as it is)
@@ -22,7 +22,7 @@ import sys
 from kafka import KafkaConsumer, TopicPartition
 
 BOOTSTRAP = 'kafka:9092'
-PREFIXES = ('kemensos', 'dukcapil', 'schema-monitor-')
+PREFIXES = ('reporting', 'registry', 'schema-monitor-')
 
 
 def relevant_topics(consumer) -> list[str]:

@@ -17,11 +17,15 @@ class AgentConfig:
     artifacts_dir: Path
     mapping_name: str = 'mapping.ttl'
     ontology_name: str = 'ontology_file.ttl'
-    properties_name: str = 'government.docker.properties'
+    properties_name: str = 'npd.docker.properties'
     ontop_container: str = 'vkg-system-ontop-teiid'
     ontop_image: str = 'ontop/ontop-endpoint:4.1.1'
     ontop_input_dir: str = '/opt/ontop/input'          # path inside the Ontop container
     sparql_path: str = '/sparql'
+    # Query that tells an Ontop instance is ready (ADR-0030). It must go through Ontop, Teiid,
+    # and a source, but stay cheap: ASK { ?s ?p ?o } unfolds into the whole T-mapping, which
+    # on NPD takes 184 s through Teiid while every attempt has a 5 s timeout.
+    ready_query: str = 'ASK { ?s ?p ?o }'
     tokens_file: str | None = None
     # Blue-green OBDA layer (ADR-0022): two Ontop instances behind an nginx proxy. Every
     # instance reads its own slot and is bound to one VDB version.
@@ -53,11 +57,12 @@ def from_env() -> AgentConfig:
         artifacts_dir=Path(os.getenv('ASCAM_AGENT_ARTIFACTS_DIR', '/artifacts')),
         mapping_name=os.getenv('ASCAM_AGENT_MAPPING_NAME', 'mapping.ttl'),
         ontology_name=os.getenv('ASCAM_AGENT_ONTOLOGY_NAME', 'ontology_file.ttl'),
-        properties_name=os.getenv('ASCAM_AGENT_PROPERTIES_NAME', 'government.docker.properties'),
+        properties_name=os.getenv('ASCAM_AGENT_PROPERTIES_NAME', 'npd.docker.properties'),
         ontop_container=os.getenv('ASCAM_AGENT_ONTOP_CONTAINER', 'vkg-system-ontop-teiid'),
         ontop_image=os.getenv('ASCAM_AGENT_ONTOP_IMAGE', 'ontop/ontop-endpoint:4.1.1'),
         ontop_input_dir=os.getenv('ASCAM_AGENT_ONTOP_INPUT_DIR', '/opt/ontop/input'),
         sparql_path=os.getenv('ASCAM_AGENT_SPARQL_PATH', '/sparql'),
+        ready_query=os.getenv('ASCAM_AGENT_READY_QUERY') or 'ASK { ?s ?p ?o }',
         tokens_file=os.getenv('ASCAM_AGENT_API_TOKENS_FILE'),
         slots_dir=_path(os.getenv('ASCAM_AGENT_SLOTS_DIR')),
         proxy_runtime_dir=_path(os.getenv('ASCAM_AGENT_PROXY_RUNTIME_DIR')),

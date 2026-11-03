@@ -104,12 +104,22 @@ def check_teiid_odbc(endpoint: dict, username: str, password: str,
     return _timed(run, password)
 
 
+DEFAULT_READY_QUERY = 'ASK { ?s ?p ?o }'
+
+
+def ready_query(endpoint: dict) -> str:
+    """The query that checks the SPARQL endpoint (ADR-0030), from the target's
+    `endpoint.options.ready_query`. ASK { ?s ?p ?o } unfolds into the whole T-mapping, which is
+    too slow on a large mapping such as NPD (184 s through Teiid)."""
+    return ((endpoint or {}).get('options') or {}).get('ready_query') or DEFAULT_READY_QUERY
+
+
 def check_ontop_sparql(endpoint: dict, http: httpx.Client | None = None,
                        timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
     def run():
         client = http or httpx.Client(timeout=timeout)
         try:
-            r = client.get(_url(endpoint, '/sparql'), params={'query': 'ASK { ?s ?p ?o }'},
+            r = client.get(_url(endpoint, '/sparql'), params={'query': ready_query(endpoint)},
                            headers={'Accept': 'application/sparql-results+json'})
             if r.status_code != 200:
                 return CheckResult(False, 0, f'HTTP {r.status_code}', error=r.text[:200])

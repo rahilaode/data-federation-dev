@@ -66,7 +66,8 @@ class ExecutorWorker:
                             teiid_jdbc_port=self.settings.teiid_jdbc_port,
                             obda_strategy=self.settings.obda_strategy,
                             sparql_for=SparqlClient.from_url,
-                            view_statement=self.settings.view_statement)
+                            view_statement=self.settings.view_statement,
+                            fingerprint=self.settings.fingerprint)
         return knowledge, obdf_id, executor
 
     def process_once(self, knowledge: KnowledgeClient, obdf_id: int, executor: Executor) -> int:

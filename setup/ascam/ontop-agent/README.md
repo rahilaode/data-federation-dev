@@ -28,6 +28,12 @@ ADR-0018, ADR-0022.
 Backups are kept in `setup/vkg-system/config/ascam-backups/` (not committed). **The Ontop
 properties file is never exposed**, because it holds the JDBC password.
 
+"Answers" (after `start`, and after a reload) means that the readiness query succeeds:
+`ASCAM_AGENT_READY_QUERY`, by default `ASK { ?s ?p ?o }`. Over a large mapping that query unfolds
+into thousands of UNION branches (NPD: 5,525, 184 s through Teiid), so `docker-compose.yaml` sets
+`PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }` (ADR-0030). The
+properties file is `ASCAM_AGENT_PROPERTIES_NAME`, by default `npd.docker.properties`.
+
 ## Running
 
 ```bash

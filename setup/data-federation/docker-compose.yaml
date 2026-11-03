@@ -4,6 +4,16 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: data-federation-teiid
+    environment:
+      # Replaces WildFly's default JAVA_OPTS (standalone.conf: -Xms64m -Xmx512m ...), adding
+      # -Xss16m (ADR-0030): Teiid resolves and rewrites a UNION chain recursively, one stack level
+      # per branch (QueryResolver/SetQueryResolver, QueryRewriter.rewriteSetQuery), and with the
+      # default 1 MB thread stack the ~1 500-branch union Ontop builds for rdf:type over the NPD
+      # mapping fails with TEIID30019 StackOverflowError. -Xmx1g leaves room to plan such unions.
+      JAVA_OPTS: >-
+        -Xms64m -Xmx1g -Xss16m -XX:MetaspaceSize=96M -XX:MaxMetaspaceSize=256m
+        -Djava.net.preferIPv4Stack=true -Djboss.modules.system.pkgs=org.jboss.byteman
+        -Djava.awt.headless=true
     ports:
       - '0.0.0.0:31000:31000'
       - '0.0.0.0:18080:8080'
@@ -20,7 +30,7 @@ services:
       - teiid-standalone-data:/opt/jboss/wildfly/standalone/data
       - teiid-domain-configuration:/opt/jboss/wildfly/domain/configuration
       # The deployment folder is shared with the ASCAM Executor.
-      # It holds government-vdb.xml (Σ_S) and the scanner marker files
+      # It holds npd-vdb.xml (Σ_S) and the scanner marker files
       # (.dodeploy, .isdeploying, .deployed, .failed).
       - ./deployments:/opt/jboss/wildfly/standalone/deployments
 

@@ -670,8 +670,15 @@ not as a federation.
   SHA-256 sums; the split, the VDB, the qualified mapping and the Turtle ontology are generated
   by `setup/npd/tools/`, and the generated files are committed.
 - Three Teiid views in the virtual model `services` carry the view scenarios A007–A009
-  (ADR-0023). Seven TriplesMaps are pointed at them; every redirected TriplesMap returns the
-  same rows as before (1,111 query pairs, 3,171,165 rows compared).
+  (ADR-0023). Seven TriplesMaps are pointed at them. Compared with the original mapping on one
+  PostgreSQL database (3 November 2026): the 31 NPD queries give identical answers, and six of
+  the seven redirected predicates give identical triples (140,315). `npdv:coreIntervalBottom`
+  gives the same number of triples (8,718), but 410 values differ in their last digits: Ontop
+  evaluates NPD's own expression `"wlbCoreIntervalBottom" * 0.3048` in double precision
+  (`3080.0040000000004`), the view in exact NUMERIC (`3080.004`). A009 compares answers of the
+  same federation before and after the change, so the difference does not affect it. Qualifying
+  the table names (without the redirects) was checked on its own: 1,111 query pairs, 3,171,165
+  rows, all identical.
 - The social-assistance artifacts are moved to `archive/bansos/`, and their tests keep running.
 - **P-001 when no logical table exposes the column.** NPD lists its columns explicitly in all
   1,177 logical tables, so after `ADD COLUMN` no TriplesMap picks up the new column and the old

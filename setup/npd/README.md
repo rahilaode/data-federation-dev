@@ -51,8 +51,11 @@ docker exec -i datasources-mysql mysql -uroot -pmysql -N -B registry < tools/cat
 ```
 
 `services.py` holds the three views of the scenarios A007–A009 and the TriplesMaps that read
-them. Each redirected TriplesMap returns the same rows as before: 1,111 query pairs and
-3,171,165 rows were compared.
+them. Against the original mapping on one PostgreSQL database, the 31 NPD queries give
+identical answers and six of the seven redirected predicates identical triples; the values of
+`npdv:coreIntervalBottom` (8,718 triples) differ in their last digits for 410 triples, because
+the view computes the feet-to-metres conversion in exact NUMERIC where Ontop used double
+precision (ADR-0027).
 
 `compare_endpoints.py <reference> <tested> <queries dir>` runs the 31 NPD queries on two SPARQL
 endpoints and compares the answers as multisets, for example NPD on one PostgreSQL database

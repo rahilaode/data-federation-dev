@@ -16,7 +16,7 @@ wellbore_exploration_all."wlbNpdidWellbore") valid without touching it.
 Starts from the PostgreSQL variant of the mapping because it double-quotes the mixed-case names.
 
 Seven TriplesMaps are then pointed at the service views of tools/services.py (scenarios
-A007-A009); their answers do not change.
+A007-A009); see services.py for how their answers compare with the original.
 """
 import os
 import re

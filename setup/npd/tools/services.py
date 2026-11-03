@@ -2,9 +2,10 @@
 
 Scenarios A007-A009 test columns that reach the mapping THROUGH a Teiid view (ADR-0023). The
 NPD mapping reads tables only, so three views are added in the virtual model `services`, and
-the TriplesMaps of the affected properties are pointed at them. Every redirected TriplesMap
-returns exactly the rows and values it returned from the table (checked by
-tools/check_mapping.py and by the 31 NPD queries), so the virtual graph does not change.
+the TriplesMaps of the affected properties are pointed at them. The 31 NPD queries give the
+same answers as with the original mapping, and six of the seven predicates the same triples;
+npdv:coreIntervalBottom differs in the last digits of 410 values, because the view computes the
+conversion in exact NUMERIC where Ontop used double precision (ADR-0027).
 
   v_wellbore_mud      pass-through projection of reporting.wellbore_mud (A007, DROP through
                       a view whose projection can be narrowed with ALTER VIEW)

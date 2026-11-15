@@ -126,6 +126,16 @@ def load_usages(db: Session, version_id: int, column_id: int) -> list[dict]:
              'path': u.path, 'term_map_id': u.term_map_id} for u, iri in rows]
 
 
+def _term_map_value(db: Session, term_map_id: int | None) -> str | None:
+    """rr:column or rr:template of an object term map, as written in the mapping."""
+    if term_map_id is None:
+        return None
+    term_map = db.get(spec.TermMap, term_map_id)
+    if term_map is None or term_map.value_kind not in ('column', 'template'):
+        return None
+    return term_map.value
+
+
 def _predicate_shared(db: Session, version_id: int, predicate_iri: str,
                       column_ids: set[int]) -> bool:
     """Whether another column still uses the predicate (P-002 must not deprecate it then)."""
@@ -434,16 +444,23 @@ def _decide_drop(db, version, event, targets, report) -> ImpactReport:
             report.actions.append({'artifact': 'r2rml', 'operation': 'rewrite_logical_table',
                                    'triples_map_iri': triples_map_iri, 'column': logical_name})
 
-    predicates: dict[str, set[str]] = {}
+    # One removal per object term map, not per predicate: a TriplesMap may fill the same predicate
+    # from two columns, and only the assertion that reads the dropped column is removed
+    # (condition (ii) of the adaptation problem; the other assertion lies outside D(c, F)).
+    predicates: dict[str, set[tuple[str, str | None]]] = {}
     for target in targets:
         for usage in target.usages:
             if usage['role'] == 'literal_value' and usage['predicate_iri']:
-                predicates.setdefault(usage['predicate_iri'], set()).add(usage['triples_map'])
+                predicates.setdefault(usage['predicate_iri'], set()).add(
+                    (usage['triples_map'], _term_map_value(db, usage.get('term_map_id'))))
     for predicate in sorted(predicates):
-        for triples_map in sorted(predicates[predicate]):
+        for triples_map, object_value in sorted(predicates[predicate], key=lambda p: (p[0], p[1] or '')):
             # the TriplesMap comes from the lineage; the Executor does not guess it from the table name
-            report.actions.append({'artifact': 'r2rml', 'operation': 'remove_predicate_object_map',
-                                   'predicate_iri': predicate, 'triples_map_iri': triples_map})
+            action = {'artifact': 'r2rml', 'operation': 'remove_predicate_object_map',
+                      'predicate_iri': predicate, 'triples_map_iri': triples_map}
+            if object_value is not None:
+                action['object'] = object_value
+            report.actions.append(action)
         if _predicate_shared(db, version.id, predicate, column_ids):
             report.actions.append({'artifact': 'ontology', 'operation': 'keep_property',
                                    'predicate_iri': predicate,

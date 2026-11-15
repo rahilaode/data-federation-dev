@@ -69,11 +69,11 @@ def metadata_view():
     return meta
 
 
-def prepare(api, vdb_xml=None):
+def prepare(api, vdb_xml=None, mapping=MAPPING, ontology=ONTOLOGY):
     oid = new_obdf_with_sources(api)
     admin = fx.FakeAdmin(content=vdb_xml.encode()) if vdb_xml else None
     set_clients(api, meta=fx.FakeMetadata(metadata_view()), admin=admin,
-                agent=fx.FakeAgent(mapping=MAPPING, ontology=ONTOLOGY))
+                agent=fx.FakeAgent(mapping=mapping, ontology=ontology))
     api.put(f'/api/v1/obdf/{oid}/naming-policy',
             json={'property_iri_template': '{namespace}{column_camel}',
                   'on_collision': 'qualify_with_class', 'namespace': 'http://bansos.go.id/ontology/'})
@@ -159,3 +159,31 @@ def test_inline_column_detection():
     assert inline_columns('create virtual view profil(a string) as select 1', 'v', 'profil')
     assert not inline_columns('CREATE VIEW profil AS SELECT a FROM t', 'v', 'profil')
     assert not inline_columns(None, 'v', 'profil')
+
+
+# ── one TriplesMap filling the same predicate from two columns ─────────────────
+MAPPING_TWO_COLUMNS = MAPPING + """
+<#MapKeterangan> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT nik, pekerjaan, alamat FROM dukcapil.master_penduduk" ] ;
+    rr:subjectMap [ rr:template "http://bansos.go.id/resource/ket/{nik}" ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:keterangan ; rr:objectMap [ rr:column "pekerjaan" ] ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:keterangan ; rr:objectMap [ rr:column "alamat" ] ] .
+"""
+ONTOLOGY_TWO_COLUMNS = ONTOLOGY + 'bansos:keterangan a owl:DatatypeProperty ; rdfs:range xsd:string .\n'
+
+
+def test_drop_removes_only_the_assertion_that_reads_the_column(api):
+    """Condition (ii): the assertion that fills the same predicate from another column of the
+    same TriplesMap lies outside D(c, F) and stays; the property is therefore not deprecated."""
+    oid = prepare(api, mapping=MAPPING_TWO_COLUMNS, ontology=ONTOLOGY_TWO_COLUMNS)
+    out = impact(api, oid, operation='drop', source='dukcapil', table='master_penduduk',
+                 column='pekerjaan')
+    assert out['decision'] == 'auto', out['reasons']
+    removals = [a for a in actions_of(out, 'remove_predicate_object_map')
+                if a['triples_map_iri'].endswith('MapKeterangan')]
+    assert [(a['predicate_iri'].rsplit('/', 1)[-1], a['object']) for a in removals] == [
+        ('keterangan', 'pekerjaan')]
+    kept = {a['predicate_iri'].rsplit('/', 1)[-1] for a in actions_of(out, 'keep_property')}
+    deprecated = {a['predicate_iri'].rsplit('/', 1)[-1] for a in actions_of(out, 'deprecate_property')}
+    assert 'keterangan' in kept and 'keterangan' not in deprecated
+    assert 'pekerjaan' in deprecated                          # filled only from the dropped column

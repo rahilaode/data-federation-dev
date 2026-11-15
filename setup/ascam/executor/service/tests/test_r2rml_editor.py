@@ -64,6 +64,52 @@ def test_remove_can_be_scoped_to_one_table():
     assert count_all == 2
 
 
+TWO_COLUMNS = MAPPING + """
+<#MapKontak> a rr:TriplesMap ;
+    rr:logicalTable [ rr:sqlQuery "SELECT penerima_id, telepon, \\"Telepon2\\" FROM kemensos.kontak" ] ;
+    rr:subjectMap [ rr:template "http://bansos.go.id/resource/penerima/{penerima_id}" ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:telepon ; rr:objectMap [ rr:column "telepon" ] ] ;
+    rr:predicateObjectMap [ rr:predicate bansos:telepon ;
+                            rr:objectMap [ rr:column "\\"Telepon2\\"" ] ] .
+"""
+TELEPON = 'http://bansos.go.id/ontology/telepon'
+KONTAK = r2rml.BASE + '#MapKontak'
+
+
+def _object_columns(text, predicate_iri):
+    graph = Graph()
+    graph.parse(data=text, format='turtle', publicID=r2rml.BASE)
+    return sorted(str(column) for pom in graph.subjects(RR.predicate, None)
+                  if (pom, RR.predicate, None) in graph and str(graph.value(pom, RR.predicate)) == predicate_iri
+                  for obj in graph.objects(pom, RR.objectMap) for column in graph.objects(obj, RR.column))
+
+
+def test_remove_keeps_the_other_column_of_the_same_predicate():
+    """P-002 removes only the assertion that reads the dropped column; the same predicate filled
+    from another column of the same TriplesMap stays (condition (ii))."""
+    result, count = r2rml.remove_predicate_object_map(TWO_COLUMNS, TELEPON, triples_map_iri=KONTAK,
+                                                      object_value='telepon')
+    assert count == 1 and _object_columns(result, TELEPON) == ['"Telepon2"']
+    # the term map is matched as written, so a delimited identifier is matched too
+    result, count = r2rml.remove_predicate_object_map(TWO_COLUMNS, TELEPON, triples_map_iri=KONTAK,
+                                                      object_value='"Telepon2"')
+    assert count == 1 and _object_columns(result, TELEPON) == ['telepon']
+    # without an object every predicate-object map of the predicate goes, as before
+    _, count_all = r2rml.remove_predicate_object_map(TWO_COLUMNS, TELEPON, triples_map_iri=KONTAK)
+    assert count_all == 2
+    # an object that the TriplesMap does not read removes nothing, which apply_actions reports
+    assert r2rml.remove_predicate_object_map(TWO_COLUMNS, TELEPON, triples_map_iri=KONTAK,
+                                             object_value='fax')[1] == 0
+    with pytest.raises(r2rml.MappingError, match='not found'):
+        r2rml.apply_actions(TWO_COLUMNS, [{'operation': 'remove_predicate_object_map',
+                                           'predicate_iri': TELEPON, 'triples_map_iri': KONTAK,
+                                           'object': 'fax'}])
+    planned = r2rml.apply_actions(TWO_COLUMNS, [{'operation': 'remove_predicate_object_map',
+                                                 'predicate_iri': TELEPON, 'triples_map_iri': KONTAK,
+                                                 'object': 'telepon'}])
+    assert TELEPON in r2rml.predicates_of(planned)
+
+
 def test_missing_targets_are_reported():
     assert r2rml.remove_predicate_object_map(MAPPING, 'http://example.org/does-not-exist')[1] == 0
     with pytest.raises(r2rml.MappingError, match='not found'):

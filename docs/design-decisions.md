@@ -684,8 +684,10 @@ not as a federation.
   1,177 logical tables, so after `ADD COLUMN` no TriplesMap picks up the new column and the old
   plan had nothing to attach the property to. Knowledge now proposes a new TriplesMap
   `urn:ascam:mapping#ascam-<table>-<column>`, built from an existing TriplesMap over the same
-  single table: same subject template and class, logical table `SELECT <subject columns>,
-  "<column>" FROM <table>`. Only TriplesMaps over one table whose subject columns are plain
+  single table: the same subject template, and as logical table that TriplesMap's query with
+  `"<column>"` added to its projection (FROM and WHERE are kept, so the subjects are the same).
+  The new TriplesMap has no `rr:class`: its subjects already get the class from the original
+  TriplesMap. Only TriplesMaps over one table whose subject columns are plain
   columns are used; one proposal is made per subject template. The decision stays `hitl`
   (ADR-0021): the administrator sees the proposed TriplesMap before anything is written.
 
@@ -761,3 +763,26 @@ per request), and the Executor's whole-graph fingerprint is one `GROUP BY ?p` ov
 count (1,025,884 triples) takes 10.9 s. On a PostgreSQL copy, the whole fingerprint took 264 s
 and the per-predicate one 4.1 s for 327 predicates. Two agent tests and two Executor tests.
 The per-predicate time through Teiid has not been measured yet; it is part of Δt_adapt.
+
+## ADR-0031: P-002 removes one predicate-object map per object column
+
+*2026-11-15. Plan, Execute.*
+
+**Context.** P-002 removed every predicate-object map of predicate p in a TriplesMap. R2RML
+allows one TriplesMap to fill p from two columns, and each pair (p, column) is a separate
+assertion. Dropping one column then also removed the assertion that reads the other column,
+which lies outside D(c, F), so the result broke condition (ii) of the adaptation problem in the
+paper. Knowledge still kept p (`keep_property`), because the other column uses it. NPD does
+not contain this case: none of its 1,177 TriplesMaps uses a predicate twice (158 of its 326
+predicates are filled by more than one TriplesMap, which was already handled).
+
+**Decision.** The `remove_predicate_object_map` action carries `object`, the `rr:column` or
+`rr:template` of the object term map exactly as the mapping writes it (Knowledge stores it
+unchanged, ADR-0028). The Executor removes only predicate-object maps of p whose object map is
+that term map. Without `object` the old behaviour is kept. A predicate-object map written by
+ASCAM is still removed as text: ASCAM adds p only to a TriplesMap that does not have it, so
+such a TriplesMap has one predicate-object map for p.
+
+**Evidence.** Knowledge `test_drop_removes_only_the_assertion_that_reads_the_column`;
+Executor `test_remove_keeps_the_other_column_of_the_same_predicate` (also a delimited column
+name). Knowledge 181 and Executor 80 tests pass.

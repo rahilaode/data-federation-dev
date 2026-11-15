@@ -164,12 +164,30 @@ def add_triples_map(text: str, triples_map_iri: str, sql_query: str, subject_tem
     return result
 
 
+def _object_reads(graph: Graph, pom, object_value: str) -> bool:
+    """Whether an object map of `pom` is the term map `object_value`: the text of its
+    rr:column or rr:template exactly as the mapping writes it (Knowledge stores it unchanged)."""
+    for obj in graph.objects(pom, RR.objectMap):
+        for prop in (RR.column, RR.template):
+            if any(str(value) == object_value for value in graph.objects(obj, prop)):
+                return True
+    return False
+
+
 def remove_predicate_object_map(text: str, predicate_iri: str, table: str | None = None,
-                                triples_map_iri: str | None = None) -> tuple[str, int]:
+                                triples_map_iri: str | None = None,
+                                object_value: str | None = None) -> tuple[str, int]:
     """Removes the predicate-object maps of a given predicate (pattern P-002).
 
-    Blocks that ASCAM wrote earlier are removed as text (the rest of the file is untouched).
-    Mappings written by people can only be removed by rewriting the file from the RDF graph.
+    With `object_value`, only the predicate-object maps whose object map is that term map are
+    removed: a TriplesMap may fill the same predicate from two columns, and dropping one column
+    must keep the other assertion (condition (ii) of the adaptation problem). Without it, every
+    predicate-object map of the predicate in the target is removed.
+
+    Blocks that ASCAM wrote earlier are removed as text (the rest of the file is untouched); a
+    TriplesMap holds at most one such block per predicate, because ASCAM adds a predicate only
+    to a TriplesMap that does not have it yet. Mappings written by people can only be removed by
+    rewriting the file from the RDF graph.
     """
     if triples_map_iri and has_block(text, _pom_key(predicate_iri, triples_map_iri)):
         return remove_block(text, _pom_key(predicate_iri, triples_map_iri))
@@ -192,6 +210,8 @@ def remove_predicate_object_map(text: str, predicate_iri: str, table: str | None
             continue
         for pom in list(graph.objects(tm, RR.predicateObjectMap)):
             if (pom, RR.predicate, target) not in graph:
+                continue
+            if object_value is not None and not _object_reads(graph, pom, object_value):
                 continue
             for obj in list(graph.objects(pom, RR.objectMap)):
                 graph.remove((obj, None, None))
@@ -268,7 +288,8 @@ def apply_actions(text: str, actions: list[dict]) -> str:
         elif operation == 'remove_predicate_object_map':
             result, count = remove_predicate_object_map(result, action['predicate_iri'],
                                                         action.get('table'),
-                                                        action.get('triples_map_iri'))
+                                                        action.get('triples_map_iri'),
+                                                        action.get('object'))
             if count == 0:
                 raise MappingError(f"predicate {action['predicate_iri']} not found in the mapping")
         else:

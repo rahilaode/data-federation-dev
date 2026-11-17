@@ -786,3 +786,31 @@ such a TriplesMap has one predicate-object map for p.
 **Evidence.** Knowledge `test_drop_removes_only_the_assertion_that_reads_the_column`;
 Executor `test_remove_keeps_the_other_column_of_the_same_predicate` (also a delimited column
 name). Knowledge 181 and Executor 80 tests pass.
+
+## ADR-0032: Views that select * from a table, and table-level checks, for ADD
+
+*2026-11-18. Plan.*
+
+**Context.** P-001 always waited for approval and checked neither the views over the table
+nor the table-level conditions that DROP and RENAME check (multi-source model, trigger or
+procedure, logical table that cannot be parsed). A view that selects `*` from the table gets the
+new column when Teiid loads the next VDB version, because Teiid derives the columns of a view
+without a column list from its query (teiid-documents, Schema object DDL, p. 356). That is
+harmless for an ordinary view, but not when the view is materialized (its cache table lacks the
+column), combines branches with UNION, EXCEPT, or INTERSECT (the branches would differ in their
+number of columns), declares its columns inline (they "can be only altered to modify their
+properties", p. 357), or already has a column with the new name. The Executor stops such a plan
+when the VDB fails to load, so users were not affected, but the administrator approved the plan
+without being told.
+
+**Decision.** `views.check_view_adds` follows the views that select `*` (or `alias.*`) from the
+table, also through nested views, and reports the four cases above; a view whose definition
+cannot be parsed but seems to select `*` from the table is reported as well. Views that list
+their columns are not affected. ADD is notified, with no actions, when one of these cases or a
+table-level condition holds; otherwise it waits for approval as before.
+
+**Evidence.** Six Knowledge tests in `test_impact_views.py`: a plain `SELECT *` view and views
+that list their columns still give `hitl`; a UNION, a materialized view reached through a nested
+`SELECT *` view, inline columns, and a repeated name give `notify`. Four of them fail when the
+check is disabled. The NPD case-study tests (A001, A004 still `hitl`) and all 187 Knowledge tests
+pass.

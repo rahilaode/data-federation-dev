@@ -22,7 +22,11 @@ loaded, and the propagation continues to the views above them. The new definitio
 by removing projection items from the original definition text, so the other parts (FROM,
 WHERE, Teiid functions) are not rewritten by the parser.
 """
+import re
 from dataclasses import dataclass, field
+
+import sqlglot
+from sqlglot import exp
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,7 +34,8 @@ from sqlalchemy.orm import Session
 from .db import spec
 from .viewsql import RewriteError, inline_columns, remove_projection
 
-__all__ = ['RewriteError', 'ViewPlan', 'inline_columns', 'plan_view_drops', 'remove_projection']
+__all__ = ['RewriteError', 'ViewPlan', 'check_view_adds', 'inline_columns', 'plan_view_drops',
+           'remove_projection']
 
 
 @dataclass
@@ -119,3 +124,122 @@ def plan_view_drops(db: Session, version_id: int, column_ids: set[int],
                              'table': table.name, 'body': body,
                              'removed_columns': sorted(names)})
     return plan
+
+
+# ── ADD: views that select * from the table ───────────────────────────────────
+_STAR_TEXT = re.compile(r'(?:SELECT\s+(?:DISTINCT\s+)?|,)\s*(?:[\w"]+\s*\.\s*)?\*', re.IGNORECASE)
+_SET_OPERATIONS = tuple(getattr(exp, name) for name in ('Union', 'Except', 'Intersect')
+                        if hasattr(exp, name))
+
+
+def _star_tables(tree: exp.Expression, resolve) -> set[int]:
+    """Teiid tables whose columns a `*` or `alias.*` in any SELECT of `tree` passes on."""
+    covered: set[int] = set()
+    for select in tree.find_all(exp.Select):
+        sources = []
+        source_from = select.args.get('from_') or select.args.get('from')   # key differs by version
+        if source_from is not None:
+            sources.append(source_from.this)
+        sources += [join.this for join in select.args.get('joins') or []]
+        by_alias = {}
+        for source in sources:
+            if isinstance(source, exp.Table):
+                table_id = resolve(source.db, source.name)
+                if table_id is not None:
+                    by_alias[(source.alias_or_name or '').lower()] = table_id
+                    by_alias.setdefault(source.name.lower(), table_id)
+        for item in select.expressions:
+            inner = item.this if isinstance(item, exp.Alias) else item
+            if isinstance(inner, exp.Star):
+                covered |= set(by_alias.values())
+            elif isinstance(inner, exp.Column) and isinstance(inner.this, exp.Star):
+                table_id = by_alias.get((inner.table or '').lower())
+                if table_id is not None:
+                    covered.add(table_id)
+    return covered
+
+
+def check_view_adds(db: Session, version_id: int, table_id: int, column: str,
+                    vdb_xml: str | None = None) -> list[str]:
+    """Reasons why a new column of `table_id` cannot be added safely (pattern P-001, ADR-0032).
+
+    A view that selects `*` from the table, directly or through other such views, gets the new
+    column when Teiid loads the next VDB version. That fails, or gives a wrong view, when the
+    view is materialized (its cache table lacks the column), uses UNION, EXCEPT, or INTERSECT
+    (the branches would differ in their number of columns), declares its columns inline (Teiid
+    does not add columns to such a view), or already has a column of that name. A view whose
+    definition cannot be parsed but seems to select `*` from the table is reported as well.
+    Views that list their columns are not affected.
+    """
+    tables = {t.id: t for t in db.execute(
+        select(spec.TeiidTable).where(spec.TeiidTable.spec_version_id == version_id)).scalars()}
+    models = {m.id: m.name for m in db.execute(
+        select(spec.TeiidModel).where(spec.TeiidModel.spec_version_id == version_id)).scalars()}
+    views = {v.table_id: v for v in db.execute(
+        select(spec.TeiidView).where(spec.TeiidView.spec_version_id == version_id)).scalars()}
+    uses: dict[int, set[int]] = {}
+    for dep in db.execute(select(spec.TeiidDependency)
+                          .where(spec.TeiidDependency.spec_version_id == version_id)).scalars():
+        uses.setdefault(dep.dependent_table_id, set()).add(dep.used_table_id)
+    column_names: dict[int, set[str]] = {}
+    for col in db.execute(select(spec.TeiidColumn)
+                          .where(spec.TeiidColumn.spec_version_id == version_id)).scalars():
+        column_names.setdefault(col.table_id, set()).add(col.name.lower())
+
+    def resolve(schema: str, name: str) -> int | None:
+        matches = [t.id for t in tables.values() if t.name.lower() == (name or '').lower()
+                   and (not schema or models[t.model_id].lower() == schema.lower())]
+        return matches[0] if len(matches) == 1 else None
+
+    def label(tid: int) -> str:
+        return f'{models[tables[tid].model_id]}.{tables[tid].name}'
+
+    reasons: list[str] = []
+    covered, done = {table_id}, set()
+    changed = True
+    while changed:                                     # nested views: until nothing new is covered
+        changed = False
+        for view_id, used in uses.items():
+            if view_id in done or not used & covered or view_id not in tables:
+                continue
+            table = tables[view_id]
+            if table.kind not in ('view', 'materialized_view'):
+                continue
+            view = views.get(view_id)
+            name, read = label(view_id), ', '.join(sorted(label(t) for t in used & covered))
+            tree = None
+            if view is not None and view.parse_status == 'ok':
+                try:
+                    tree = sqlglot.parse_one(view.body)
+                except Exception:                      # noqa: BLE001
+                    tree = None
+            if tree is None:
+                body = view.body if view is not None else ''
+                if _STAR_TEXT.search(body or ''):
+                    reasons.append(f'the definition of view {name}, which reads {read}, cannot be '
+                                   'parsed, so it is unknown whether it gets the new column')
+                    done.add(view_id)
+                    covered.add(view_id)
+                    changed = True
+                continue
+            if not _star_tables(tree, resolve) & covered:
+                done.add(view_id)
+                continue
+            done.add(view_id)
+            covered.add(view_id)
+            changed = True
+            if table.kind == 'materialized_view':
+                reasons.append(f'view {name} selects * from {read} and is materialized; its '
+                               'cache table would lack the new column')
+            if _SET_OPERATIONS and (isinstance(tree, _SET_OPERATIONS) or tree.find(*_SET_OPERATIONS)) \
+                    and any(not _star_tables(branch, resolve) & covered
+                            for branch in tree.find_all(exp.Select)):
+                reasons.append(f'view {name} selects * from {read} in a UNION, EXCEPT, or '
+                               'INTERSECT; its branches would differ in their number of columns')
+            if inline_columns(vdb_xml, models[table.model_id], table.name):
+                reasons.append(f'view {name} selects * from {read} but declares its columns '
+                               'inline; Teiid does not add the new column to it')
+            if column.lower() in column_names.get(view_id, set()):
+                reasons.append(f'view {name} selects * from {read} and already has a column '
+                               f'named {column}')
+    return reasons

@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from sqlglot import exp
 
 from .db import registry, spec
-from .views import plan_view_drops
+from .views import check_view_adds, plan_view_drops
 
 AUTO_ROLES = {'literal_value', 'projection_only'}
 HITL_ROLES = {'iri_template', 'join_key', 'sql_predicate', 'dynamic_predicate'}
@@ -567,11 +567,22 @@ def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
 
 def _decide_add(db, obdf_id, version, event, table_columns, existing, report,
                 dbms: str | None = None) -> ImpactReport:
-    """ADD always waits for approval: ASCAM proposes the property name and domain from the
-    naming policy, and the administrator approves or revises them in the console (ADR-0021,
-    ADR-0024)."""
+    """ADD waits for approval: ASCAM proposes the property name and domain from the naming
+    policy, and the administrator approves or revises them in the console (ADR-0021,
+    ADR-0024). It is notified instead, with no actions, when the table-level conditions of
+    DROP and RENAME hold or a view that selects * from the table cannot take the new column
+    (ADR-0032)."""
     column = (event.get('column') or '').lower()
     target_table = table_columns[0]
+    table_id = db.get(spec.TeiidColumn, target_table.column_id).table_id
+    vdb_xml = db.execute(select(spec.Artifact.content).where(
+        spec.Artifact.spec_version_id == version.id, spec.Artifact.kind == 'vdb_xml')).scalar()
+    blocking = _table_flags(db, version.id, [target_table]) + check_view_adds(
+        db, version.id, table_id, event.get('column') or '', vdb_xml)
+    if blocking:
+        report.decision = 'notify'
+        report.reasons.extend(blocking)
+        return report
     report.decision = 'hitl'
     report.actions.append({'artifact': 'vdb', 'operation': 'add_column',
                            'model': target_table.model, 'table': target_table.table,

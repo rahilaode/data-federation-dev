@@ -187,3 +187,102 @@ def test_drop_removes_only_the_assertion_that_reads_the_column(api):
     deprecated = {a['predicate_iri'].rsplit('/', 1)[-1] for a in actions_of(out, 'deprecate_property')}
     assert 'keterangan' in kept and 'keterangan' not in deprecated
     assert 'pekerjaan' in deprecated                          # filled only from the dropped column
+
+
+# ── ADD: views that select * from the table (ADR-0032) ─────────────────────────
+MP = ('dukcapil', 'master_penduduk')
+MP_COLUMNS = (('nik', 'c1'), ('tanggal_lahir', 'c2'), ('pekerjaan', 'c5'), ('alamat', 'c6'))
+
+
+def column_def_of(view, name, uid, position):
+    return column('v', view, name, uid, position)
+
+
+def star_view(meta, name, body, uid, columns=MP_COLUMNS, reads=MP, materialized=False):
+    """A view `v.<name>` whose columns pass on the columns of `reads` through `*`."""
+    meta['tables'].append({'SchemaName': 'v', 'Name': name, 'Type': 'Table', 'NameInSource': None,
+                           'IsPhysical': False, 'UID': uid})
+    meta['views'].append({'SchemaName': 'v', 'Name': name, 'Body': body})
+    if materialized:
+        meta.setdefault('matviews', []).append({'SchemaName': 'v', 'Name': name})
+    for position, (column, used_uid) in enumerate(columns, start=1):
+        col_uid = f'{uid}c{position}'
+        meta['columns'].append(column_def_of(name, column, col_uid, position))
+        meta['usage'].append(usage(col_uid, 'v', name, column, used_uid, *reads, column))
+
+
+def prepare_add(api, meta, vdb_xml=None):
+    oid = new_obdf_with_sources(api)
+    admin = fx.FakeAdmin(content=vdb_xml.encode()) if vdb_xml else None
+    set_clients(api, meta=fx.FakeMetadata(meta), admin=admin,
+                agent=fx.FakeAgent(mapping=MAPPING, ontology=ONTOLOGY))
+    api.put(f'/api/v1/obdf/{oid}/naming-policy',
+            json={'property_iri_template': '{namespace}{column_camel}',
+                  'on_collision': 'qualify_with_class', 'namespace': 'http://bansos.go.id/ontology/'})
+    assert api.post(f'/api/v1/obdf/{oid}/sync').status_code == 200
+    return oid
+
+
+def add_event(api, oid, column='email'):
+    return impact(api, oid, operation='add', source='dukcapil', table='master_penduduk',
+                  column=column, column_type='varchar(100)')
+
+
+def test_add_with_plain_star_view_waits_for_approval(api):
+    """A view that selects * gets the column when Teiid loads the VDB; nothing to report."""
+    meta = metadata_view()
+    star_view(meta, 'semua', 'SELECT * FROM dukcapil.master_penduduk', 't7')
+    out = add_event(api, prepare_add(api, meta))
+    assert out['decision'] == 'hitl', out['reasons']
+    assert not any('selects *' in r for r in out['reasons'])
+
+
+def test_add_is_notified_for_star_view_in_union(api):
+    meta = metadata_view()
+    star_view(meta, 'gabung', 'SELECT * FROM dukcapil.master_penduduk UNION ALL '
+                              'SELECT nik, tanggal_lahir, pekerjaan, alamat FROM dukcapil.master_penduduk',
+              't7')
+    out = add_event(api, prepare_add(api, meta))
+    assert out['decision'] == 'notify' and out['actions'] == []
+    assert any('v.gabung' in r and 'UNION' in r for r in out['reasons'])
+
+
+def test_add_reaches_materialized_view_through_nested_star_views(api):
+    meta = metadata_view()
+    star_view(meta, 'semua', 'SELECT * FROM dukcapil.master_penduduk', 't7')
+    star_view(meta, 'cache', 'SELECT * FROM v.semua', 't8',
+              columns=tuple((n, f't7c{i}') for i, (n, _) in enumerate(MP_COLUMNS, start=1)),
+              reads=('v', 'semua'), materialized=True)
+    out = add_event(api, prepare_add(api, meta))
+    assert out['decision'] == 'notify'
+    assert any('v.cache' in r and 'materialized' in r for r in out['reasons'])
+    assert not any(r.startswith('view v.semua ') for r in out['reasons'])   # plain view: fine
+
+
+def test_add_is_notified_for_star_view_with_inline_columns(api):
+    meta = metadata_view()
+    star_view(meta, 'semua', 'SELECT * FROM dukcapil.master_penduduk', 't7')
+    vdb_xml = ('<vdb><model name="v" type="VIRTUAL"><metadata type="DDL"><![CDATA['
+               'CREATE VIEW semua (nik string, tanggal_lahir date, pekerjaan string, alamat string) '
+               'AS SELECT * FROM dukcapil.master_penduduk;]]></metadata></model></vdb>')
+    out = add_event(api, prepare_add(api, meta, vdb_xml=vdb_xml))
+    assert out['decision'] == 'notify'
+    assert any('v.semua' in r and 'inline' in r for r in out['reasons'])
+
+
+def test_add_is_notified_when_star_view_already_has_the_name(api):
+    """p.* from the table and r.label from another view: adding `label` repeats a name."""
+    meta = metadata_view()
+    star_view(meta, 'gabung', 'SELECT p.*, r.label FROM dukcapil.master_penduduk AS p '
+                              'JOIN v.label AS r ON p.nik = r.nik', 't7',
+              columns=MP_COLUMNS + (('label', 'cv7'),))
+    meta['usage'][-1] = usage('t7c5', 'v', 'gabung', 'label', 'cv7', 'v', 'label', 'label')
+    out = add_event(api, prepare_add(api, meta), column='label')
+    assert out['decision'] == 'notify'
+    assert any('v.gabung' in r and 'already has a column named label' in r for r in out['reasons'])
+
+
+def test_add_ignores_views_that_list_their_columns(api):
+    """v.profil lists its columns, so a new column of master_penduduk does not reach it."""
+    out = add_event(api, prepare_add(api, metadata_view()))
+    assert out['decision'] == 'hitl', out['reasons']

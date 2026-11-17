@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Running example of the paper, extended so that every Plan branch of ASCAM can be validated
+     (docs/running-example.md). Two autonomous sources: S1 = PostgreSQL `reporting` (model src),
+     S2 = MySQL `registry` (model reg); the views are in model v. Columns have no NAMEINSOURCE,
+     so each reads the source column of its own name (src(ĉ) = ĉ), except staff.town_legacy. -->
+<vdb name="example" version="1">
+    <description>Running example: person/v_active of the paper plus one small table per Plan branch</description>
+
+    <!-- S1 (PostgreSQL, database reporting, schema public) -->
+    <model visible="true" name="src">
+        <source name="reporting" translator-name="postgresql" connection-jndi-name="java:/pgsql-reporting"/>
+        <metadata type="DDL"><![CDATA[
+            CREATE FOREIGN TABLE "person" (
+              "id" integer NOT NULL,
+              "active" boolean NOT NULL,
+              "first_name" string(50),
+              "nickname" string(50),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"person"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "contact" (
+              "id" integer NOT NULL,
+              "phone" string(20),
+              "phone2" string(20),
+              "email" string(50),
+              "fax" string(20),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"contact"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "product" (
+              "id" integer NOT NULL,
+              "label" string(50),
+              "price" bigdecimal(10,2),
+              "discount" bigdecimal(4,2),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"product"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "note" (
+              "id" integer NOT NULL,
+              "body" string(100),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"note"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "memo" (
+              "id" integer NOT NULL,
+              "body" string(100),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"memo"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "doc" (
+              "id" integer NOT NULL,
+              "body" string(100),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"doc"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "staff" (
+              "id" integer NOT NULL,
+              "city" string(50),
+              "town_legacy" string(50) OPTIONS(NAMEINSOURCE '"town"'),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"staff"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "city" (
+              "id" integer NOT NULL,
+              "name" string(50),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"city"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "account" (
+              "id" integer NOT NULL,
+              "owner" string(50),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"account"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "event" (
+              "id" integer NOT NULL,
+              "kind" string(20),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"event"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "audit" (
+              "id" integer NOT NULL,
+              "action" string(20),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"audit"', UPDATABLE 'FALSE');
+
+            CREATE FOREIGN TABLE "tool" (
+              "id" integer NOT NULL,
+              "label" string(50),
+              PRIMARY KEY ("id")
+            ) OPTIONS(NAMEINSOURCE '"tool"', UPDATABLE 'FALSE');
+        ]]></metadata>
+    </model>
+
+    <!-- S2 (MySQL, database registry) -->
+    <model visible="true" name="reg">
+        <source name="registry" translator-name="mysql5" connection-jndi-name="java:/mysql-registry"/>
+        <metadata type="DDL"><![CDATA[
+            CREATE FOREIGN TABLE "member" (
+              "member_id" integer NOT NULL,
+              "nama" string(50),
+              "panggilan" string(50),
+              "phone" string(20),
+              PRIMARY KEY ("member_id")
+            ) OPTIONS(NAMEINSOURCE '`member`', UPDATABLE 'FALSE');
+        ]]></metadata>
+    </model>
+
+    <!-- Views (Σ_V) -->
+    <model visible="true" type="VIRTUAL" name="v">
+        <metadata type="DDL"><![CDATA[
+            CREATE VIEW "v_active" AS SELECT "id", "first_name" AS "name" FROM "src"."person" WHERE "active" = TRUE;
+
+            CREATE VIEW "v_net_price" AS SELECT "id", "price" * (1 - "discount") AS "net_price" FROM "src"."product";
+
+            CREATE VIEW "v_note_body" AS SELECT "body" FROM "src"."note";
+
+            CREATE VIEW "v_memo" ("id" integer, "body" string) AS SELECT "id", "body" FROM "src"."memo";
+
+            CREATE VIEW "v_doc_cache" OPTIONS (MATERIALIZED 'TRUE') AS SELECT "id", "body" FROM "src"."doc";
+
+            CREATE VIEW "v_city_all" AS SELECT * FROM "src"."city";
+
+            CREATE VIEW "v_events" AS SELECT * FROM "src"."event" UNION ALL SELECT "id", "kind" FROM "src"."event";
+        ]]></metadata>
+    </model>
+</vdb>

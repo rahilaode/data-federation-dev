@@ -1,16 +1,20 @@
 """
-ASCAM evaluation scenarios: the schema change applied to a source and how to undo it.
-Every scenario must give the same result when it is run again, so the values of a column
-that is dropped are copied first and written back after the run.
+Scenarios of the running example (docs/running-example.md): one schema change per Plan branch
+of the paper, with how to undo it. Every scenario must give the same result when it is run
+again, so the values of a column that is dropped are copied first and written back after the run.
+
+  r01-r12  DROP and RENAME (P-002, P-003, and the notification conditions of Table 1)
+  r13-r18  ADD (P-001) on S1 = reporting (PostgreSQL)
+  r19-r21  the three operators on S2 = registry (MySQL)
 """
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
-# NPD case study (ADR-0027): reporting = PostgreSQL (public schema), registry = MySQL
 PG = ['docker', 'exec', 'datasources-pgsql', 'psql', '-U', 'postgres', '-d', 'reporting', '-tAc']
 MY = ['docker', 'exec', 'datasources-mysql', 'mysql', '-umysql', '-pmysql', '-N', '-B',
       'registry', '-e']
+EX = 'http://example.org/'
 
 
 def run(command: list[str], sql: str) -> str:
@@ -37,7 +41,7 @@ class Scenario:
     code: str
     title: str
     pattern: str
-    decision: str                       # expected D11 decision
+    decision: str                       # expected decision: auto, hitl, or notify
     source: str
     table: str
     column: str
@@ -46,16 +50,16 @@ class Scenario:
     prepare: Callable[[], str] | None = None
     predicate: str | None = None        # predicate expected to change
     note: str = ''
-    # Fills the new column so that "the new query returns rows" can be tested (A001)
     fill_data: Callable[[], str] | None = None
-    # Text fragments that must appear in the reasons of a non-automatic decision (this checks
-    # the reason, not only the decision)
+    # Text fragments that must appear together in one reason of the plan, so that the plan is
+    # checked for the reason it was designed for, not only for its decision
     reasons_contain: tuple[str, ...] = ()
-    view: str | None = None             # Teiid view the column passes through (A007-A009)
+    view: str | None = None             # Teiid view that the notification must name
+    branch: str = ''                    # the Plan branch of the paper that this scenario exercises
+    new_column: str | None = None       # the new name of a RENAME
+    expect: dict = field(default_factory=dict)   # expectations after the treatment (queries.py)
 
 
-# NPD names are mixed case: PostgreSQL needs them double-quoted (ADR-0029), MySQL is run in its
-# default mode here, so backticks are used there.
 def _pg_exists(table: str, column: str) -> bool:
     return pg("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' "
               f"AND table_name='{table}' AND column_name='{column}'") == '1'
@@ -66,188 +70,218 @@ def _my_exists(table: str, column: str) -> bool:
               f"AND table_name='{table}' AND column_name='{column}'").strip() == '1'
 
 
-def _pg_drop(table: str, column: str, key: list[str], sql_type: str):
-    """apply/restore/prepare of a DROP on PostgreSQL that can be run again: the values are copied
-    to ascam_backup_<column> before the first run and written back by restore."""
-    backup = f'ascam_backup_{column.lower()}'
-    keys = ', '.join(f'"{k}"' for k in key)
-    join = ' AND '.join(f'c."{k}" = t."{k}"' for k in key)
+def _pg_drop(table: str, column: str, sql_type: str, key: str = 'id', after: str | None = None):
+    """prepare/apply/restore of a DROP on PostgreSQL that can be run again: the values are
+    copied to ascam_backup_<table>_<column> before the first run and written back by restore.
+    `key` identifies a row (another column when the key itself is dropped); `after` runs at the
+    end of the restore, e.g. to recreate a primary key (not a column operation, so the schema
+    monitor does not log it)."""
+    backup = f'ascam_backup_{table}_{column}'
 
     def prepare() -> str:
         if not _pg_exists(table, column):
             return 'column not restored yet; backup not recreated'
-        return pg(f'CREATE TABLE IF NOT EXISTS public.{backup} AS SELECT {keys}, "{column}" FROM public."{table}"')
+        return pg(f'CREATE TABLE IF NOT EXISTS public.{backup} AS SELECT {key}, {column} FROM public.{table}')
 
     def apply() -> str:
-        return pg(f'ALTER TABLE public."{table}" DROP COLUMN "{column}"')
+        return pg(f'ALTER TABLE public.{table} DROP COLUMN {column}')
 
     def restore() -> str:
         if _pg_exists(table, column):
-            # no DDL runs, so the harness must not wait for a restore event (finding of
-            # evaluation 20260924T071746 in the first case study)
-            return 'clean'
-        pg(f'ALTER TABLE public."{table}" ADD COLUMN "{column}" {sql_type}')
-        pg(f'UPDATE public."{table}" t SET "{column}" = c."{column}" FROM public.{backup} c WHERE {join}')
-        return 'restored: ' + pg(f'SELECT count(*) FROM public."{table}" WHERE "{column}" IS NOT NULL')
+            return 'clean'                         # no DDL runs: the harness waits for no event
+        pg(f'ALTER TABLE public.{table} ADD COLUMN {column} {sql_type}')
+        pg(f'UPDATE public.{table} t SET {column} = c.{column} FROM public.{backup} c WHERE c.{key} = t.{key}')
+        if after:
+            pg(after)
+        return 'restored: ' + pg(f'SELECT count(*) FROM public.{table} WHERE {column} IS NOT NULL')
     return prepare, apply, restore
 
 
-def _my_drop(table: str, column: str, key: list[str], sql_type: str):
-    backup = f'ascam_backup_{column.lower()}'
-    keys = ', '.join(f'`{k}`' for k in key)
-    join = ' AND '.join(f'c.`{k}` = t.`{k}`' for k in key)
+def _pg_rename(table: str, column: str, new: str):
+    def apply() -> str:
+        return pg(f'ALTER TABLE public.{table} RENAME COLUMN {column} TO {new}')
+
+    def restore() -> str:
+        if not _pg_exists(table, new):
+            return 'clean'
+        return 'restored: ' + pg(f'ALTER TABLE public.{table} RENAME COLUMN {new} TO {column}')
+    return apply, restore
+
+
+def _pg_add(table: str, column: str, sql_type: str, fill: str | None = None):
+    def apply() -> str:
+        return pg(f'ALTER TABLE public.{table} ADD COLUMN {column} {sql_type}')
+
+    def restore() -> str:
+        if not _pg_exists(table, column):
+            return 'clean'
+        return 'restored: ' + pg(f'ALTER TABLE public.{table} DROP COLUMN {column}')
+
+    def fill_data() -> str:
+        return pg(f'UPDATE public.{table} SET {column} = {fill}')
+    return apply, restore, (fill_data if fill else None)
+
+
+def _my_drop(table: str, column: str, sql_type: str, key: str):
+    backup = f'ascam_backup_{table}_{column}'
 
     def prepare() -> str:
         if not _my_exists(table, column):
             return 'column not restored yet; backup not recreated'
-        return my(f'CREATE TABLE IF NOT EXISTS {backup} AS SELECT {keys}, `{column}` FROM `{table}`')
+        return my(f'CREATE TABLE IF NOT EXISTS {backup} AS SELECT {key}, {column} FROM {table}')
 
     def apply() -> str:
-        return my(f'ALTER TABLE `{table}` DROP COLUMN `{column}`')
+        return my(f'ALTER TABLE {table} DROP COLUMN {column}')
 
     def restore() -> str:
         if _my_exists(table, column):
             return 'clean'
-        my(f'ALTER TABLE `{table}` ADD COLUMN `{column}` {sql_type}')
-        my(f'UPDATE `{table}` t JOIN {backup} c ON {join} SET t.`{column}` = c.`{column}`')
-        return 'restored: ' + my(f'SELECT count(*) FROM `{table}` WHERE `{column}` IS NOT NULL')
+        my(f'ALTER TABLE {table} ADD COLUMN {column} {sql_type}')
+        my(f'UPDATE {table} t JOIN {backup} c ON c.{key} = t.{key} SET t.{column} = c.{column}')
+        return 'restored: ' + my(f'SELECT count(*) FROM {table} WHERE {column} IS NOT NULL')
     return prepare, apply, restore
 
 
-# ── A001: new column on reporting (PostgreSQL) ─────────────────────────────────
-def a001_apply() -> str:
-    return pg('ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2)')
+def _my_rename(table: str, column: str, new: str):
+    def apply() -> str:
+        return my(f'ALTER TABLE {table} RENAME COLUMN {column} TO {new}')
+
+    def restore() -> str:
+        if not _my_exists(table, new):
+            return 'clean'
+        # the MySQL client prints nothing when ALTER succeeds: the marker tells the harness that
+        # a DDL ran and that it must wait for the restore event
+        return 'restored: ' + my(f'ALTER TABLE {table} RENAME COLUMN {new} TO {column}')
+    return apply, restore
 
 
-def a001_fill_data() -> str:
-    return pg('UPDATE public.wellbore_mud SET "wlbMudPh" = 8.5 + wellbore_mud_id / 10.0 '
-              'WHERE wellbore_mud_id <= 3')
+def _my_add(table: str, column: str, sql_type: str, fill: str | None = None):
+    def apply() -> str:
+        return my(f'ALTER TABLE {table} ADD COLUMN {column} {sql_type}')
+
+    def restore() -> str:
+        if not _my_exists(table, column):
+            return 'clean'
+        return 'restored: ' + my(f'ALTER TABLE {table} DROP COLUMN {column}')
+
+    def fill_data() -> str:
+        return my(f'UPDATE {table} SET {column} = {fill}')
+    return apply, restore, (fill_data if fill else None)
 
 
-def a001_restore() -> str:
-    if not _pg_exists('wellbore_mud', 'wlbMudPh'):
-        return 'clean'
-    return 'restored: ' + pg('ALTER TABLE public.wellbore_mud DROP COLUMN "wlbMudPh"')
+def _scenario(code, title, pattern, decision, source, table, column, ops, **kw) -> Scenario:
+    """ops: (prepare, apply, restore) for a DROP, (apply, restore) for a RENAME, and
+    (apply, restore, fill_data) for an ADD."""
+    if pattern == 'P-002':
+        prepare, apply, restore = ops
+        kw.setdefault('prepare', prepare)
+    elif pattern == 'P-001':
+        apply, restore, fill = ops
+        kw.setdefault('fill_data', fill)
+    else:
+        apply, restore = ops
+    return Scenario(code=code, title=title, pattern=pattern, decision=decision, source=source,
+                    table=table, column=column, apply=apply, restore=restore, **kw)
 
 
-# ── A002: column dropped on reporting ─────────────────────────────────────────
-a002_prepare, a002_apply, a002_restore = _pg_drop(
-    'wellbore_casing_and_lot', 'wlbLotMudDencity', ['wellbore_casing_and_lot_id'], 'NUMERIC(13,6)')
+R = 'reporting'
+SCENARIOS = {s.code: s for s in [
+    # ── DROP and RENAME on S1 (PostgreSQL) ──────────────────────────────────────────
+    _scenario('r01', 'DROP COLUMN first_name on person (Example ex:dependents)', 'P-002', 'auto',
+              R, 'person', 'first_name', _pg_drop('person', 'first_name', 'VARCHAR(50)'),
+              predicate=EX + 'name', view='v.v_active',
+              branch='P-002: W = {v_active.name}, M_c = {a2}; ex:name is orphaned and deprecated',
+              note='v_active is narrowed with ALTER VIEW; ex:name disappears from the graph'),
+    _scenario('r02', 'RENAME COLUMN first_name TO given_name on person (Example ex:repairs)', 'P-003',
+              'auto', R, 'person', 'first_name', _pg_rename('person', 'first_name', 'given_name'), new_column='given_name',
+              predicate=EX + 'name',
+              branch='P-003: Σ\' = Σ[src(ĉ) := given_name]; M and T unchanged (repair (a))',
+              note='answers must be identical'),
+    _scenario('r03', 'DROP COLUMN active on person (used in WHERE of v_active)', 'P-002', 'notify',
+              R, 'person', 'active', _pg_drop('person', 'active', 'BOOLEAN'),
+              predicate=EX + 'name', view='v.v_active', reasons_contain=('WHERE', 'v.v_active'),
+              branch='notify: weakest link predicate (rows would change)'),
+    _scenario('r04', 'DROP COLUMN id on person (primary key, IRI template)', 'P-002', 'notify',
+              R, 'person', 'id', _pg_drop('person', 'id', 'INTEGER', key='first_name',
+                                          after='ALTER TABLE public.person ADD PRIMARY KEY (id)'),
+              predicate=EX + 'nickname', reasons_contain=('primary key',),
+              branch='notify: ĉ is in the primary key; role IRI template'),
+    _scenario('r05', 'RENAME COLUMN city TO town on staff (town is already read)', 'P-003', 'notify',
+              R, 'staff', 'city', _pg_rename('staff', 'city', 'town'), new_column='town',
+              predicate=EX + 'city', reasons_contain=('already used', 'town_legacy'),
+              branch='notify: another column of τ̂ already reads c\''),
+    _scenario('r06', 'DROP COLUMN phone on contact (ex:phone also filled from phone2)', 'P-002', 'auto',
+              R, 'contact', 'phone', _pg_drop('contact', 'phone', 'VARCHAR(20)'),
+              predicate=EX + 'phone',
+              branch='P-002: only the assertion of phone is removed; ex:phone is kept (ADR-0031)'),
+    _scenario('r07', 'DROP COLUMN fax on contact (projection only)', 'P-002', 'auto',
+              R, 'contact', 'fax', _pg_drop('contact', 'fax', 'VARCHAR(20)'),
+              predicate=EX + 'email',
+              branch='P-002: rw_c removes fax from the query; ex:email is orphaned but still populated'),
+    _scenario('r08', 'DROP COLUMN nickname on person (ex:nickname also filled from S2)', 'P-002', 'auto',
+              R, 'person', 'nickname', _pg_drop('person', 'nickname', 'VARCHAR(50)'),
+              predicate=EX + 'nickname',
+              branch='P-002: ex:nickname is kept because TM_Member (MySQL) still populates it'),
+    _scenario('r09', 'DROP COLUMN discount on product (used in a view expression)', 'P-002', 'notify',
+              R, 'product', 'discount', _pg_drop('product', 'discount', 'NUMERIC(4,2)'),
+              predicate=EX + 'netPrice', view='v.v_net_price',
+              reasons_contain=('expression', 'v.v_net_price'),
+              branch='notify: weakest link expression (values would change)'),
+    _scenario('r10', 'DROP COLUMN body on note (view v_note_body would lose all its columns)', 'P-002',
+              'notify', R, 'note', 'body', _pg_drop('note', 'body', 'VARCHAR(100)'),
+              predicate=EX + 'noteBody', view='v.v_note_body',
+              reasons_contain=('v.v_note_body', 'lose all'),
+              branch='notify: a view passing ĉ on would lose all its columns'),
+    _scenario('r11', 'DROP COLUMN body on memo (view v_memo declares its columns inline)', 'P-002',
+              'notify', R, 'memo', 'body', _pg_drop('memo', 'body', 'VARCHAR(100)'),
+              predicate=EX + 'memoBody', view='v.v_memo', reasons_contain=('v.v_memo', 'inline'),
+              branch='notify: a view passing ĉ on declares its columns inline'),
+    _scenario('r12', 'DROP COLUMN body on doc (view v_doc_cache is materialized)', 'P-002', 'notify',
+              R, 'doc', 'body', _pg_drop('doc', 'body', 'VARCHAR(100)'),
+              predicate=EX + 'docBody', view='v.v_doc_cache',
+              reasons_contain=('materialized', 'v.v_doc_cache'),
+              branch='notify: a view passing ĉ on is materialized'),
 
+    # ── ADD on S1 (PostgreSQL) ──────────────────────────────────────────────────────
+    _scenario('r13', 'ADD COLUMN population on city (rr:tableName map; v_city_all selects *)', 'P-001',
+              'hitl', R, 'city', 'population', _pg_add('city', 'population', 'INTEGER', 'id * 1000'),
+              predicate=EX + 'population',
+              branch='P-001, X = {TM_City}: one predicate-object map is added; the plain SELECT * '
+                     'view is no notification condition'),
+    _scenario('r14', 'ADD COLUMN status on account (two classes and a map without a class)', 'P-001',
+              'hitl', R, 'account', 'status', _pg_add('account', 'status', 'VARCHAR(20)', "'open'"),
+              predicate=EX + 'status', reasons_contain=('more than one class',),
+              branch='P-001, several classes: ASCAM proposes ex:Account; X_C = {TM_Account, '
+                     'TM_AccountRecord}, TM_Customer is left out'),
+    _scenario('r15', 'ADD COLUMN birth_date on person (every query lists its columns)', 'P-001',
+              'hitl', R, 'person', 'birth_date', _pg_add('person', 'birth_date', 'DATE', "DATE '2000-01-01'"),
+              predicate=EX + 'birthDate', reasons_contain=('NEW TriplesMap',),
+              branch='P-001, X = ∅: a new triples map from TM_PersonNick (same template, no class)'),
+    _scenario('r16', 'ADD COLUMN actor on audit (no triples map reads audit)', 'P-001', 'hitl',
+              R, 'audit', 'actor', _pg_add('audit', 'actor', 'VARCHAR(20)', "'system'"),
+              reasons_contain=('only the VDB column',),
+              branch='P-001, X_C = ∅: only Σ changes; M and T stay as they are',
+              expect={'property': False}),
+    _scenario('r17', 'ADD COLUMN severity on event (v_events selects * in a UNION)', 'P-001', 'notify',
+              R, 'event', 'severity', _pg_add('event', 'severity', 'VARCHAR(10)'),
+              view='v.v_events', reasons_contain=('v.v_events', 'UNION'),
+              branch='notify (ADR-0032): a view that gains c through * combines branches with UNION',
+              expect={'property': False}),
+    _scenario('r18', 'ADD COLUMN weight on tool (reuses the deprecated ex:weight)', 'P-001', 'hitl',
+              R, 'tool', 'weight', _pg_add('tool', 'weight', 'NUMERIC(6,2)', '1.5'),
+              predicate=EX + 'weight', reasons_contain=('deprecated',),
+              branch='P-001, reuse: same domain and range; deprecated(ex:weight) is withdrawn'),
 
-# ── A003: column renamed on reporting (joins wells to companies of registry) ───
-def a003_apply() -> str:
-    return pg('ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" '
-              'TO "wlbDrillingCompany"')
-
-
-def a003_restore() -> str:
-    if not _pg_exists('wellbore_exploration_all', 'wlbDrillingCompany'):
-        return 'clean'
-    return 'restored: ' + pg('ALTER TABLE public.wellbore_exploration_all RENAME COLUMN '
-                             '"wlbDrillingCompany" TO "wlbDrillingOperator"')
-
-
-# ── A004: new column on registry (MySQL) ──────────────────────────────────────
-def a004_apply() -> str:
-    return my('ALTER TABLE company ADD COLUMN cmpCountryCode VARCHAR(2)')
-
-
-def a004_fill_data() -> str:
-    return my("UPDATE company SET cmpCountryCode = 'NO' ORDER BY cmpNpdidCompany LIMIT 3")
-
-
-def a004_restore() -> str:
-    if not _my_exists('company', 'cmpCountryCode'):
-        return 'clean'
-    return 'restored: ' + my('ALTER TABLE company DROP COLUMN cmpCountryCode')
-
-
-# ── A005: column dropped on registry ──────────────────────────────────────────
-a005_prepare, a005_apply, a005_restore = _my_drop(
-    'discovery', 'dscDiscoveryYear', ['dscNpdidDiscovery'], 'INT')
-
-
-# ── A006: column renamed on registry (target of the wells -> company join) ────
-def a006_apply() -> str:
-    return my('ALTER TABLE company RENAME COLUMN cmpLongName TO cmpFullName')
-
-
-def a006_restore() -> str:
-    if _my_exists('company', 'cmpFullName'):
-        # the MySQL client prints nothing when ALTER succeeds; without a marker the empty output
-        # reads as "nothing changed" and the harness does not wait for the restore event
-        return 'restored: ' + my('ALTER TABLE company RENAME COLUMN cmpFullName TO cmpLongName')
-    return 'clean'
-
-
-# ── A007-A009: columns the mapping reads THROUGH a Teiid view (model services, ADR-0023) ──
-# A007: pass-through view on reporting; no other TriplesMap reads the column
-a007_prepare, a007_apply, a007_restore = _pg_drop(
-    'wellbore_mud', 'wlbMudViscosityAtMD', ['wellbore_mud_id'], 'NUMERIC(13,6)')
-# A008: view with aliases on registry; the mapping runs SELECT * over the view
-a008_prepare, a008_apply, a008_restore = _my_drop(
-    'field_investment_yearly', 'prfInvestmentsMillNOK', ['prfNpdidInformationCarrier', 'prfYear'],
-    'DECIMAL(13,6)')
-# A009: the column is used inside a view expression ("wlbCoreIntervalBottom" * 0.3048); negative control
-a009_prepare, a009_apply, a009_restore = _pg_drop(
-    'wellbore_core', 'wlbCoreIntervalBottom', ['wellbore_core_id'], 'NUMERIC(13,6)')
-
-
-N = 'http://sws.ifi.uio.no/vocab/npd-v2#'
-SCENARIOS = {
-    'a001': Scenario(code='a001', title='ADD COLUMN wlbMudPh on wellbore_mud', pattern='P-001',
-                     # ADR-0021: ADD needs the administrator's approval; ADR-0027: the logical
-                     # tables list their columns, so ASCAM proposes a new TriplesMap
-                     decision='hitl', source='reporting', table='wellbore_mud', column='wlbMudPh',
-                     apply=a001_apply, restore=a001_restore, predicate=N + 'wlbMudPh',
-                     note='3 rows of the new column are filled after the change',
-                     fill_data=a001_fill_data),
-    'a002': Scenario(code='a002', title='DROP COLUMN wlbLotMudDencity on wellbore_casing_and_lot',
-                     pattern='P-002', decision='auto', source='reporting',
-                     table='wellbore_casing_and_lot', column='wlbLotMudDencity',
-                     prepare=a002_prepare, apply=a002_apply, restore=a002_restore,
-                     predicate=N + 'LOTMudDensity',
-                     note='the LOTMudDensity predicate must disappear from the graph'),
-    'a003': Scenario(code='a003', title='RENAME COLUMN wlbDrillingOperator on wellbore_exploration_all',
-                     pattern='P-003', decision='auto', source='reporting',
-                     table='wellbore_exploration_all', column='wlbDrillingOperator',
-                     apply=a003_apply, restore=a003_restore, predicate=N + 'drillingOperatorCompany',
-                     note='join column of a cross-source TriplesMap; answers must be identical'),
-    # 3 x 2 design: A001-A003 test the three operators on PostgreSQL, A004-A006 on MySQL.
-    'a004': Scenario(code='a004', title='ADD COLUMN cmpCountryCode on company', pattern='P-001',
-                     decision='hitl', source='registry', table='company', column='cmpCountryCode',
-                     apply=a004_apply, restore=a004_restore, predicate=N + 'cmpCountryCode',
-                     note='3 rows of the new column are filled after the change',
-                     fill_data=a004_fill_data),
-    'a005': Scenario(code='a005', title='DROP COLUMN dscDiscoveryYear on discovery',
-                     pattern='P-002', decision='auto', source='registry', table='discovery',
-                     column='dscDiscoveryYear', prepare=a005_prepare, apply=a005_apply,
-                     restore=a005_restore, predicate=N + 'discoveryYear',
-                     note='the discoveryYear predicate must disappear from the graph'),
-    'a006': Scenario(code='a006', title='RENAME COLUMN cmpLongName on company',
-                     pattern='P-003', decision='auto', source='registry', table='company',
-                     column='cmpLongName', apply=a006_apply, restore=a006_restore,
-                     predicate=N + 'name',
-                     note='company names and the target of the wells -> company join'),
-    'a007': Scenario(code='a007', title='DROP COLUMN wlbMudViscosityAtMD through view v_wellbore_mud',
-                     pattern='P-002', decision='auto', source='reporting', table='wellbore_mud',
-                     column='wlbMudViscosityAtMD', prepare=a007_prepare, apply=a007_apply,
-                     restore=a007_restore, view='services.v_wellbore_mud',
-                     predicate=N + 'mudViscosity',
-                     note='pass-through view: the view projection shrinks (ALTER VIEW)'),
-    'a008': Scenario(code='a008', title='DROP COLUMN prfInvestmentsMillNOK through view v_field_investment',
-                     pattern='P-002', decision='auto', source='registry',
-                     table='field_investment_yearly', column='prfInvestmentsMillNOK',
-                     prepare=a008_prepare, apply=a008_apply, restore=a008_restore,
-                     view='services.v_field_investment', predicate=N + 'investmentNOK',
-                     note='aliased pass-through view; the mapping runs SELECT * over the view'),
-    'a009': Scenario(code='a009', title='DROP COLUMN wlbCoreIntervalBottom used in a view expression',
-                     # ADR-0024: a DROP that is not proven safe is only notified, with no action
-                     pattern='P-002', decision='notify', source='reporting', table='wellbore_core',
-                     column='wlbCoreIntervalBottom', prepare=a009_prepare, apply=a009_apply,
-                     restore=a009_restore, view='services.v_wellbore_core_ft',
-                     predicate=N + 'coreIntervalBottom',
-                     reasons_contain=('expression', 'services.v_wellbore_core_ft'),
-                     note='negative control: not adapted, the administrator is notified'),
-}
+    # ── the three operators on S2 (MySQL) ──────────────────────────────────────────
+    _scenario('r19', 'RENAME COLUMN nama TO nama_lengkap on member', 'P-003', 'auto', 'registry',
+              'member', 'nama', _my_rename('member', 'nama', 'nama_lengkap'), new_column='nama_lengkap',
+              predicate=EX + 'fullName', branch='P-003 on MySQL'),
+    _scenario('r20', 'ADD COLUMN email on member (reuses the active ex:email)', 'P-001', 'hitl',
+              'registry', 'member', 'email', _my_add('member', 'email', 'VARCHAR(50)', "'member@example.org'"),
+              predicate=EX + 'email', reasons_contain=('already exists',),
+              branch='P-001 on MySQL, X = ∅ and an existing property with no domain or range'),
+    _scenario('r21', 'DROP COLUMN panggilan on member (ex:nickname also filled from S1)', 'P-002',
+              'auto', 'registry', 'member', 'panggilan',
+              _my_drop('member', 'panggilan', 'VARCHAR(50)', 'member_id'),
+              predicate=EX + 'nickname', branch='P-002 on MySQL; ex:nickname is kept'),
+]}

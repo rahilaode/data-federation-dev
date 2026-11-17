@@ -1,7 +1,5 @@
--- Step 3 of 4: schema monitor of the source `registry` (ADR-0017). Taken from the
--- social-assistance case study (archive/bansos/data-source/mysql/init.sql); for NPD every table
--- is monitored and the database is `registry`. The column snapshot is taken here, after the
--- dump was loaded and split.
+-- Step 2 of 2: schema monitor of the source `registry` (ADR-0017), as on the NPD branch. The
+-- column snapshot is taken here, after the table of the running example was created.
 USE registry;
 
 -- ============================================================
@@ -22,53 +20,9 @@ CREATE TABLE IF NOT EXISTS captured_tables_ref (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='Tables that may be monitored (regulated).';
 
--- Every table of the source is monitored (ADR-0027: all 45 NPD tables of `registry`).
+-- Every table of the running example is monitored.
 INSERT IGNORE INTO captured_tables_ref (db_name, table_name) VALUES
-('registry', 'apaAreaGross'),
-('registry', 'apaAreaNet'),
-('registry', 'baaArea'),
-('registry', 'bsns_arr_area'),
-('registry', 'bsns_arr_area_area_poly_hst'),
-('registry', 'bsns_arr_area_licensee_hst'),
-('registry', 'bsns_arr_area_operator'),
-('registry', 'bsns_arr_area_transfer_hst'),
-('registry', 'company'),
-('registry', 'company_reserves'),
-('registry', 'discovery'),
-('registry', 'discovery_reserves'),
-('registry', 'dscArea'),
-('registry', 'facility_fixed'),
-('registry', 'facility_moveable'),
-('registry', 'fclPoint'),
-('registry', 'field'),
-('registry', 'field_activity_status_hst'),
-('registry', 'field_description'),
-('registry', 'field_investment_yearly'),
-('registry', 'field_licensee_hst'),
-('registry', 'field_operator_hst'),
-('registry', 'field_owner_hst'),
-('registry', 'field_reserves'),
-('registry', 'fldArea'),
-('registry', 'licence'),
-('registry', 'licence_area_poly_hst'),
-('registry', 'licence_licensee_hst'),
-('registry', 'licence_oper_hst'),
-('registry', 'licence_petreg_licence'),
-('registry', 'licence_petreg_licence_licencee'),
-('registry', 'licence_petreg_licence_oper'),
-('registry', 'licence_petreg_message'),
-('registry', 'licence_phase_hst'),
-('registry', 'licence_task'),
-('registry', 'licence_transfer_hst'),
-('registry', 'pipLine'),
-('registry', 'prlArea'),
-('registry', 'prlAreaSplitByBlock'),
-('registry', 'tuf_operator_hst'),
-('registry', 'tuf_owner_hst'),
-('registry', 'tuf_petreg_licence'),
-('registry', 'tuf_petreg_licence_licencee'),
-('registry', 'tuf_petreg_licence_oper'),
-('registry', 'tuf_petreg_message');
+('registry', 'member');
 
 
 -- ------------------------------------------------------------

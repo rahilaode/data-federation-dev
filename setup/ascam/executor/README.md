@@ -39,7 +39,7 @@ verification that fails, this is recorded as a `rollback` step. Users see no cha
 |---|---|---|
 | `ASCAM_EXEC_KNOWLEDGE_URL` | `http://ascam-knowledge-service:8000` | Knowledge Service |
 | `ASCAM_EXEC_TOKEN_FILE`, `ASCAM_EXEC_TOKEN_CLIENT` | –, `executor` | Token file and client name for Knowledge |
-| `ASCAM_EXEC_OBDF` | `npd` | Name of the OBDF |
+| `ASCAM_EXEC_OBDF` | `npd` | Name of the OBDF (`docker-compose.yaml` sets `example`) |
 | `ASCAM_EXEC_TEIID_PASSWORD_FILE` | – | Teiid ManagementRealm password |
 | `ASCAM_EXEC_AGENT_TOKEN_FILE` | – | Token for the Ontop agent |
 | `ASCAM_EXEC_TEIID_JDBC_HOST`, `ASCAM_EXEC_TEIID_JDBC_PORT` | `teiid`, `31000` | Teiid address used in the validation JDBC URL |

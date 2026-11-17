@@ -1,6 +1,5 @@
--- Step 3 of 4: schema monitor of the source `reporting` (ADR-0017). Taken from the
--- social-assistance case study (archive/bansos/data-source/pgsql/init.sql) with two changes for
--- NPD: every table is monitored, and mixed-case names are logged without quotes.
+-- Step 2 of 2: schema monitor of the source `reporting` (ADR-0017), as on the NPD branch:
+-- every table of the running example is monitored, and the table name comes from the catalog.
 -- ============================================================
 -- ============================================================
 -- PostgreSQL: DDL trigger that monitors ALTER TABLE only
@@ -28,34 +27,21 @@ CREATE TABLE IF NOT EXISTS schema_monitor.captured_tables_ref (
 COMMENT ON TABLE schema_monitor.captured_tables_ref
     IS 'Tables that may be monitored (regulated).';
 
--- Every table of the source is monitored (ADR-0027: all 25 NPD tables of `reporting`).
+-- Every table of the running example is monitored.
 INSERT INTO schema_monitor.captured_tables_ref (schema_name, table_name)
 VALUES
-    ('public', 'field_production_monthly'),
-    ('public', 'field_production_totalt_NCS_month'),
-    ('public', 'field_production_totalt_NCS_year'),
-    ('public', 'field_production_yearly'),
-    ('public', 'seaArea'),
-    ('public', 'seaMultiline'),
-    ('public', 'seis_acquisition'),
-    ('public', 'seis_acquisition_coordinates_inc_turnarea'),
-    ('public', 'seis_acquisition_progress'),
-    ('public', 'strat_litho_wellbore'),
-    ('public', 'strat_litho_wellbore_core'),
-    ('public', 'wellbore_casing_and_lot'),
-    ('public', 'wellbore_coordinates'),
-    ('public', 'wellbore_core'),
-    ('public', 'wellbore_core_photo'),
-    ('public', 'wellbore_development_all'),
-    ('public', 'wellbore_document'),
-    ('public', 'wellbore_dst'),
-    ('public', 'wellbore_exploration_all'),
-    ('public', 'wellbore_formation_top'),
-    ('public', 'wellbore_mud'),
-    ('public', 'wellbore_npdid_overview'),
-    ('public', 'wellbore_oil_sample'),
-    ('public', 'wellbore_shallow_all'),
-    ('public', 'wlbPoint')
+    ('public', 'person'),
+    ('public', 'contact'),
+    ('public', 'product'),
+    ('public', 'note'),
+    ('public', 'memo'),
+    ('public', 'doc'),
+    ('public', 'staff'),
+    ('public', 'city'),
+    ('public', 'account'),
+    ('public', 'event'),
+    ('public', 'audit'),
+    ('public', 'tool')
 ON CONFLICT DO NOTHING;
 
 

@@ -20,7 +20,7 @@ deploy /opt/jboss/jdbc/postgresql-42.2.14.jre7.jar
 
 # ------------------------------------------------------------------
 # The VDB is NO longer deployed when the image is built.
-# The VDB (npd-vdb.xml) is deployed by the deployment scanner
+# The VDB (example-vdb.xml) is deployed by the deployment scanner
 # from the standalone/deployments folder mounted from the host, so
 # ASCAM (the effector of the Execute phase) can redeploy Σ'_S without
 # restarting the Teiid container.

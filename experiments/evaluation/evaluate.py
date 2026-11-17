@@ -16,7 +16,7 @@ Every run starts from the same base state (experiments/reset_obdf.py).
 
 Examples:
   python3 experiments/evaluation/evaluate.py --mode both --runs 20 --baseline-runs 5
-  python3 experiments/evaluation/evaluate.py --mode baseline --scenario a002 --baseline-runs 1
+  python3 experiments/evaluation/evaluate.py --mode baseline --scenario r01 --baseline-runs 1
 Results: results/evaluation/<time>/{baseline-*.json, run-*.json, kafka-*.json, debezium-config.json}
 Analysis: python3 experiments/evaluation/analyze.py
 """

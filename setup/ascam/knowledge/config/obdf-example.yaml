@@ -1,24 +1,20 @@
 # Declarative configuration of the case-study OBDF (D5). Applied idempotently when the Knowledge
 # Service starts; objects not named here are not deleted. Secrets are referenced only by file.
 #
-# Case study: the NPD FactPages data (NPD Benchmark, Lanti et al., EDBT 2015) split over two
-# autonomous sources (ADR-0027): `reporting` (PostgreSQL; wells, stratigraphy, seismic surveys,
-# production) and `registry` (MySQL; licences, Petroleum Register, companies, fields, ...).
-# The earlier social-assistance case study is kept in archive/bansos/.
+# Running example of the paper (person and view v_active), extended with one small table per
+# Plan branch (docs/running-example.md). Two autonomous sources: `reporting` (PostgreSQL, S1)
+# and `registry` (MySQL, S2). The NPD case study is on branch feature/npd.
 version: 1
 
 obdf:
-  name: npd
-  description: NPD FactPages data federation (reporting PostgreSQL + registry MySQL)
+  name: example
+  description: Running example of the paper (reporting PostgreSQL + registry MySQL)
 
 sources:
   - logical_name: reporting
     dbms: postgresql
     database_name: reporting
     kafka_topic: reporting.schema_monitor.ddl_event_log
-    # NPD names are mixed case and double-quoted in PostgreSQL ("wlbNpdidWellbore"), so names
-    # are compared as they are, not folded to lower case (the PostgreSQL default; ADR-0029)
-    identifier_case: preserve
   - logical_name: registry
     dbms: mysql
     database_name: registry
@@ -42,19 +38,18 @@ targets:
     credential: teiid-admin
   - kind: teiid_odbc
     name: teiid-odbc
-    endpoint: {host: data-federation-teiid, port: 35432, options: {vdb: npd}}
+    endpoint: {host: data-federation-teiid, port: 35432, options: {vdb: example}}
     credential: teiid-user
   - kind: ontop_sparql
     name: ontop-sparql
-    # ready_query (ADR-0030): ASK { ?s ?p ?o } unfolds into all 1 177 mapping assertions of NPD
-    # (184 s through Teiid); one class read from the source `reporting` is enough to show that
-    # Ontop, Teiid, and a source answer.
+    # ready_query (ADR-0030): one class read through Teiid from the source `reporting` shows
+    # that Ontop, Teiid, and a source answer.
     endpoint:
       host: vkg-system-ontop-teiid
       port: 8080
       path: /sparql
       options:
-        ready_query: "PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }"
+        ready_query: "PREFIX ex: <http://example.org/> ASK { ?p a ex:ActivePerson }"
   - kind: kafka
     name: schema-monitor-kafka
     endpoint: {host: kafka, port: 9092}
@@ -72,8 +67,9 @@ settings:
   teiid.keep_previous_vdb_versions: 1          # ADR-0004 step 7
 
 naming_policy:
-  # the NPD vocabulary; a new column wlbMudPh becomes npdv:wlbMudPh (the administrator may revise it)
-  namespace: "http://sws.ifi.uio.no/vocab/npd-v2#"
+  # the vocabulary of the running example; a new column birth_date becomes ex:birthDate
+  # (the administrator may revise it)
+  namespace: "http://example.org/"
   property_iri_template: "{namespace}{column_camel}"
   on_collision: qualify_with_class
   label_language: en
@@ -114,8 +110,8 @@ type_mappings:
   - {dbms: mysql, native_type: datetime, teiid_type: timestamp, xsd_datatype: "xsd:dateTime"}
   - {dbms: mysql, native_type: timestamp, teiid_type: timestamp, xsd_datatype: "xsd:dateTime"}
   # Types as sqlglot writes them in the DDL events (the orchestrator parses ddl_command):
-  # NUMERIC(6,2) -> DECIMAL(6, 2), INTEGER -> INT, CHARACTER VARYING -> VARCHAR; and the MySQL
-  # types of the NPD dump that the list above does not name.
+  # NUMERIC(6,2) -> DECIMAL(6, 2), INTEGER -> INT, CHARACTER VARYING -> VARCHAR; and two more
+  # MySQL types.
   - {dbms: postgresql, native_type: decimal, teiid_type: bigdecimal, xsd_datatype: "xsd:decimal"}
   - {dbms: postgresql, native_type: int, teiid_type: integer, xsd_datatype: "xsd:integer"}
   - {dbms: postgresql, native_type: varchar, teiid_type: string, xsd_datatype: "xsd:string"}

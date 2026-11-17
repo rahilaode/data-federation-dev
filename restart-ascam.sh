@@ -79,13 +79,13 @@ teiid_vdb_active() {
   password="$(head -n1 "$SECRETS/obdf_teiid_mgmt_password")"
   curl -sf --digest -u "admin:$password" -H 'Content-Type: application/json' \
     -d '{"operation":"list-vdbs","address":[{"subsystem":"teiid"}]}' "$TEIID_MGMT" \
-    | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; sys.exit(0 if any(v.get("vdb-name")=="npd" and v.get("status")=="ACTIVE" for v in r) else 1)'
+    | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; sys.exit(0 if any(v.get("vdb-name")=="example" and v.get("status")=="ACTIVE" for v in r) else 1)'
 }
-# Not ASK { ?s ?p ?o }: over the NPD mapping that query unfolds into 5,525 UNION branches (ADR-0030)
-READY_QUERY='PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#> ASK { ?w a npdv:Wellbore }'
+# one class read through Teiid from the source reporting (view v.v_active)
+READY_QUERY='PREFIX ex: <http://example.org/> ASK { ?p a ex:ActivePerson }'
 sparql_ready() { curl -sf -G "$SPARQL" --data-urlencode "query=$READY_QUERY" -H 'Accept: application/sparql-results+json'; }
 # Over TCP: the temporary server of the init scripts listens on the socket only, so these succeed
-# only once a first start has loaded the NPD dump, split it and installed the schema monitor.
+# only once a first start has loaded the example data and installed the schema monitor.
 reporting_ready() { docker exec -e PGPASSWORD=postgres datasources-pgsql psql -h 127.0.0.1 -U postgres -d reporting -tAc 'SELECT 1 FROM schema_monitor.ddl_event_log LIMIT 1'; }
 registry_ready() { docker exec datasources-mysql sh -c 'mysql -h127.0.0.1 --protocol=TCP -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1 FROM registry.ddl_event_log LIMIT 1"'; }
 connect_ready() { curl -sf "$CONNECT/connectors"; }
@@ -106,7 +106,6 @@ docker info >/dev/null 2>&1 || { echo "  Docker is not running"; exit 1; }
 docker network create ascam-networks >/dev/null 2>&1 || true
 info "network ascam-networks available"
 setup/ascam/knowledge/scripts/init-secrets.sh | sed 's/^/  /'
-setup/npd/fetch-npd.sh | sed 's/^/  /'     # the dumps are mounted into the data sources (ADR-0027)
 if container_exists ascam-adaptive-engine; then
   docker rm -f ascam-adaptive-engine >/dev/null
   info "iteration-1 engine (ascam-adaptive-engine) removed; it is no longer used"
@@ -115,8 +114,8 @@ fi
 # ── 1. OBDF: started when down, never changed ─────────────────────────────────
 heading "1) OBDF: data sources, Teiid, Ontop (no change to data or configuration)"
 compose setup/data-source/docker-compose.yaml up -d 2>&1 | sed 's/^/  /'
-wait_for "PostgreSQL reporting" 900 reporting_ready
-wait_for "MySQL registry" 900 registry_ready
+wait_for "PostgreSQL reporting" 300 reporting_ready
+wait_for "MySQL registry" 300 registry_ready
 
 NEW_TEIID=0
 container_exists data-federation-teiid || NEW_TEIID=1
@@ -125,15 +124,15 @@ if [ "$NEW_TEIID" = "1" ]; then
   # marker, exactly as in start.sh. The VDB file itself is not changed.
   DEPLOY_DIR=setup/data-federation/deployments
   rm -f "$DEPLOY_DIR"/*.dodeploy "$DEPLOY_DIR"/*.isdeploying "$DEPLOY_DIR"/*.failed "$DEPLOY_DIR"/*.pending
-  touch "$DEPLOY_DIR"/npd-vdb.xml.dodeploy
+  touch "$DEPLOY_DIR"/example-vdb.xml.dodeploy
   chmod 777 "$DEPLOY_DIR"
   info "new Teiid container: the initial VDB will be deployed"
 fi
-# A new container is built from the current setup.cli (JNDI names of the NPD sources); a running
+# A new container is built from the current setup.cli (JNDI names of the sources); a running
 # one is left alone.
 if [ "$NEW_TEIID" = "1" ]; then BUILD=(--build); else BUILD=(); fi
 compose setup/data-federation/docker-compose.yaml up -d "${BUILD[@]}" 2>&1 | sed 's/^/  /'
-wait_for "VDB npd (ACTIVE)" 300 teiid_vdb_active
+wait_for "VDB example (ACTIVE)" 300 teiid_vdb_active
 
 # Blue-green OBDA layer (ADR-0022): existing slots are kept, so the instance that became active
 # after the last adaptation keeps serving.
@@ -195,7 +194,7 @@ done
 heading "4) initial Knowledge sync"
 TOKEN="$(grep '^ui:' "$SECRETS/knowledge_api_tokens" | cut -d: -f2)"
 OBDF_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" "$KNOWLEDGE/api/v1/obdf" \
-  | python3 -c 'import json,sys; print(next(o["id"] for o in json.load(sys.stdin) if o["name"]=="npd"))')"
+  | python3 -c 'import json,sys; print(next(o["id"] for o in json.load(sys.stdin) if o["name"]=="example"))')"
 curl -sf -X POST -H "Authorization: Bearer $TOKEN" -H 'X-ASCAM-User: restart-ascam.sh' \
   "$KNOWLEDGE/api/v1/obdf/$OBDF_ID/sync" | python3 -c '
 import json, sys

@@ -1,5 +1,5 @@
 """Case-study views (scenarios A007-A009) over the artifacts of the social-assistance case study
-(archive/bansos; ADR-0023). The NPD case study has its own tests in test_case_study_npd.py.
+(archive/bansos; ADR-0023). The NPD case study is tested on branch feature/npd; the running example in test_case_study_example.py.
 
 The VDB, mapping, and ontology are read from setup/; the Teiid runtime metadata (SYS.*,
 SYSADMIN.Views, SYSADMIN.Usage) is built from that VDB following the semantics observed in F0.7

@@ -1,17 +1,17 @@
 """
-The query set Q_k of every scenario and how it is scored (thesis proposal §3.10–3.11.3).
+The query set Q_k of every scenario of the running example and how it is scored.
 
 Each scenario has three kinds of query:
-  affected   touches the column that changes;
-  neighbour  same table, another column;
-  control    another table, including the cross-source query.
+  affected   reads the predicate that the change touches;
+  neighbour  same table or view, another column;
+  control    another table, including a query that reads both sources (ex:nickname).
 
 Every query execution is recorded in full: HTTP status, Ontop error message, row count, and the
-sorted answer set, so the baseline (§3.10.1) and the treatment (§3.10.2) are scored the same way.
+sorted answer set, so the baseline and the treatment are scored the same way.
 
-  ResultPreserved(q)     = 1 if both executions succeed and the answer sets are identical (eq. 3.19)
-  ExecutionPreserved(q)  = 1 if the Ontop response after the change is not an error (eq. 3.20)
-  PreservationRatio(A_k) = mean of P_k(q) over Q_k × 100 % (eq. 3.21)
+  ResultPreserved(q)     = 1 if both executions succeed and the answer sets are identical
+  ExecutionPreserved(q)  = 1 if the Ontop response after the change is not an error
+  PreservationRatio(A_k) = mean of P_k(q) over Q_k × 100 %
 """
 import json
 import time
@@ -20,97 +20,84 @@ import urllib.parse
 import urllib.request
 
 SPARQL = 'http://localhost:8080/sparql'
-N = 'PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>\n'
+P = 'PREFIX ex: <http://example.org/>\n'
 
-# NPD case study (ADR-0027). No query has ORDER BY: run() sorts the answer set before it is
-# compared, and for a view without a key Ontop 4.1.1 adds SELECT DISTINCT, with which Teiid rejects
-# ORDER BY over an IRI expression that is not projected (TEIID30088, found with A007 of the first
-# case study).
-CONTROL = {
-    # cross-source: exploration wells (reporting) joined to their licences (registry) on
-    # prlNpdidProductionLicence = prlNpdidLicence, a pair of columns no scenario touches
-    'well_licence': ('control', N + 'SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }'),
-    'well_name': ('control', N + 'SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }'),
-}
-COMPANY_NAME = N + 'SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }'
-MUD_WEIGHT = N + 'SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }'
-CASING_TYPE = N + 'SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }'
-DISCOVERY_NAME = N + 'SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }'
-DRILLING_OPERATOR = N + 'SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }'
+
+def q(body: str) -> str:
+    return P + 'SELECT * WHERE { ' + body + ' }'
+
+
+# No query has ORDER BY: run() sorts the answer set before it is compared.
+ACTIVE_NAME = q('?p a ex:ActivePerson ; ex:name ?n')
+ACTIVE = q('?p a ex:ActivePerson')
+NICKNAME = q('?s ex:nickname ?n')                     # filled from both sources
+PERSON = q('?p a ex:Person')
+PHONE = q('?s ex:phone ?x')
+EMAIL = q('?s ex:email ?e')
+CONTACT = q('?c a ex:Contact')
+NET_PRICE = q('?p ex:netPrice ?x')
+PRODUCT = q('?p a ex:Product')
+CITY_NAME = q('?c a ex:City ; ex:cityName ?n')
+MEMBER_NAME = q('?m a ex:Member ; ex:fullName ?n')
+
+CONTROL = {'city_name': ('control', CITY_NAME), 'member_name': ('control', MEMBER_NAME)}
 
 Q = {
-    # reporting (PostgreSQL)
-    'a001': {
-        'mud_ph': ('affected', N + 'SELECT ?m ?ph WHERE { ?m npdv:wlbMudPh ?ph }'),
-        'mud_weight': ('neighbour', MUD_WEIGHT),
-        'company_name': ('control', COMPANY_NAME),
-        **CONTROL,
-    },
-    'a002': {
-        'lot_mud_density': ('affected', N + 'SELECT ?c ?d WHERE { ?c npdv:LOTMudDensity ?d }'),
-        'casing_type': ('neighbour', CASING_TYPE),
-        'company_name': ('control', COMPANY_NAME),
-        **CONTROL,
-    },
-    'a003': {
-        # the renamed column joins wells (reporting) to companies (registry)
-        'drilling_operator': ('affected', DRILLING_OPERATOR),
-        'well_total_depth': ('neighbour', N + 'SELECT ?w ?d WHERE { ?w a npdv:ExplorationWellbore ; '
-                                              'npdv:wellboreTotalDepth ?d }'),
-        'discovery_name': ('control', DISCOVERY_NAME),
-        **CONTROL,
-    },
-    # registry (MySQL)
-    'a004': {
-        'country_code': ('affected', N + 'SELECT ?c ?cc WHERE { ?c npdv:cmpCountryCode ?cc }'),
-        'company_short_name': ('neighbour', N + 'SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }'),
-        'mud_weight': ('control', MUD_WEIGHT),
-        **CONTROL,
-    },
-    'a005': {
-        'discovery_year': ('affected', N + 'SELECT ?d ?y WHERE { ?d a npdv:Discovery ; npdv:discoveryYear ?y }'),
-        'discovery_name': ('neighbour', DISCOVERY_NAME),
-        'casing_type': ('control', CASING_TYPE),
-        **CONTROL,
-    },
-    'a006': {
-        # the renamed column gives company names and is the target of the wells -> company join
-        'company_name': ('affected', COMPANY_NAME),
-        'company_short_name': ('neighbour', N + 'SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }'),
-        'drilling_operator': ('control', DRILLING_OPERATOR),
-        **CONTROL,
-    },
-    # through the service views (A007-A009); the neighbour reads another column of the same view
-    # (A007) or of the same base table (A008, A009)
-    'a007': {
-        'mud_viscosity': ('affected', N + 'SELECT ?m ?v WHERE { ?m npdv:mudViscosity ?v }'),
-        'mud_yield_point': ('neighbour', N + 'SELECT ?m ?y WHERE { ?m npdv:mudYieldPoint ?y }'),
-        'company_name': ('control', COMPANY_NAME),
-        **CONTROL,
-    },
-    'a008': {
-        'investment': ('affected', N + 'SELECT ?i ?x WHERE { ?i npdv:investmentNOK ?x }'),
-        'investment_year': ('neighbour', N + 'SELECT ?i ?y WHERE { ?i a npdv:FieldInvestment ; '
-                                             'npdv:productionYear ?y }'),
-        'mud_weight': ('control', MUD_WEIGHT),
-        **CONTROL,
-    },
-    'a009': {
-        'core_bottom': ('affected', N + 'SELECT ?c ?b WHERE { ?c npdv:coreIntervalBottom ?b }'),
-        'core_top': ('neighbour', N + 'SELECT ?c ?t WHERE { ?c a npdv:WellboreCore ; npdv:coreIntervalTop ?t }'),
-        'company_name': ('control', COMPANY_NAME),
-        **CONTROL,
-    },
+    'r01': {'name': ('affected', ACTIVE_NAME), 'active': ('neighbour', ACTIVE),
+            'nickname': ('control', NICKNAME), **CONTROL},
+    'r02': {'name': ('affected', ACTIVE_NAME), 'active': ('neighbour', ACTIVE),
+            'nickname': ('control', NICKNAME), **CONTROL},
+    'r03': {'name': ('affected', ACTIVE_NAME), 'person': ('neighbour', PERSON), **CONTROL},
+    'r04': {'nickname': ('affected', q('?p a ex:Person ; ex:nickname ?n')),
+            'name': ('neighbour', ACTIVE_NAME), **CONTROL},
+    'r05': {'staff_city': ('affected', q('?s ex:city ?c')), 'staff': ('neighbour', q('?s a ex:Staff')),
+            **CONTROL},
+    'r06': {'phone': ('affected', PHONE), 'contact': ('neighbour', CONTACT),
+            'email': ('neighbour', EMAIL), **CONTROL},
+    'r07': {'email': ('affected', EMAIL), 'phone': ('neighbour', PHONE), **CONTROL},
+    'r08': {'nickname': ('affected', NICKNAME), 'person': ('neighbour', PERSON),
+            'name': ('neighbour', ACTIVE_NAME), **CONTROL},
+    'r09': {'net_price': ('affected', NET_PRICE), 'product': ('neighbour', PRODUCT), **CONTROL},
+    'r10': {'note_body': ('affected', q('?n ex:noteBody ?b')), 'note': ('neighbour', q('?n a ex:Note')),
+            **CONTROL},
+    'r11': {'memo_body': ('affected', q('?m ex:memoBody ?b')), 'memo': ('neighbour', q('?m a ex:Memo')),
+            **CONTROL},
+    'r12': {'doc_body': ('affected', q('?d ex:docBody ?b')), 'doc': ('neighbour', q('?d a ex:Doc')),
+            **CONTROL},
+    'r13': {'population': ('affected', q('?c ex:population ?x')), 'city_name': ('neighbour', CITY_NAME),
+            'member_name': ('control', MEMBER_NAME)},
+    'r14': {'status': ('affected', q('?a ex:status ?s')), 'owner': ('neighbour', q('?a ex:owner ?o')),
+            'customer': ('neighbour', q('?c a ex:Customer')), **CONTROL},
+    'r15': {'birth_date': ('affected', q('?p ex:birthDate ?d')), 'nickname': ('neighbour', NICKNAME),
+            'name': ('neighbour', ACTIVE_NAME), **CONTROL},
+    # audit is read by no triples map, so the neighbour is the graph of another S1 table
+    'r16': {'actor': ('affected', q('?a ex:actor ?x')), 'person': ('neighbour', PERSON), **CONTROL},
+    'r17': {'severity': ('affected', q('?e ex:severity ?s')), 'kind': ('neighbour', q('?e ex:kind ?k')),
+            **CONTROL},
+    'r18': {'weight': ('affected', q('?t ex:weight ?w')), 'label': ('neighbour', q('?t ex:label ?l')),
+            **CONTROL},
+    'r19': {'member_name': ('affected', MEMBER_NAME), 'nickname': ('neighbour', NICKNAME),
+            'city_name': ('control', CITY_NAME)},
+    'r20': {'member_email': ('affected', q('?m a ex:Member ; ex:email ?e')),
+            'contact_email': ('neighbour', EMAIL), **CONTROL},
+    'r21': {'nickname': ('affected', NICKNAME), 'member_name': ('neighbour', MEMBER_NAME),
+            'city_name': ('control', CITY_NAME)},
 }
 
-# Light query used to watch endpoint availability during an adaptation: no scenario touches the
-# licence table (registry), so a failure means the endpoint itself is not available.
-AVAILABILITY = N + 'SELECT ?l WHERE { ?l a npdv:ProductionLicence } LIMIT 1'
+# Light query used to watch endpoint availability during an adaptation: no scenario touches
+# the city name, so a failure means the endpoint itself is not available.
+AVAILABILITY = P + 'SELECT ?c WHERE { ?c a ex:City } LIMIT 1'
+
+# Queries through the views of model v that must answer in the base state (preflight.py)
+BASE_CHECKS = ('r01', 'r09')
+
+# What happens to the affected query of a P-002 scenario: 'empty' when its property is
+# deprecated, 'fewer' when another assertion still populates it, 'same' when the dropped
+# column was only projected.
+P002_AFFECTED = {'r01': 'empty', 'r06': 'fewer', 'r07': 'same', 'r08': 'fewer', 'r21': 'fewer'}
 
 
 def pattern(code: str) -> str:
-    """ASCAM pattern of a scenario; scoring follows the pattern, not the code, so that it is the
-    same on both DBMSs."""
     from scenarios import SCENARIOS
     return SCENARIOS[code].pattern
 
@@ -144,8 +131,7 @@ def run_set(code: str) -> dict:
 
 
 def run_stable(code: str, attempts: int = 6, delay: float = 2.0) -> dict:
-    """For the BASE snapshot: retried while the endpoint does not answer (not used after the
-    change, because an error after the change is exactly what is measured)."""
+    """For the BASE snapshot: retried while the endpoint does not answer."""
     result = {}
     for _ in range(attempts):
         result = run_set(code)
@@ -156,7 +142,6 @@ def run_stable(code: str, attempts: int = 6, delay: float = 2.0) -> dict:
 
 
 def score(code: str, before: dict, after: dict) -> dict:
-    """ResultPreserved and ExecutionPreserved per query, and the PreservationRatio of the scenario."""
     per_query = {}
     for name, (kind, _) in Q[code].items():
         a, b = before.get(name) or {}, after.get(name) or {}
@@ -173,21 +158,33 @@ def score(code: str, before: dict, after: dict) -> dict:
 
 
 def expectations(code: str, after: dict, assessment: dict) -> dict:
-    """Theoretical expectation of a treatment scenario by its pattern (thesis proposal §3.10.2,
-    p. 104)."""
+    """What the paper predicts for the scenario after the treatment (docs/running-example.md)."""
     from scenarios import SCENARIOS
-    q = after.get(affected(code)) or {}
-    if SCENARIOS[code].decision == 'notify':
-        # Not adapted (ADR-0024): the OBDF does not change, so the query through the broken view
-        # keeps failing until the administrator redefines the view (same behaviour as the
-        # baseline). The other queries are recorded in `assessment` without an expectation: that
-        # depends on whether Teiid prunes the view columns that are not requested before push-down.
-        return {'affected_query_fails': not q.get('ok')}
-    if pattern(code) == 'P-001':
-        return {'old_queries_valid': all(v['execution_preserved'] for n, v in assessment['per_query'].items()
-                                         if n != affected(code)),
-                'new_query_returns_rows': bool(q.get('ok') and (q.get('n') or 0) > 0)}
-    if pattern(code) == 'P-002':
-        return {'old_query_still_runs': bool(q.get('ok')),
-                'answer_set_empty': bool(q.get('ok') and q.get('n') == 0)}
+    sc = SCENARIOS[code]
+    name = affected(code)
+    a = after.get(name) or {}
+    per = assessment['per_query']
+    others_run = all(v['execution_preserved'] for n, v in per.items() if n != name)
+    if sc.decision == 'notify':
+        if sc.pattern == 'P-001':
+            # ADD is not adapted: Σ does not change, so the new column is simply not visible
+            return {'old_queries_valid': all(v['execution_preserved'] for v in per.values())}
+        # not adapted: the query through the broken element keeps failing until a person repairs it
+        return {'affected_query_fails': not a.get('ok')}
+    if sc.pattern == 'P-001':
+        out = {'old_queries_valid': others_run}
+        if sc.expect.get('property', True):
+            out['new_query_returns_rows'] = bool(a.get('ok') and (a.get('n') or 0) > 0)
+        return out
+    if sc.pattern == 'P-002':
+        before_n, after_n = per[name]['rows_before'], per[name]['rows_after']
+        rule = P002_AFFECTED[code]
+        out = {'old_query_still_runs': bool(a.get('ok')), 'other_queries_run': others_run}
+        if rule == 'empty':
+            out['answer_set_empty'] = bool(a.get('ok') and a.get('n') == 0)
+        elif rule == 'fewer':
+            out['fewer_answers_but_not_empty'] = bool(a.get('ok') and 0 < (after_n or 0) < (before_n or 0))
+        else:
+            out['answers_identical'] = per[name]['result_preserved'] == 1
+        return out
     return {'answer_set_identical': assessment['preservation_ratio'] == 100.0}

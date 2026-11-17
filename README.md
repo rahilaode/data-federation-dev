@@ -8,10 +8,13 @@ change (new columns), or reports what a person has to repair. Adaptations are de
 side with the running version and switched over only after they have been verified, so SPARQL
 queries keep being answered while ASCAM works.
 
-This repository holds the whole laboratory of the thesis: a case-study OBDF built from the NPD
-benchmark (data of the Norwegian Petroleum Directorate split over PostgreSQL and MySQL, federated
-by Teiid and exposed as SPARQL by Ontop with the benchmark's own ontology and R2RML mapping), the
-ASCAM services, and the evaluation harness.
+This repository holds the whole laboratory of the thesis: a case-study OBDF, the ASCAM services,
+and the evaluation harness. On this branch (`feature/running-example`) the OBDF is the running
+example of the paper: a few small tables split over PostgreSQL and MySQL, federated by Teiid, and
+exposed as SPARQL by Ontop with a small ontology and R2RML mapping. Each table exercises one branch
+of the Plan, so every rule of the framework can be checked on its own. The code of the framework
+is the same as on `feature/npd`; only the data, the VDB, the mapping, the ontology, and the
+scenarios differ. See [`docs/running-example.md`](docs/running-example.md).
 
 - [Architecture](#architecture)
 - [Requirements](#requirements)
@@ -29,7 +32,7 @@ flowchart LR
     subgraph OBDF["Case-study OBDF"]
         PG[("PostgreSQL<br/>reporting")]
         MY[("MySQL<br/>registry")]
-        TEIID["Teiid 16<br/>VDB npd (Σ_S)"]
+        TEIID["Teiid 16<br/>VDB example (Σ_S)"]
         PROXY["nginx proxy<br/>:8080/sparql"]
         BLUE["Ontop blue<br/>ℳ, 𝒯"]
         GREEN["Ontop green<br/>(standby)"]
@@ -78,16 +81,16 @@ The three adaptation patterns:
 
 | Pattern | Operation | What ASCAM does |
 |---|---|---|
-| P-001 | ADD COLUMN | Waits for the administrator. On approval: `ALTER FOREIGN TABLE ... ADD COLUMN`, a new `owl:DatatypeProperty`, and a predicate-object map on the TriplesMaps that pick up the column; when every logical table lists its columns (as in NPD), a new TriplesMap over the table instead (ADR-0027) |
-| P-002 | DROP COLUMN | When every usage is a plain value or projection: `DROP COLUMN`, `ALTER VIEW` for views that pass the column on, removal of the predicate-object maps, and `owl:deprecated` on the property. Otherwise a notification |
+| P-001 | ADD COLUMN | Waits for the administrator. On approval: `ALTER FOREIGN TABLE ... ADD COLUMN`, a new `owl:DatatypeProperty`, and a predicate-object map on the TriplesMaps that pick up the column; when no TriplesMap picks it up, a new TriplesMap over the table (ADR-0027). A view that would receive the column through `SELECT *` but cannot take it leads to a notification (ADR-0032) |
+| P-002 | DROP COLUMN | When every usage is a plain value or projection: `DROP COLUMN`, `ALTER VIEW` for views that pass the column on, removal of the predicate-object maps that read the column (ADR-0031), and `owl:deprecated` on a property that no assertion populates any more. Otherwise a notification |
 | P-003 | RENAME COLUMN | `ALTER COLUMN ... OPTIONS (SET NAMEINSOURCE '"<new name>"')`: the Teiid column keeps its name, so views, the mapping, and the ontology do not change |
 
 ### Containers and ports
 
 | Container | Component | Host port |
 |---|---|---|
-| `datasources-pgsql` | PostgreSQL 15, database `reporting` (25 NPD tables) | 15433 |
-| `datasources-mysql` | MySQL 8.0, database `registry` (45 NPD tables) | 13306 |
+| `datasources-pgsql` | PostgreSQL 15, database `reporting` (12 small tables) | 15433 |
+| `datasources-mysql` | MySQL 8.0, database `registry` (table `member`) | 13306 |
 | `data-federation-teiid` | Teiid 16 on WildFly: JDBC, ODBC, management API, HTTP | 31000, 35432, 19990, 18080 |
 | `vkg-system-ontop-teiid` | nginx proxy in front of Ontop, the SPARQL endpoint | 8080 |
 | `vkg-system-ontop-blue`, `vkg-system-ontop-green` | Ontop 4.1.1 instances (one runs at a time) | – |
@@ -111,12 +114,10 @@ All containers share the external Docker network `ascam-networks`. Every compone
 - `git`, `curl`, and Python 3.10 or later on the host (the scripts and the harness use only the
   standard library; `plot.py` also needs matplotlib).
 - Internet access the first time, to pull images, to build the Teiid and ASCAM images
-  (Docker Hub, quay.io, Maven Central, PyPI), and to fetch the NPD benchmark from GitHub
-  (`setup/npd/fetch-npd.sh`, run by `start.sh`).
+  (Docker Hub, quay.io, Maven Central, PyPI).
 - The host ports listed above must be free. The lab creates 17 containers (the migration
   container exits after its run, and one Ontop instance stays stopped until an adaptation); give
-  Docker enough memory for two Ontop JVMs, Teiid (1 GB heap), and Kafka. The first start loads
-  the NPD dumps into both sources, which takes a few minutes.
+  Docker enough memory for two Ontop JVMs, Teiid (1 GB heap), and Kafka.
 
 ## Setup and running
 
@@ -128,8 +129,8 @@ cd data-federation-dev
 
 `start.sh` builds the lab from scratch, in dependency order: it creates the secrets
 (`setup/ascam/knowledge/secrets/`, not committed), takes every container down **with its volumes**,
-restores the mapping and the ontology from git, fetches the NPD benchmark at a fixed commit and
-checks its checksums, starts the sources (each loads the NPD dump and keeps its own tables),
+restores the mapping and the ontology from git, starts the sources (each loads the rows of
+`setup/data-source/*/01-example.sql`),
 Teiid, the blue-green Ontop layer, Kafka and Debezium (and registers the connectors), the
 Knowledge Service, the Ontop agent, the Event Normalizer, the Executor, and the console, then runs
 an initial sync and the preflight checks, including a real DDL that travels through the whole
@@ -148,8 +149,8 @@ A first query:
 
 ```bash
 curl -s -G http://localhost:8080/sparql -H 'Accept: application/sparql-results+json' \
-  --data-urlencode 'query=PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c } LIMIT 10'
+  --data-urlencode 'query=PREFIX ex: <http://example.org/>
+SELECT ?p ?n WHERE { ?p a ex:ActivePerson ; ex:name ?n }'
 ```
 
 Three scripts cover day-to-day use:
@@ -165,427 +166,50 @@ Three scripts cover day-to-day use:
 
 ### Trying a schema change by hand
 
-Rename a column that the mapping uses (scenario A003, the column that links exploration wells
-in `reporting` to their drilling company in `registry`), then watch the console (Schema changes,
-Plans and executions):
+Rename the column that Example 1 of the paper reads (scenario r02), then watch the console
+(Schema changes, Plans and executions):
 
 ```bash
-docker exec datasources-pgsql psql -U postgres -d reporting -c 'ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" TO "wlbDrillingCompany"'
+docker exec datasources-pgsql psql -U postgres -d reporting -c 'ALTER TABLE public.person RENAME COLUMN first_name TO given_name'
 ```
 
-ASCAM decides `auto`, deploys a new VDB version with `SET NAMEINSOURCE '"wlbDrillingCompany"'`,
-starts and verifies the standby Ontop instance, and switches to it; the query above keeps
-returning the same answers. An `ADD COLUMN`, for example
-`ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2)`, appears under Approvals,
-with the proposed property and the new TriplesMap, which can be approved or renamed. Renaming the column back is adapted the
-same way; `./start.sh` returns the whole lab to its base state.
+ASCAM decides `auto`, deploys a new VDB version with `SET NAMEINSOURCE '"given_name"'`, starts and
+verifies the standby Ontop instance, and switches to it; the query above keeps returning Ana and
+Budi. An `ADD COLUMN`, for example `ALTER TABLE public.city ADD COLUMN population INTEGER`
+(scenario r13), appears under Approvals with the proposed property and predicate-object map, which
+can be approved or renamed. `./start.sh` returns the whole lab to its base state.
 
 ## Running the experiments
 
-The evaluation applies nine schema changes, each in two modes: **baseline** (Executor paused,
-no adaptation; 5 runs per scenario) and **treatment** (the full ASCAM loop; 20 runs per scenario).
-For every run it records the answers of five SPARQL queries before and after the change, the
-decision, the time of every step, the availability of the endpoint during the adaptation, and it
-audits every Kafka message to show that no production data leaves the sources. The full protocol,
-the metrics, and the threats to validity are in [`docs/evaluation.md`](docs/evaluation.md).
+On this branch the evaluation applies the 21 scenarios of the running example (r01–r21), one per
+branch of the Plan. Every scenario, its DDL, the expected decision and actions, and the expected
+SPARQL answers are listed in [`docs/running-example.md`](docs/running-example.md). The scenarios
+are defined in `experiments/evaluation/scenarios.py` and their queries (affected, neighbour,
+control) in `experiments/evaluation/queries.py`.
 
 ```bash
 ./start.sh                                                     # clean lab
 python3 experiments/evaluation/self_test.py                    # harness self-test (no Docker)
-python3 experiments/evaluation/evaluate.py --mode both --runs 1 --baseline-runs 1   # short trial
-nohup python3 experiments/evaluation/evaluate.py --mode both --runs 20 --baseline-runs 5 \
-  > evaluation.log 2>&1 &                                       # full evaluation, several hours
-tail -f evaluation.log
+python3 experiments/evaluation/evaluate.py --mode treatment --scenario r01 --runs 1   # one scenario
+python3 experiments/evaluation/evaluate.py --mode both --runs 1 --baseline-runs 1     # all scenarios
 ```
 
-The results go to `results/evaluation/<time>/` (one JSON file per run, the Kafka audit, the
-Debezium configuration, and `metadata.json` with the commit, the random-delay seed, and the
-machine). Then:
+The results go to `results/evaluation/<time>/` (one JSON file per run, with the decision, the
+actions, the answers before and after the change, and the check of the expected outcome). Then:
 
 ```bash
 python3 experiments/evaluation/analyze.py results/evaluation/<time> > results/evaluation/<time>/analysis.md
-python3 experiments/evaluation/extract.py results/evaluation/<time>     # CSV and summary.json
-python3 experiments/evaluation/plot.py results/evaluation/<time>        # adaptation-time figure (matplotlib)
 ```
 
-`./run-evaluation.sh` does all of this in one go, starting with `./start.sh`.
-
 The evaluation refuses to run when tracked files differ from the current commit, so that every
-result names the code that produced it. Results of the earlier Indonesian-language harness
-(`results/f6/`, branch `eval/final`) can be converted with
-`experiments/evaluation/convert_results.py` and then analysed the same way.
-
-### Schema changes (ALTER TABLE)
-
-| Scenario | Source | Statement applied to the source |
-|---|---|---|
-| A001 | PostgreSQL (reporting) | `ALTER TABLE public.wellbore_mud ADD COLUMN "wlbMudPh" NUMERIC(6,2)` |
-| A002 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_casing_and_lot" DROP COLUMN "wlbLotMudDencity"` |
-| A003 | PostgreSQL (reporting) | `ALTER TABLE public.wellbore_exploration_all RENAME COLUMN "wlbDrillingOperator" TO "wlbDrillingCompany"` |
-| A004 | MySQL (registry) | `ALTER TABLE company ADD COLUMN cmpCountryCode VARCHAR(2)` |
-| A005 | MySQL (registry) | `` ALTER TABLE `discovery` DROP COLUMN `dscDiscoveryYear` `` |
-| A006 | MySQL (registry) | `ALTER TABLE company RENAME COLUMN cmpLongName TO cmpFullName` |
-| A007 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_mud" DROP COLUMN "wlbMudViscosityAtMD"` |
-| A008 | MySQL (registry) | `` ALTER TABLE `field_investment_yearly` DROP COLUMN `prfInvestmentsMillNOK` `` |
-| A009 | PostgreSQL (reporting) | `ALTER TABLE public."wellbore_core" DROP COLUMN "wlbCoreIntervalBottom"` |
-
-Before a DROP the harness copies the column into a backup table (`ascam_backup_<column>`); after
-each run it puts the column back and waits for the monitor to report the restore. A001 and A004
-fill three rows of the new column after the change. Every statement, including the backup,
-data, and restore statements, is listed per scenario in
-[`docs/evaluation.md`](docs/evaluation.md#statements-applied-to-the-sources).
-
-Expected outcome per scenario:
-
-| Paper | Change | Expected decision | Expected answers after the adaptation |
-|---|---|---|---|
-| A001, A004 | ADD | `hitl`, approved by the evaluator | Old queries still run; the query on the new property returns the filled rows |
-| A002, A005 | DROP of a plain column | `auto` | The predicate disappears; its query still runs and returns an empty answer set; the other queries still run |
-| A003, A006 | RENAME | `auto` | All answers identical |
-| A007, A008 | DROP of a column read through a view | `auto` (`ALTER VIEW`) | As for DROP |
-| A009 | DROP of a column used in a view expression (`"wlbCoreIntervalBottom" * 0.3048`) | `notify`, no actions | Not adapted: the affected query fails, as without ASCAM, until a person repairs the view |
-
-### SPARQL queries
-
-Every scenario runs five queries, before and after the change: q1 reads the changed column
-(affected), q2 another column of the same table or view (neighbour), and q3–q5 other tables
-(control). q4 `well_licence` (exploration wells in `reporting` joined to their licences in
-`registry`, a cross-source join no scenario touches) and q5 `well_name` are the same in every
-scenario. The queries have no `ORDER BY`, because the harness sorts every answer set before it
-compares. They are listed exactly as they are sent to `http://localhost:8080/sparql`; they are
-defined in `experiments/evaluation/queries.py` and also listed in
-[`docs/evaluation.md`](docs/evaluation.md#sparql-queries).
-
-- **A001**: ADD COLUMN wlbMudPh on wellbore_mud (PostgreSQL)
-  - q1 `mud_ph` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?m ?ph WHERE { ?m npdv:wlbMudPh ?ph }
-    ```
-
-  - q2 `mud_weight` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
-    ```
-
-  - q3 `company_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A002**: DROP COLUMN wlbLotMudDencity on wellbore_casing_and_lot (PostgreSQL)
-  - q1 `lot_mud_density` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?d WHERE { ?c npdv:LOTMudDensity ?d }
-    ```
-
-  - q2 `casing_type` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }
-    ```
-
-  - q3 `company_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A003**: RENAME COLUMN wlbDrillingOperator on wellbore_exploration_all (PostgreSQL)
-  - q1 `drilling_operator` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }
-    ```
-
-  - q2 `well_total_depth` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?d WHERE { ?w a npdv:ExplorationWellbore ; npdv:wellboreTotalDepth ?d }
-    ```
-
-  - q3 `discovery_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A004**: ADD COLUMN cmpCountryCode on company (MySQL)
-  - q1 `country_code` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?cc WHERE { ?c npdv:cmpCountryCode ?cc }
-    ```
-
-  - q2 `company_short_name` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }
-    ```
-
-  - q3 `mud_weight` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A005**: DROP COLUMN dscDiscoveryYear on discovery (MySQL)
-  - q1 `discovery_year` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?d ?y WHERE { ?d a npdv:Discovery ; npdv:discoveryYear ?y }
-    ```
-
-  - q2 `discovery_name` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?d ?n WHERE { ?d a npdv:Discovery ; npdv:name ?n }
-    ```
-
-  - q3 `casing_type` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?t WHERE { ?c a npdv:WellboreCasingAndLeakoffTest ; npdv:casingType ?t }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A006**: RENAME COLUMN cmpLongName on company (MySQL)
-  - q1 `company_name` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
-    ```
-
-  - q2 `company_short_name` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?s WHERE { ?c a npdv:Company ; npdv:shortName ?s }
-    ```
-
-  - q3 `drilling_operator` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?c WHERE { ?w npdv:drillingOperatorCompany ?c }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A007**: DROP COLUMN wlbMudViscosityAtMD through view v_wellbore_mud (PostgreSQL)
-  - q1 `mud_viscosity` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?m ?v WHERE { ?m npdv:mudViscosity ?v }
-    ```
-
-  - q2 `mud_yield_point` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?m ?y WHERE { ?m npdv:mudYieldPoint ?y }
-    ```
-
-  - q3 `company_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A008**: DROP COLUMN prfInvestmentsMillNOK through view v_field_investment (MySQL)
-  - q1 `investment` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?i ?x WHERE { ?i npdv:investmentNOK ?x }
-    ```
-
-  - q2 `investment_year` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?i ?y WHERE { ?i a npdv:FieldInvestment ; npdv:productionYear ?y }
-    ```
-
-  - q3 `mud_weight` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?m ?w WHERE { ?m a npdv:WellboreDrillingMudSample ; npdv:mudWeight ?w }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
-
-- **A009**: DROP COLUMN wlbCoreIntervalBottom used in a view expression (PostgreSQL)
-  - q1 `core_bottom` (affected)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?b WHERE { ?c npdv:coreIntervalBottom ?b }
-    ```
-
-  - q2 `core_top` (neighbour)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?t WHERE { ?c a npdv:WellboreCore ; npdv:coreIntervalTop ?t }
-    ```
-
-  - q3 `company_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?c ?n WHERE { ?c a npdv:Company ; npdv:name ?n }
-    ```
-
-  - q4 `well_licence` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?l WHERE { ?w npdv:explorationWellboreForLicence ?l }
-    ```
-
-  - q5 `well_name` (control)
-
-    ```sparql
-    PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-    SELECT ?w ?n WHERE { ?w a npdv:ExplorationWellbore ; npdv:name ?n }
-    ```
+result names the code that produced it.
 
 Availability probe, sent about every 0.5 s during each treatment run (no scenario touches the
-licence table):
+`City` class):
 
 ```sparql
-PREFIX npdv: <http://sws.ifi.uio.no/vocab/npd-v2#>
-SELECT ?l WHERE { ?l a npdv:ProductionLicence } LIMIT 1
+PREFIX ex: <http://example.org/>
+SELECT ?c WHERE { ?c a ex:City } LIMIT 1
 ```
 
 ## Knowledge Base and ERD
@@ -621,7 +245,7 @@ done
 python3 experiments/evaluation/self_test.py                    # evaluation harness
 ```
 
-At the time of writing: Knowledge 180 tests, Executor 79, Ontop agent 42, Event Normalizer 32,
+At the time of writing: Knowledge 199 tests, Executor 80, Ontop agent 42, Event Normalizer 32,
 console 27.
 
 ## Repository layout
@@ -633,9 +257,8 @@ console 27.
 ├── stop.sh                     stop everything (--volumes also deletes the data)
 ├── run-evaluation.sh           start.sh + evaluation + analysis
 ├── setup/
-│   ├── npd/                    fetch-npd.sh and the generators of the split, the VDB, the mapping, the ontology
 │   ├── data-source/            PostgreSQL (reporting) and MySQL (registry) with schema monitors
-│   ├── data-federation/        Teiid image, datasources, VDB npd (Σ_S)
+│   ├── data-federation/        Teiid image, datasources, VDB example (Σ_S)
 │   ├── vkg-system/             Ontop blue/green instances, proxy, mapping.ttl (ℳ), ontology_file.ttl (𝒯)
 │   └── ascam/
 │       ├── schema-monitor/     Kafka, Kafka Connect, Debezium connector definitions
@@ -652,23 +275,22 @@ console 27.
 └── archive/                    retired iteration-1 code, the feasibility scripts, and the first case study (bansos/)
 ```
 
-The table and column names (`wlbNpdidWellbore`, `cmpLongName`) and the ontology terms are those of
-the NPD benchmark (<https://github.com/ontop/npd-benchmark>; Lanti et al., EDBT 2015). The split
-into `reporting` and `registry` is a choice of this thesis (ADR-0027). The first case study, on
-Indonesian social-assistance data, is kept in `archive/bansos/`.
+The data of the running example is invented and kept small on purpose (two or three rows per
+table). The NPD case study is on branch `feature/npd`; the first case study, on Indonesian
+social-assistance data, is kept in `archive/bansos/`.
 
 ## Documentation
 
 | Document | Content |
 |---|---|
-| [`docs/design-decisions.md`](docs/design-decisions.md) | The 30 architecture decisions (ADR-0001 to ADR-0030) with their evidence |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | The architecture decisions (ADR-0001 to ADR-0032) with their evidence |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | Knowledge Base: principles, schemas, ERD, integrity rules, decision matrix |
-| [`docs/evaluation.md`](docs/evaluation.md) | Evaluation protocol, all SQL and SPARQL, result files, threats to validity |
+| [`docs/evaluation.md`](docs/evaluation.md) | Evaluation protocol of the NPD case study (branch `feature/npd`), result files, threats to validity |
 | `setup/*/README.md`, `setup/ascam/*/README.md` | One README per component: what it does, how to run and test it |
-| [`setup/npd/README.md`](setup/npd/README.md) | The NPD case study: where the inputs come from, the split, and the generators |
+| [`docs/running-example.md`](docs/running-example.md) | The running example: data, VDB, mapping, ontology, and the 21 scenarios with their expected outcomes |
 | [`archive/README.md`](archive/README.md) | What the archive holds and why |
 
 The results of the first case study (social assistance) were produced by commit `a1e9b0a` on
 branch `eval/final`. Since then the code has been translated to English, three rules were
-corrected (ADR-0025, ADR-0026), and the case study was replaced by NPD (ADR-0027 to ADR-0030);
-the NPD evaluation is still to be run.
+corrected (ADR-0025, ADR-0026), and the case study was replaced by NPD (ADR-0027 to ADR-0030).
+This branch replaces NPD by the running example of the paper, to validate the Plan rule by rule.

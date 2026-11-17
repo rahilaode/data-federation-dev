@@ -109,10 +109,10 @@ def check(quiet: bool = False) -> tuple[bool, list[str]]:
     if agent.get('status') != 'ok':
         problems.append('the Ontop agent is not healthy')
 
-    # View scenarios (A007-A009): the predicates read through the views of the `services` model must be
+    # Scenarios that read through the views (queries.BASE_CHECKS): their predicates must be
     # answered in the base state. If not, the OBDF runs with an old VDB or mapping: run start.sh.
     import queries
-    for view_scenario in ('a007', 'a008', 'a009'):
+    for view_scenario in queries.BASE_CHECKS:
         name = queries.affected(view_scenario)
         result = queries.run(queries.Q[view_scenario][name][1], timeout=60)
         error = ' '.join((result['error'] or '').split())[:400]
@@ -128,7 +128,7 @@ def check(quiet: bool = False) -> tuple[bool, list[str]]:
                                 'run python3 experiments/evaluation/restore_sources.py, then ./restart-ascam.sh')
             else:
                 problems.append(f'base query {view_scenario} ({name}) returns no rows; '
-                                'the case-study views are not loaded (run start.sh)')
+                                'the views of the running example are not loaded (run start.sh)')
 
     version = http(KNOWLEDGE, '/api/v1/obdf/1/versions?limit=1', token('knowledge_api_tokens', 'ui'))
     if isinstance(version, list) and version:

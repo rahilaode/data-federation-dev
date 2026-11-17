@@ -35,11 +35,18 @@ def main() -> int:
 
     # In the base state a restore must send no DDL and must return 'clean'; otherwise the
     # harness waits for a restore event that never comes.
-    # keyed on the whole predicate, so that no column name matches inside another one
-    added = ('wlbMudPh', 'cmpCountryCode', 'wlbDrillingCompany', 'cmpFullName')   # ADD, new RENAME names
-    dropped = ('wlbLotMudDencity', 'dscDiscoveryYear', 'wlbMudViscosityAtMD', 'prfInvestmentsMillNOK',
-               'wlbCoreIntervalBottom')
-    base_state = {**{f"column_name='{c}'": '0' for c in added}, **{f"column_name='{c}'": '1' for c in dropped}}
+    # keyed on table and column, so that no column name matches inside another one; a DROP
+    # column exists in the base state, an ADD column and the new name of a RENAME do not
+    def key(table, column):
+        return f"table_name='{table}' AND column_name='{column}'"
+    base_state = {}
+    for sc in scenarios.SCENARIOS.values():
+        if sc.pattern == 'P-002':
+            base_state[key(sc.table, sc.column)] = '1'
+        elif sc.pattern == 'P-001':
+            base_state[key(sc.table, sc.column)] = '0'
+        else:
+            base_state[key(sc.table, sc.new_column)] = '0'
     for code, sc in scenarios.SCENARIOS.items():
         commands: list[str] = []
 
@@ -126,10 +133,13 @@ def main() -> int:
             if pattern == 'P-001':
                 after[affected] = ok(3, 'e')
             if pattern == 'P-002':
-                after[affected] = ok(0)
+                rule = queries.P002_AFFECTED.get(code, 'empty')
+                after[affected] = {'empty': ok(0), 'fewer': ok(2), 'same': before[affected]}[rule]
             not_adapted = scenarios.SCENARIOS[code].decision == "notify"
-            if not_adapted:                             # A009: not adapted, the view stays broken
+            if not_adapted and pattern != 'P-001':      # not adapted: the broken element stays broken
                 after = dict(broken)
+            elif not_adapted:                           # an ADD that is not adapted breaks nothing
+                after = dict(before)
             assessment = queries.score(code, before, after)
             expectations = queries.expectations(code, after, assessment)
             assert all(expectations.values()), (code, expectations)

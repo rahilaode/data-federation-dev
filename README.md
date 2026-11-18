@@ -13,6 +13,11 @@ benchmark (data of the Norwegian Petroleum Directorate split over PostgreSQL and
 by Teiid and exposed as SPARQL by Ontop with the benchmark's own ontology and R2RML mapping), the
 ASCAM services, and the evaluation harness.
 
+On branch `feature/npd_v2` the NPD federation also carries a validation layer: views, TriplesMaps,
+classes, and properties added beside the NPD benchmark so that every rule of the Plan can be
+triggered on NPD tables (ADR-0034, [`docs/npd-v2-modifications.md`](docs/npd-v2-modifications.md)).
+The sources are those of NPD.
+
 - [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Setup and running](#setup-and-running)
@@ -621,7 +626,7 @@ done
 python3 experiments/evaluation/self_test.py                    # evaluation harness
 ```
 
-At the time of writing: Knowledge 193 tests, Executor 80, Ontop agent 42, Event Normalizer 32,
+At the time of writing: Knowledge 214 tests, Executor 81, Ontop agent 42, Event Normalizer 32,
 console 27.
 
 ## Repository layout
@@ -661,8 +666,9 @@ Indonesian social-assistance data, is kept in `archive/bansos/`.
 
 | Document | Content |
 |---|---|
-| [`docs/design-decisions.md`](docs/design-decisions.md) | The 33 architecture decisions (ADR-0001 to ADR-0033) with their evidence |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | The 34 architecture decisions (ADR-0001 to ADR-0034) with their evidence |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | Knowledge Base: principles, schemas, ERD, integrity rules, decision matrix |
+| [`docs/npd-v2-modifications.md`](docs/npd-v2-modifications.md) | The validation layer of `feature/npd_v2`: every added element, its reason, and the scenarios v01–v21 |
 | [`docs/evaluation.md`](docs/evaluation.md) | Evaluation protocol, all SQL and SPARQL, result files, threats to validity |
 | `setup/*/README.md`, `setup/ascam/*/README.md` | One README per component: what it does, how to run and test it |
 | [`setup/npd/README.md`](setup/npd/README.md) | The NPD case study: where the inputs come from, the split, and the generators |

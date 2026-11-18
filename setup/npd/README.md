@@ -57,6 +57,14 @@ identical answers and six of the seven redirected predicates identical triples; 
 the view computes the feet-to-metres conversion in exact NUMERIC where Ontop used double
 precision (ADR-0027).
 
+## Validation layer (branch `feature/npd_v2`)
+
+`tools/validation.py` adds the elements that trigger every rule of the Plan in the paper on NPD
+tables: one foreign column, six views in `services`, ten TriplesMaps, and their classes and
+properties in the namespace `npdx` (ADR-0034). It changes no NPD element and runs after the
+generators above; it is idempotent. `docs/npd-v2-modifications.md` explains every element, and
+`test_case_study_npd_v2.py` checks the 21 scenarios v01–v21.
+
 `compare_endpoints.py <reference> <tested> <queries dir>` runs the 31 NPD queries on two SPARQL
 endpoints and compares the answers as multisets, for example NPD on one PostgreSQL database
 against the federation.

@@ -17450,3 +17450,164 @@
       rr:template "http://sws.ifi.uio.no/data/npd-v2/wellbore/{\"wlbNpdidWellbore\"}/core/{\"wlbCoreNumber\"}";
       rr:termType rr:IRI
     ] .
+
+# >>> ASCAM validation layer (setup/npd/tools/validation.py); do not edit by hand
+@prefix npdx: <https://github.com/rahilaode/data-federation-dev/npd-validation#> .
+
+<Validation:CurrentOperator> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"services\".\"v_current_operator\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"orgNumber\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:orgNumber
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:class npdx:CurrentOperator;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/company/{\"cmpNpdidCompany\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:OverviewWellbore> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"reporting\".\"wellbore_npdid_overview\""
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:class npdx:OverviewWellbore;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/wellbore/{\"wlbNpdidWellbore\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:OverviewWellboreType> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"reporting\".\"wellbore_npdid_overview\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"wlbWellType\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:overviewWellType
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/wellbore/{\"wlbNpdidWellbore\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:PointFacility> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT \"wlbNpdidWellbore\", \"wlbDrillingFacility\", \"wlbProductionFacility\" FROM \"reporting\".\"wlbPoint\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"wlbDrillingFacility\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:drillingFacility
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/wellbore/{\"wlbNpdidWellbore\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:ShallowDrillingFacility> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT \"wlbNpdidWellbore\", \"wlbDrillingFacility\" FROM \"reporting\".\"wellbore_shallow_all\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"wlbDrillingFacility\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:drillingFacility
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/wellbore/{\"wlbNpdidWellbore\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:PipelineOperator> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"services\".\"v_pipeline_operator\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"pipNameCurrentOperator\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:currentOperatorName
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/pipeline/{\"pipNpdidPipe\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:FieldDescriptionText> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"services\".\"v_field_text_cache\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"fldDescriptionText\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:descriptionText
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/field/{\"fldNpdidField\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:MoveableFacility> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"registry\".\"facility_moveable\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"fclKind\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:facilityKind
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:class npdx:MoveableFacility;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/facility/{\"fclNpdidFacility\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:ForeignFlaggedFacility> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"registry\".\"facility_moveable\" WHERE \"fclNationName\" <> 'NORWAY'"
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"fclNationName\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:flagNation
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:class npdx:ForeignFlaggedFacility;
+      rr:template "http://sws.ifi.uio.no/data/npd-v2/facility/{\"fclNpdidFacility\"}";
+      rr:termType rr:IRI
+    ] .
+
+<Validation:FacilityRecord> a rr:TriplesMap;
+  rr:logicalTable [ a rr:R2RMLView;
+      rr:sqlQuery "SELECT * FROM \"registry\".\"facility_moveable\""
+    ];
+  rr:predicateObjectMap [ a rr:PredicateObjectMap;
+      rr:objectMap [ a rr:ObjectMap, rr:TermMap;
+          rr:column "\"fclCurrentRespCompanyName\"";
+          rr:termType rr:Literal
+        ];
+      rr:predicate npdx:responsibleCompany
+    ];
+  rr:subjectMap [ a rr:SubjectMap, rr:TermMap;
+      rr:template "https://github.com/rahilaode/data-federation-dev/npd-validation/record/facility/{\"fclNpdidFacility\"}";
+      rr:termType rr:IRI
+    ] .
+# <<< ASCAM validation layer

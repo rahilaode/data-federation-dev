@@ -15040,3 +15040,88 @@ skos:Concept a owl:Class ;
 [] a owl:AllDisjointClasses ;
     owl:members ( npdv:Formation npdv:Group npdv:Member ) .
 
+# >>> ASCAM validation layer (setup/npd/tools/validation.py); do not edit by hand
+@prefix npdx: <https://github.com/rahilaode/data-federation-dev/npd-validation#> .
+
+npdx:CurrentOperator a owl:Class ;
+    rdfs:label "CurrentOperator"@en ;
+    rdfs:comment "Company that is currently operator of a production licence (view v_current_operator)."@en .
+
+npdx:OverviewWellbore a owl:Class ;
+    rdfs:label "OverviewWellbore"@en ;
+    rdfs:comment "Wellbore listed in the NPDID overview (wellbore_npdid_overview)."@en .
+
+npdx:MoveableFacility a owl:Class ;
+    rdfs:label "MoveableFacility"@en ;
+    rdfs:comment "Moveable facility (facility_moveable)."@en .
+
+npdx:ForeignFlaggedFacility a owl:Class ;
+    rdfs:label "ForeignFlaggedFacility"@en ;
+    rdfs:comment "Moveable facility whose flag nation is not Norway."@en .
+
+npdx:orgNumber a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "orgNumber"@en ;
+    rdfs:comment "Organisation number (Brønnøysund register) of a current licence operator."@en .
+
+npdx:overviewWellType a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "overviewWellType"@en ;
+    rdfs:comment "Well type as given in the NPDID overview."@en .
+
+npdx:drillingFacility a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "drillingFacility"@en ;
+    rdfs:comment "Name of the drilling facility of a wellbore."@en .
+
+npdx:currentOperatorName a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "currentOperatorName"@en ;
+    rdfs:comment "Name of the current operator of a pipeline."@en .
+
+npdx:descriptionText a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "descriptionText"@en ;
+    rdfs:comment "Text of a field description."@en .
+
+npdx:facilityKind a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "facilityKind"@en ;
+    rdfs:comment "Kind of a moveable facility."@en .
+
+npdx:flagNation a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "flagNation"@en ;
+    rdfs:comment "Flag nation of a moveable facility."@en .
+
+npdx:responsibleCompany a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "responsibleCompany"@en ;
+    rdfs:comment "Name of the company responsible for a moveable facility."@en .
+
+npdv:wlbEntryYear a owl:DatatypeProperty ;
+    rdfs:domain npdx:OverviewWellbore ;
+    rdfs:range xsd:integer ;
+    rdfs:label "wlbEntryYear"@en ;
+    rdfs:comment "Mapped from reporting.wellbore_npdid_overview.wlbEntryYear until that column was dropped."@en .
+
+npdv:fclStatus a owl:DatatypeProperty ;
+    rdfs:domain npdx:MoveableFacility ;
+    rdfs:range xsd:string ;
+    rdfs:label "fclStatus"@en ;
+    rdfs:comment "Mapped from registry.facility_moveable.fclStatus until that column was dropped."@en .
+# <<< ASCAM validation layer
+
+# ─── ASCAM-managed blocks (do not edit by hand) ───
+
+# ascam:begin deprecate http://sws.ifi.uio.no/vocab/npd-v2#wlbEntryYear
+npdv:wlbEntryYear owl:deprecated true ;
+    dcterms:modified "2026-11-18T00:00:00+00:00"^^xsd:dateTime ;
+    skos:changeNote "column reporting.wellbore_npdid_overview.wlbEntryYear was dropped" .
+# ascam:end deprecate http://sws.ifi.uio.no/vocab/npd-v2#wlbEntryYear
+
+# ascam:begin deprecate http://sws.ifi.uio.no/vocab/npd-v2#fclStatus
+npdv:fclStatus owl:deprecated true ;
+    dcterms:modified "2026-11-18T00:00:00+00:00"^^xsd:dateTime ;
+    skos:changeNote "column registry.facility_moveable.fclStatus was dropped" .
+# ascam:end deprecate http://sws.ifi.uio.no/vocab/npd-v2#fclStatus

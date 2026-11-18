@@ -860,3 +860,43 @@ a deprecated property gets a new IRI, and the administrator cannot choose it. Th
 case-study tests (A001, A004) keep their domains, because their new TriplesMaps keep the
 subjects of a class TriplesMap. All 193 Knowledge tests pass. With Ontop 4.1.1 on scenario r14
 of the running example, `?a a ex:Account` stays at 2 answers and `?s ex:status ?st` gives 4.
+
+## ADR-0034: A validation layer on NPD for every rule of the Plan
+
+*2026-11-18. Case study (branch `feature/npd_v2`).*
+
+**Context.** The NPD case study (ADR-0027) exercised nine scenarios. Several rules of the Plan
+in the paper had no NPD element that triggers them: a filter in a view, an IRI template column
+outside the key, c′ already read by another column, views that would lose all their columns,
+declare them inline, or are materialized, `SELECT *` in a UNION, a drop that only rewrites a
+logical table, a property that another assertion keeps populated, a new column on maps that
+select `*`, a safe and an unsafe domain (ADR-0033), and reuse of a deprecated property. The
+paper's Preliminaries also needed an NPD fragment for Examples 1 to 3. The sources must not
+change.
+
+**Decision.** `setup/npd/tools/validation.py` adds, without changing any NPD element: one
+foreign column (`company.cmpGroupName`, reading a column that does not exist), six views in
+`services`, ten TriplesMaps over NPD tables or the new views, four classes and eight data
+properties in the namespace `npdx`, and two deprecated properties in the NPD namespace for the
+reuse scenarios. No axiom relates the `npdx` terms to the NPD vocabulary, and no new TriplesMap
+uses an NPD class or property, so the triples that the 31 NPD queries can read are unchanged.
+`docs/npd-v2-modifications.md` gives the reason of every element and the scenario it serves.
+
+The layer exposed two defects, fixed here. (1) A predicate-object map added by P-001 named its
+column without delimiters, so a mixed-case column such as `wlbEntryYear` meant `wlbentryyear` on
+PostgreSQL and Ontop rejected the mapping ("placeholder … does not occur in source query"); the
+Executor now delimits it as ADR-0028 does for new TriplesMaps. (2) The collision policy
+`qualify_with_class` took the local name of the class after the last `/`, which gives
+`fclStatus_npd-v2#Company` for a class in a `#` namespace; it now takes it after `#` or `/`.
+
+**Evidence.** `test_case_study_npd_v2.py`: 21 tests, one per scenario v01–v21, each naming the
+sentence of the paper or the row of Table 1 it checks; all 214 Knowledge tests pass. Executor:
+a new test for the delimited column; all 81 tests pass. `ontop validate` (Ontop 4.1.1) accepts the
+mapping and ontology with the layer, and the result of each executed plan (v01, v12–v15,
+v17–v20), on an empty copy of the NPD schema in PostgreSQL; before the fix (1), v17 and v18 were
+rejected. Teiid's acceptance of the layer (inline and materialized views, the extra foreign
+column) could not be run here, because the session's network policy refuses Maven Central and
+the container registries; it was checked against the Teiid documentation (CREATE VIEW BNF and
+view options, pp. 356–357; internal materialization, pp. 117 and 129; foreign table DDL and
+NAMEINSOURCE, pp. 352–354) and structurally (well-formed XML, every view body parses, every
+column exists, UNION branches of equal width), and is to be confirmed on the running stack.

@@ -694,6 +694,7 @@
               "cmpLicenceLicenseeCurrent" string(1) NOT NULL,
               "cmpLicenceLicenseeFormer" string(1) NOT NULL,
               "dateSyncNPD" date NOT NULL,
+              "cmpGroupName" string(100) OPTIONS(NAMEINSOURCE '`cmpGroupName`'),
               PRIMARY KEY ("cmpNpdidCompany")
             ) OPTIONS(UPDATABLE 'FALSE');
 
@@ -1272,6 +1273,20 @@
             CREATE VIEW "v_field_investment" AS SELECT "prfNpdidInformationCarrier" AS "fieldId", "prfYear" AS "investmentYear", "prfInvestmentsMillNOK" AS "investmentMillNOK" FROM "registry"."field_investment_yearly";
 
             CREATE VIEW "v_wellbore_core_ft" AS SELECT "wellbore_core_id", "wlbNpdidWellbore", "wlbCoreNumber", "wlbCoreIntervalBottom" * 0.3048 AS "wlbCoreIntervalBottomFT" FROM "reporting"."wellbore_core" WHERE "wlbCoreIntervalUom" = '[ft  ]';
+
+            /* >>> validation views (setup/npd/tools/validation.py) */
+            CREATE VIEW "v_current_operator" AS SELECT "cmpNpdidCompany", "cmpOrgNumberBrReg" AS "orgNumber" FROM "registry"."company" WHERE "cmpLicenceOperCurrent" = 'Y';
+
+            CREATE VIEW "v_wellbore_overview" AS SELECT * FROM "reporting"."wellbore_npdid_overview";
+
+            CREATE VIEW "v_point_field" AS SELECT "wlbField" FROM "reporting"."wlbPoint";
+
+            CREATE VIEW "v_pipeline_operator" ("pipNpdidPipe" integer, "pipNameCurrentOperator" string) AS SELECT "pipNpdidPipe", "pipNameCurrentOperator" FROM "registry"."pipLine";
+
+            CREATE VIEW "v_field_text_cache" OPTIONS (MATERIALIZED 'TRUE') AS SELECT "fldNpdidField", "fldDescriptionText" FROM "registry"."field_description";
+
+            CREATE VIEW "v_field_status" AS SELECT * FROM "registry"."field_activity_status_hst" WHERE "fldStatus" = 'PRODUCING' UNION ALL SELECT "fldName", "fldStatusFromDate", "fldStatusToDate", "fldStatus", "fldNpdidField", "fldStatusDateUpdated", "dateSyncNPD" FROM "registry"."field_activity_status_hst" WHERE "fldStatus" <> 'PRODUCING';
+            /* <<< validation views */
         ]]></metadata>
     </model>
 </vdb>

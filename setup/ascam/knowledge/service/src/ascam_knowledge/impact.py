@@ -214,8 +214,131 @@ def _exposing_triples_maps(db: Session, version_id: int, table: str) -> list[dic
             continue
         classes = db.execute(select(spec.SubjectClass.class_iri)
                              .filter_by(triples_map_id=triples_map_id)).scalars().all()
-        found.append({'id': triples_map_id, 'iri': iri, 'classes': list(classes)})
+        found.append({'id': triples_map_id, 'iri': iri, 'classes': list(classes),
+                      'typed': sorted(_typed_classes(db, version_id, triples_map_id, table))})
     return found
+
+
+# ── which classes the subjects of a TriplesMap already belong to (ADR-0033) ─────────────
+RDFS_SUBCLASS = 'http://www.w3.org/2000/01/rdf-schema#subClassOf'
+
+
+def _superclasses(db: Session, version_id: int, classes) -> set[str]:
+    """The classes and their named superclasses, following rdfs:subClassOf in 𝒯."""
+    edges: dict[str, set[str]] = {}
+    for sub, sup in db.execute(select(spec.RdfTriple.subject, spec.RdfTriple.object).where(
+            spec.RdfTriple.spec_version_id == version_id,
+            spec.RdfTriple.predicate == RDFS_SUBCLASS,
+            spec.RdfTriple.object_kind == 'iri')).all():
+        edges.setdefault(sub, set()).add(sup)
+    found, todo = set(), list(classes)
+    while todo:
+        c = todo.pop()
+        if c not in found:
+            found.add(c)
+            todo.extend(edges.get(c, ()))
+    return found
+
+
+def _subject_template(db: Session, version_id: int, triples_map_id: int):
+    return db.execute(select(spec.TermMap).where(
+        spec.TermMap.spec_version_id == version_id,
+        spec.TermMap.triples_map_id == triples_map_id,
+        spec.TermMap.position == 'subject')).scalars().first()
+
+
+def _reads_whole_table(db: Session, version_id: int, triples_map_id: int, kind: str,
+                       sql: str | None, table: str) -> bool:
+    """True when the logical table returns every row of `table` and its subject template uses
+    columns of the table under their own names: rr:tableName, or a single SELECT over the table
+    alone without WHERE, JOIN, GROUP BY, HAVING, LIMIT, or a set operation."""
+    sources = db.execute(
+        select(spec.TeiidTable.name).join(spec.LogicalSource,
+                                          spec.LogicalSource.teiid_table_id == spec.TeiidTable.id)
+        .where(spec.LogicalSource.spec_version_id == version_id,
+               spec.LogicalSource.triples_map_id == triples_map_id)).scalars().all()
+    if sources != [table]:
+        return False
+    if kind == 'table':
+        return True
+    try:
+        tree = sqlglot.parse_one(sql or '')
+    except Exception:                                   # noqa: BLE001
+        return False
+    if not isinstance(tree, exp.Select) or len(list(tree.find_all(exp.Table))) != 1:
+        return False
+    if any(tree.args.get(k) for k in ('joins', 'where', 'group', 'having', 'limit', 'offset',
+                                       'qualify')):
+        return False
+    return _template_uses_table_columns(db, version_id, triples_map_id)
+
+
+def _template_uses_table_columns(db: Session, version_id: int, triples_map_id: int) -> bool:
+    """True when every column of the subject template is a column of the logical table's
+    source table under its own name (or comes through rr:tableName or SELECT *)."""
+    subject = _subject_template(db, version_id, triples_map_id)
+    if subject is None or subject.value_kind != 'template':
+        return False
+    columns = db.execute(
+        select(spec.LogicalColumn.name, spec.LogicalColumn.expression_kind, spec.TeiidColumn.name)
+        .join(spec.TermMapColumn, spec.TermMapColumn.logical_column_id == spec.LogicalColumn.id)
+        .outerjoin(spec.LogicalColumnSource,
+                   spec.LogicalColumnSource.logical_column_id == spec.LogicalColumn.id)
+        .outerjoin(spec.TeiidColumn, spec.TeiidColumn.id == spec.LogicalColumnSource.teiid_column_id)
+        .where(spec.TermMapColumn.spec_version_id == version_id,
+               spec.TermMapColumn.term_map_id == subject.id)).all()
+    return all(kind == 'star' or (kind == 'passthrough' and source == name)
+               for name, kind, source in columns)
+
+
+def _typed_classes(db: Session, version_id: int, triples_map_id: int, table: str) -> set[str]:
+    """Classes C such that 𝒯 and ℳ already make every subject of the TriplesMap an instance of C.
+
+    A subject is typed by the TriplesMap's own rr:class, and by the rr:class of another
+    TriplesMap with the same subject template that reads every row of the same table
+    (`_reads_whole_table`): the same row then gives the same IRI in both. Superclasses follow
+    from rdfs:subClassOf. The test is sufficient, not complete: a subject typed in another way
+    (another table, a join, a domain axiom) is not recognised, and the domain is then left out."""
+    own = db.execute(select(spec.SubjectClass.class_iri)
+                     .filter_by(spec_version_id=version_id, triples_map_id=triples_map_id)
+                     ).scalars().all()
+    classes = set(own)
+    subject = _subject_template(db, version_id, triples_map_id)
+    alone = db.execute(
+        select(spec.TeiidTable.name).join(spec.LogicalSource,
+                                          spec.LogicalSource.teiid_table_id == spec.TeiidTable.id)
+        .where(spec.LogicalSource.spec_version_id == version_id,
+               spec.LogicalSource.triples_map_id == triples_map_id)).scalars().all() == [table]
+    if alone and _template_uses_table_columns(db, version_id, triples_map_id):
+        others = db.execute(
+            select(spec.TriplesMap.id, spec.TriplesMap.logical_table_kind, spec.TriplesMap.sql_query)
+            .join(spec.TermMap, spec.TermMap.triples_map_id == spec.TriplesMap.id)
+            .join(spec.LogicalSource, spec.LogicalSource.triples_map_id == spec.TriplesMap.id)
+            .join(spec.TeiidTable, spec.TeiidTable.id == spec.LogicalSource.teiid_table_id)
+            .where(spec.TriplesMap.spec_version_id == version_id,
+                   spec.TriplesMap.id != triples_map_id,
+                   spec.TermMap.position == 'subject', spec.TermMap.value_kind == 'template',
+                   spec.TermMap.value == subject.value,
+                   spec.TeiidTable.name == table)).all()
+        for other_id, kind, sql in others:
+            other_classes = db.execute(select(spec.SubjectClass.class_iri).filter_by(
+                spec_version_id=version_id, triples_map_id=other_id)).scalars().all()
+            if other_classes and _reads_whole_table(db, version_id, other_id, kind, sql, table):
+                classes.update(other_classes)
+    return _superclasses(db, version_id, classes)
+
+
+def safe_domains(options: dict) -> list[str]:
+    """Classes C of an ADD proposal for which rdfs:domain C adds no class membership: every
+    TriplesMap in X_C (those with class C and those with no class) already types its subjects
+    as C (ADR-0033). With the domain, Ontop would otherwise infer that the subjects of a
+    TriplesMap without that class are instances of C, and old class queries would change."""
+    safe = []
+    for c in options.get('classes') or []:
+        chosen = [tm for tm in options['triples_maps'] if not tm['classes'] or c in tm['classes']]
+        if chosen and all(c in (tm.get('typed') or []) for tm in chosen):
+            safe.append(c)
+    return safe
 
 
 MAPPING_BASE = 'urn:ascam:mapping'
@@ -264,7 +387,10 @@ def _new_triples_map_options(db: Session, version_id: int, model: str, table: st
             if (subject.value, class_iri) in seen:
                 continue
             seen.add((subject.value, class_iri))
+            # the new TriplesMap keeps the FROM and WHERE of its basis, so its subjects are
+            # those of the basis and are typed as the basis types them
             options.append({'iri': None, 'classes': [class_iri], 'new': True,
+                            'typed': sorted(_typed_classes(db, version_id, triples_map_id, table)),
                             'subject_template': subject.value, 'sql_query': new_sql,
                             'based_on': iri, 'model': model})
     for index, option in enumerate(options):
@@ -504,12 +630,15 @@ def _entity(db: Session, version_id: int, iri: str):
 
 
 def property_problems(db: Session, version_id: int, iri: str, domain: str | None,
-                      range_iri: str | None = None) -> list[str]:
+                      range_iri: str | None = None, chosen: str | None = None) -> list[str]:
     """Collisions between the IRI of a new property and entities of the active version.
 
     OWL 2 QL and Ontop reject a name used both as an object property and as a data property
     ("name sets are not disjoint"); an existing data property may be reused only when its
-    domain and range are the same, because its declaration stays as it is."""
+    domain and range are the same, because its declaration stays as it is. `domain` is the
+    domain the new property may safely have (ADR-0033): when the subjects of class `chosen`
+    are not all typed by it, an existing property with a domain is not reused, because its
+    domain would make them instances of that class."""
     entity = _entity(db, version_id, iri)
     if entity is None:
         return []
@@ -518,6 +647,10 @@ def property_problems(db: Session, version_id: int, iri: str, domain: str | None
     domains = set(db.execute(select(spec.OntDomain.class_expression)
                              .filter_by(entity_id=entity.id)).scalars().all())
     if domains - ({domain} if domain else set()):
+        if chosen and not domain:
+            return [f'IRI {iri} already exists with a different domain: {sorted(domains)}; '
+                    'its domain would make subjects of the new mapping that are not instances '
+                    'of it into instances of it (ADR-0033)']
         return [f'IRI {iri} already exists with a different domain: {sorted(domains)}']
     ranges = set(db.execute(select(spec.OntRange.range_iri)
                             .filter_by(entity_id=entity.id)).scalars().all())
@@ -539,14 +672,17 @@ def property_notes(db: Session, version_id: int, iri: str) -> list[str]:
 
 
 def property_actions(options: dict, iri: str, domain: str | None) -> list[dict]:
-    """𝒯 and ℳ actions for a new property. The mapping is not attached to a TriplesMap whose
-    subjects have a class other than `domain`, because a reasoner would then infer that those
-    subjects belong to `domain` too; TriplesMaps without rr:class are included."""
+    """𝒯 and ℳ actions for a new property of class `domain` (the class chosen in the approval
+    form). The mapping is attached to the TriplesMaps of that class and to those without
+    rr:class (X_C), never to a TriplesMap of another class. rdfs:domain is written only when
+    it is safe (ADR-0033): when every TriplesMap in X_C already types its subjects as the
+    class; otherwise Ontop would infer that the other subjects are instances of it too."""
     column = options['column']
     tms = [tm for tm in options['triples_maps']
            if domain is None or not tm['classes'] or domain in tm['classes']]
+    axiom = domain if domain and domain in safe_domains(options) else None
     actions = [{'artifact': 'ontology', 'operation': 'add_datatype_property',
-                'iri': iri, 'domain': [domain] if domain else [], 'column': column}]
+                'iri': iri, 'domain': [axiom] if axiom else [], 'column': column}]
     written_templates = set()
     for tm in tms:
         if tm.get('new'):
@@ -601,10 +737,12 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report,
     options = {'column': event.get('column'), 'table': target_table.table,
                'namespace': namespace,
                'iri_template': naming.property_iri_template if naming else None,
-               'triples_maps': [{'iri': tm['iri'], 'classes': tm['classes']} for tm in exposing]
+               'triples_maps': [{'iri': tm['iri'], 'classes': tm['classes'],
+                                 'typed': tm['typed']} for tm in exposing]
                + new_maps,
                'classes': classes, 'proposed_iri': None, 'proposed_domain': None,
                'range_iri': expected_range(db, obdf_id, dbms, event.get('column_type'))}
+    options['safe_domains'] = safe_domains(options)
     report.add_options = options
     if not exposing and not new_maps:
         report.reasons.append(
@@ -624,21 +762,31 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report,
     local = ''.join(part.capitalize() if i else part
                     for i, part in enumerate((event.get('column') or '').split('_')))
     iri = _iri_property(naming.property_iri_template, namespace, local, event.get('column') or '')
-    domain = classes[0] if classes else None
-    problems = property_problems(db, version.id, iri, domain, options['range_iri'])
+    domain = (options['safe_domains'] or classes or [None])[0]
+    axiom = domain if domain in options['safe_domains'] else None
+    if domain and not axiom:
+        unsafe = [tm['iri'] for tm in options['triples_maps']
+                  if (not tm['classes'] or domain in tm['classes'])
+                  and domain not in (tm.get('typed') or [])]
+        report.reasons.append(
+            f'the property gets no rdfs:domain {domain}: the subjects of {unsafe} are not known '
+            f'to be instances of {domain}, and with the domain Ontop would infer that they are, '
+            'which changes the answers of queries on the class (ADR-0033)')
+    problems = property_problems(db, version.id, iri, axiom, options['range_iri'], domain)
     if problems:
         report.reasons.extend(problems)
         if naming.on_collision == 'qualify_with_class' and domain:
             iri = f"{iri}_{domain.rsplit('/', 1)[-1]}"
             report.reasons.append(f'the name collision policy uses IRI {iri}')
-            problems = property_problems(db, version.id, iri, domain, options['range_iri'])
+            problems = property_problems(db, version.id, iri, axiom, options['range_iri'], domain)
         if problems:
             report.reasons.append('choose another property name in the approval form')
             return report
     if len(classes) > 1:
         report.reasons.append(
             f'the TriplesMaps that expose {target_table.table} give more than one class '
-            f'{classes}; the proposal uses {domain} as domain and should be reviewed')
+            f'{classes}; the proposal maps the column for subjects of {domain} and should be '
+            'reviewed')
     options['proposed_iri'], options['proposed_domain'] = iri, domain
     report.reasons.extend(property_notes(db, version.id, iri))
     report.actions.extend(property_actions(options, iri, domain))
@@ -663,7 +811,9 @@ def revise_add(db: Session, plan, local_name: str, domain: str | None) -> tuple[
     if not options['classes'] and domain:
         raise ValueError('the exposing TriplesMaps give no class, so no domain can be chosen')
     iri = _iri_property(options['iri_template'], options['namespace'], local_name)
-    problems = property_problems(db, plan.base_spec_version_id, iri, domain, options.get('range_iri'))
+    axiom = domain if domain and domain in options.get('safe_domains', []) else None
+    problems = property_problems(db, plan.base_spec_version_id, iri, axiom,
+                                 options.get('range_iri'), domain)
     if problems:
         raise ValueError('; '.join(problems))
     return iri, property_actions(options, iri, domain)

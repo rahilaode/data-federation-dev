@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 import fixtures_obdf as fx
-from test_impact import obdf                      # noqa: F401 — synced OBDF fixture
+from test_impact import obdf, use_mapping         # noqa: F401 — synced OBDF fixture
 from test_sync import set_clients
 
 
@@ -271,7 +271,9 @@ def test_property_choice_only_for_add_and_approval(api, obdf):
 
 def test_admin_choice_of_a_deprecated_property_is_explained(api, obdf):
     """ADD → DROP → ADD: the administrator gives the new column the name of a property whose
-    column was dropped earlier (bansos:statusEkonomi is deprecated in the fixture)."""
+    column was dropped earlier (bansos:statusEkonomi is deprecated in the fixture). The mapping
+    variant makes its domain safe for the new subjects (ADR-0033)."""
+    use_mapping(api, obdf, fx.MAPPING_SHARED_TEMPLATE)
     plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
                  table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
     domain = plan['impact']['add_options']['proposed_domain']
@@ -282,6 +284,7 @@ def test_admin_choice_of_a_deprecated_property_is_explained(api, obdf):
 
 
 def test_admin_choice_with_another_range_is_refused(api, obdf):
+    use_mapping(api, obdf, fx.MAPPING_SHARED_TEMPLATE)
     api.put(f'/api/v1/obdf/{obdf}/type-mappings', json=[
         {'dbms': 'postgresql', 'native_type': 'integer', 'teiid_type': 'integer',
          'xsd_datatype': 'xsd:integer'}])
@@ -291,3 +294,14 @@ def test_admin_choice_with_another_range_is_refused(api, obdf):
     r = api.post(f"/api/v1/plans/{plan['id']}/approve",
                  json={'property_name': 'statusEkonomi', 'domain': domain})
     assert r.status_code == 422 and 'already exists with range' in r.json()['detail']
+
+
+def test_admin_cannot_reuse_a_property_whose_domain_is_unsafe(api, obdf):
+    """ADR-0033: with MapRingkas (no class, other IRIs) in X_C, reusing statusEkonomi
+    (domain PenerimaBansos) would classify its subjects, so the choice is refused."""
+    plan = send_event(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')['plan']
+    domain = plan['impact']['add_options']['proposed_domain']
+    r = api.post(f"/api/v1/plans/{plan['id']}/approve",
+                 json={'property_name': 'statusEkonomi', 'domain': domain})
+    assert r.status_code == 422 and 'would make subjects of the new mapping' in r.json()['detail']

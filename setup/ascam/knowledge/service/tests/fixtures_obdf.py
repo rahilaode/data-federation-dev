@@ -40,6 +40,13 @@ MAPPING_TTL = """@prefix rr: <http://www.w3.org/ns/r2rml#> .
         rr:objectMap [ rr:column "status_ekonomi" ] ] .
 """
 
+# MapRingkas with the subject template of MapPenerima: both read every row of the table, so the
+# subjects of MapRingkas are already instances of PenerimaBansos through MapPenerima (ADR-0033).
+MAPPING_SHARED_TEMPLATE = MAPPING_TTL.replace(
+    'rr:template "http://bansos.go.id/resource/ringkas/{penerima_id}/{nik}"',
+    'rr:template "http://bansos.go.id/resource/penerima/{penerima_id}"')
+assert MAPPING_SHARED_TEMPLATE != MAPPING_TTL
+
 ONTOLOGY_TTL = """@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .

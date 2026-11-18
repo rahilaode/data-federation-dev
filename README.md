@@ -668,6 +668,7 @@ Indonesian social-assistance data, is kept in `archive/bansos/`.
 |---|---|
 | [`docs/design-decisions.md`](docs/design-decisions.md) | The 34 architecture decisions (ADR-0001 to ADR-0034) with their evidence |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | Knowledge Base: principles, schemas, ERD, integrity rules, decision matrix |
+| [`docs/npd-v2-manual-evaluation.md`](docs/npd-v2-manual-evaluation.md) | Manual evaluation of `feature/npd_v2`: for v01–v21 the DDL, what to check, and the SPARQL queries with their SQL cross-checks |
 | [`docs/npd-v2-modifications.md`](docs/npd-v2-modifications.md) | The validation layer of `feature/npd_v2`: every added element, its reason, and the scenarios v01–v21 |
 | [`docs/evaluation.md`](docs/evaluation.md) | Evaluation protocol, all SQL and SPARQL, result files, threats to validity |
 | `setup/*/README.md`, `setup/ascam/*/README.md` | One README per component: what it does, how to run and test it |

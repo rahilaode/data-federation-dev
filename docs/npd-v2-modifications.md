@@ -6,8 +6,8 @@ Pertama, setiap aturan Plan di paper bisa dipicu pada tabel dan data NPD yang as
 potongan kecil NPD bisa dipakai sebagai contoh di bagian Preliminaries paper.
 
 Semua elemen dibuat oleh satu skrip, `setup/npd/tools/validation.py`, dan dicatat sebagai
-ADR-0034 di `docs/design-decisions.md`. Langkah evaluasi manual per skenario ditulis di dokumen
-terpisah.
+ADR-0034 di `docs/design-decisions.md`. Langkah evaluasi manual per skenario ada di
+[`npd-v2-manual-evaluation.md`](npd-v2-manual-evaluation.md).
 
 ## 1. Prinsip
 

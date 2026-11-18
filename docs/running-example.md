@@ -120,7 +120,7 @@ Knowledge (`test_case_study_example.py`).
 | r11 | `ALTER TABLE memo DROP COLUMN body` | notifikasi: v_memo punya kolom inline | notify | tidak ada | ex:memoBody gagal |
 | r12 | `ALTER TABLE doc DROP COLUMN body` | notifikasi: v_doc_cache materialized | notify | tidak ada | ex:docBody gagal |
 | r13 | `ALTER TABLE city ADD COLUMN population INTEGER` | P-001, X = {TM_City}; v_city_all (`SELECT *` biasa) bukan kondisi notifikasi | hitl | ex:population (domain ex:City, range xsd:integer); POM baru di TM_City | ex:population berisi setelah diisi |
-| r14 | `ALTER TABLE account ADD COLUMN status VARCHAR(20)` | P-001, beberapa kelas: usulan ex:Account; X_C = {TM_Account, TM_AccountRecord} | hitl | POM baru di dua map itu, TM_Customer tidak | ex:status untuk account dan record |
+| r14 | `ALTER TABLE account ADD COLUMN status VARCHAR(20)` | P-001, beberapa kelas: usulan ex:Account; X_C = {TM_Account, TM_AccountRecord}; domain tidak aman (ADR-0033) | hitl | POM baru di dua map itu, TM_Customer tidak; ex:status tanpa rdfs:domain | ex:status untuk account dan record; ex:Account tetap 2 |
 | r15 | `ALTER TABLE person ADD COLUMN birth_date DATE` | P-001, X = ∅: triples map baru dari TM_PersonNick | hitl | `add_triples_map` dengan `SELECT id, nickname, "birth_date" FROM src.person`, template sama, tanpa kelas; ex:birthDate domain ex:Person | ex:birthDate berisi |
 | r16 | `ALTER TABLE audit ADD COLUMN actor VARCHAR(20)` | P-001, X_C = ∅: hanya Σ berubah | hitl | hanya `add_column` | tidak ada property baru |
 | r17 | `ALTER TABLE event ADD COLUMN severity VARCHAR(10)` | notifikasi (ADR-0032): v_events menerima c lewat `*` dalam UNION | notify | tidak ada | query lama tetap jalan |

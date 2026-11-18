@@ -814,3 +814,49 @@ that list their columns still give `hitl`; a UNION, a materialized view reached 
 `SELECT *` view, inline columns, and a repeated name give `notify`. Four of them fail when the
 check is disabled. The NPD case-study tests (A001, A004 still `hitl`) and all 187 Knowledge tests
 pass.
+
+## ADR-0033: rdfs:domain of a new property only when it adds no class membership
+
+*2026-11-18. Plan.*
+
+**Context.** P-001 maps the new column in X_C, the TriplesMaps of the chosen class C and those
+without rr:class, and declared `rdfs:domain C` for the new property. A domain is not a constraint
+but an inference rule: whoever has the property is an instance of C (RDF 1.1 Semantics §9.2.1,
+pattern rdfs2; OWL 2 Structural Specification §9.3.4). Ontop compiles it into the mapping, so
+its answers include these inferences (Calvanese et al. 2016, p. 478). When a TriplesMap in X_C
+has no class and builds other IRIs, its subjects became instances of C. In the running example
+(scenario r14) `?a a ex:Account` went from 2 to 4 answers after `account.status` was added,
+although no query read the new column: `record/1` and `record/2` of TM_AccountRecord were
+inferred to be accounts. An addition that reclassifies existing terms is not a conservative
+extension, which Kharlamov et al. (2013, p. 130) leave to the IT expert, and the administrator
+could not see the effect in the approval form.
+
+**Decision.** For every TriplesMap of an ADD proposal, Knowledge records the classes its
+subjects already belong to (`typed`): its own rr:class, the rr:class of another TriplesMap with
+the same subject template that reads every row of the same table (rr:tableName, or one SELECT
+over that table without WHERE, JOIN, GROUP BY, HAVING, or LIMIT, whose template columns are
+table columns under their own names), and their superclasses through rdfs:subClassOf. A new
+TriplesMap built from a class TriplesMap (ADR-0027) keeps its FROM and WHERE and so its
+subjects. A class C is safe when every TriplesMap in X_C has C in `typed`. The column is still
+mapped in X_C for the chosen C, but `rdfs:domain C` is written only when C is safe; the plan
+says why when it is not. An existing property whose domain would not be safe is not reused:
+the naming policy proposes another IRI (`qualify_with_class`) or the administrator gives one.
+The administrator cannot force the domain from the console; adding it by hand is a deliberate
+change outside ASCAM.
+
+The test is sufficient, not complete. If the subjects are typed in another way (another table,
+a join, a domain axiom), the domain is left out although it would be safe. Leaving out a domain
+never changes an answer, so the error is on the safe side.
+
+**Why not the alternatives.** Leaving the TriplesMaps without class out of X_C loses data that
+the column could provide. Never writing a domain is also correct, but loses the class of the
+property and the basis of the reuse rule, which compares domains and ranges.
+
+**Evidence.** Five Knowledge tests in `test_impact.py` and one in `test_events.py`: the domain
+is left out when MapRingkas (no class, other IRIs) is in X_C, kept when MapRingkas shares the
+template of the class TriplesMap that reads the whole table, left out again when that
+TriplesMap filters rows, a subclass types the subjects as its superclass, an unsafe reuse of
+a deprecated property gets a new IRI, and the administrator cannot choose it. The NPD
+case-study tests (A001, A004) keep their domains, because their new TriplesMaps keep the
+subjects of a class TriplesMap. All 193 Knowledge tests pass. With Ontop 4.1.1 on scenario r14
+of the running example, `?a a ex:Account` stays at 2 answers and `?s ex:status ?st` gives 4.

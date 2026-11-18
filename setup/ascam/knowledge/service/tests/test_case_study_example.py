@@ -362,21 +362,27 @@ def test_r13_add_to_table_map_with_star_view(example):
     [pom] = actions_of(out, 'add_predicate_object_map')
     assert (local(pom['triples_map_iri']), local(pom['predicate_iri'])) == ('TM_City', 'population')
     [prop] = actions_of(out, 'add_datatype_property')
-    assert prop['domain'] == [EX + 'City']
+    assert prop['domain'] == [EX + 'City'] and out['add_options']['safe_domains'] == [EX + 'City']
     assert out['add_options']['range_iri'] == XSD + 'integer'
 
 
 def test_r14_add_with_several_classes(example):
     """P-001, several classes: ASCAM proposes ex:Account (to be reviewed); X_C keeps the map
-    without a class and leaves out TM_Customer, so no customer is inferred to be an Account."""
+    without a class and leaves out TM_Customer, so no customer is inferred to be an Account.
+    TM_AccountRecord has no class and builds record/{id}, so rdfs:domain ex:Account would make
+    the records accounts: the property gets no domain (ADR-0033)."""
     api, oid = example
     out = add(api, oid, 'account', 'status', 'VARCHAR(20)')
     assert out['decision'] == 'hitl'
     assert reasons_with(out, 'more than one class')
     assert sorted(out['add_options']['classes']) == [EX + 'Account', EX + 'Customer']
     assert out['add_options']['proposed_domain'] == EX + 'Account'
+    assert out['add_options']['safe_domains'] == []
+    assert reasons_with(out, 'gets no rdfs:domain', 'TM_AccountRecord')
     assert sorted(local(a['triples_map_iri']) for a in actions_of(out, 'add_predicate_object_map')) == [
         'TM_Account', 'TM_AccountRecord']
+    [prop] = actions_of(out, 'add_datatype_property')
+    assert prop['domain'] == []
 
 
 def test_r15_add_when_every_query_lists_its_columns(example):

@@ -81,7 +81,7 @@ The three adaptation patterns:
 
 | Pattern | Operation | What ASCAM does |
 |---|---|---|
-| P-001 | ADD COLUMN | Waits for the administrator. On approval: `ALTER FOREIGN TABLE ... ADD COLUMN`, a new `owl:DatatypeProperty`, and a predicate-object map on the TriplesMaps that pick up the column; when no TriplesMap picks it up, a new TriplesMap over the table (ADR-0027). A view that would receive the column through `SELECT *` but cannot take it leads to a notification (ADR-0032) |
+| P-001 | ADD COLUMN | Waits for the administrator. On approval: `ALTER FOREIGN TABLE ... ADD COLUMN`, a new `owl:DatatypeProperty`, and a predicate-object map on the TriplesMaps that pick up the column; when no TriplesMap picks it up, a new TriplesMap over the table (ADR-0027). A view that would receive the column through `SELECT *` but cannot take it leads to a notification (ADR-0032). `rdfs:domain` only when every subject that gets the property is already an instance of the class (ADR-0033) |
 | P-002 | DROP COLUMN | When every usage is a plain value or projection: `DROP COLUMN`, `ALTER VIEW` for views that pass the column on, removal of the predicate-object maps that read the column (ADR-0031), and `owl:deprecated` on a property that no assertion populates any more. Otherwise a notification |
 | P-003 | RENAME COLUMN | `ALTER COLUMN ... OPTIONS (SET NAMEINSOURCE '"<new name>"')`: the Teiid column keeps its name, so views, the mapping, and the ontology do not change |
 
@@ -245,7 +245,7 @@ done
 python3 experiments/evaluation/self_test.py                    # evaluation harness
 ```
 
-At the time of writing: Knowledge 199 tests, Executor 80, Ontop agent 42, Event Normalizer 32,
+At the time of writing: Knowledge 205 tests, Executor 80, Ontop agent 42, Event Normalizer 32,
 console 27.
 
 ## Repository layout
@@ -283,7 +283,7 @@ social-assistance data, is kept in `archive/bansos/`.
 
 | Document | Content |
 |---|---|
-| [`docs/design-decisions.md`](docs/design-decisions.md) | The architecture decisions (ADR-0001 to ADR-0032) with their evidence |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | The architecture decisions (ADR-0001 to ADR-0033) with their evidence |
 | [`docs/knowledge-base.md`](docs/knowledge-base.md) | Knowledge Base: principles, schemas, ERD, integrity rules, decision matrix |
 | [`docs/evaluation.md`](docs/evaluation.md) | Evaluation protocol of the NPD case study (branch `feature/npd`), result files, threats to validity |
 | `setup/*/README.md`, `setup/ascam/*/README.md` | One README per component: what it does, how to run and test it |

@@ -107,8 +107,81 @@ def test_add_always_needs_approval_with_generated_proposal(api, obdf):
     assert proposal['classes'] == ['http://bansos.go.id/ontology/PenerimaBansos']
     ontology = [a for a in out['actions'] if a['artifact'] == 'ontology'][0]
     assert ontology['iri'] == 'http://bansos.go.id/ontology/alamatLengkap'
-    assert ontology['domain'] == ['http://bansos.go.id/ontology/PenerimaBansos']
+    # MapRingkas has no class and another subject template (ADR-0033)
+    assert ontology['domain'] == [] and proposal['safe_domains'] == []
     assert [a for a in out['actions'] if a['artifact'] == 'r2rml'][0]['column'] == 'alamat_lengkap'
+
+
+def use_mapping(api, oid, ttl):
+    set_clients(api, agent=fx.FakeAgent(mapping=ttl))
+    assert api.post(f'/api/v1/obdf/{oid}/sync').json()['changed']
+
+
+def test_add_leaves_out_a_domain_that_would_classify_other_subjects(api, obdf):
+    """ADR-0033: MapRingkas has no rr:class and builds other IRIs (ringkas/…). With
+    rdfs:domain PenerimaBansos, Ontop would infer that every ringkas subject is a PenerimaBansos,
+    so a query on the class would get new answers. The column is still mapped in both
+    TriplesMaps, but the property gets no domain."""
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    proposal = out['add_options']
+    assert proposal['proposed_domain'] == 'http://bansos.go.id/ontology/PenerimaBansos'
+    assert proposal['safe_domains'] == []
+    assert any('gets no rdfs:domain' in r and 'MapRingkas' in r for r in out['reasons'])
+    ontology = [a for a in out['actions'] if a['operation'] == 'add_datatype_property'][0]
+    assert ontology['domain'] == []
+    targets = {a['triples_map_iri'].rsplit('#', 1)[-1] for a in out['actions']
+               if a['artifact'] == 'r2rml'}
+    assert targets == {'MapPenerima', 'MapRingkas'}
+
+
+def test_add_keeps_the_domain_when_a_class_map_with_the_same_template_reads_every_row(api, obdf):
+    """ADR-0033 (R2): MapRingkas has no class, but its template is that of MapPenerima, which
+    reads the whole table and has rr:class PenerimaBansos; its subjects are already
+    PenerimaBansos, so the domain adds no class membership."""
+    use_mapping(api, obdf, fx.MAPPING_SHARED_TEMPLATE)
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    proposal = out['add_options']
+    assert proposal['safe_domains'] == ['http://bansos.go.id/ontology/PenerimaBansos']
+    ontology = [a for a in out['actions'] if a['operation'] == 'add_datatype_property'][0]
+    assert ontology['domain'] == ['http://bansos.go.id/ontology/PenerimaBansos']
+    assert not any('gets no rdfs:domain' in r for r in out['reasons'])
+
+
+def test_add_leaves_out_the_domain_when_the_class_map_filters_rows(api, obdf):
+    """The class TriplesMap with the same template selects only some rows, so a subject of
+    MapRingkas may have no class: the domain is left out."""
+    filtered = fx.MAPPING_SHARED_TEMPLATE.replace(
+        'rr:logicalTable [ rr:tableName "kemensos.penerima_manfaat" ]',
+        'rr:logicalTable [ rr:sqlQuery "SELECT * FROM kemensos.penerima_manfaat '
+        'WHERE status_ekonomi IS NOT NULL" ]')
+    assert filtered != fx.MAPPING_SHARED_TEMPLATE
+    use_mapping(api, obdf, filtered)
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='alamat', column_type='varchar(50)')
+    assert out['add_options']['safe_domains'] == []
+    ontology = [a for a in out['actions'] if a['operation'] == 'add_datatype_property'][0]
+    assert ontology['domain'] == []
+
+
+def test_add_superclass_of_the_class_map_types_the_subjects(api, obdf):
+    """A class map whose class is a subclass of C types its subjects as C (rdfs:subClassOf)."""
+    ontology = fx.ONTOLOGY_TTL.replace('bansos:PenerimaBansos a owl:Class .',
+                                       'bansos:PenerimaBansos a owl:Class ; '
+                                       'rdfs:subClassOf bansos:Penduduk .')
+    assert ontology != fx.ONTOLOGY_TTL
+    set_clients(api, agent=fx.FakeAgent(ontology=ontology))
+    assert api.post(f'/api/v1/obdf/{obdf}/sync').json()['changed']
+    with api.factory() as db:
+        version = db.execute(select(spec.SpecVersion.id).where(spec.SpecVersion.status == 'active')
+                             .order_by(spec.SpecVersion.id.desc())).scalars().first()
+        tm = db.execute(select(spec.TriplesMap.id).where(
+            spec.TriplesMap.spec_version_id == version,
+            spec.TriplesMap.iri.like('%MapPenerima'))).scalars().first()
+        typed = impact_service._typed_classes(db, version, tm, 'penerima_manfaat')
+    assert typed == {'http://bansos.go.id/ontology/PenerimaBansos',
+                     'http://bansos.go.id/ontology/Penduduk'}
 
 
 def test_add_ignores_old_auto_policy(api, obdf):
@@ -304,7 +377,9 @@ def test_drop_of_star_column_needs_no_rewrite(api, obdf):
 # ── reusing a property whose column was dropped earlier (ADD → DROP → ADD) ──────
 def test_add_that_reuses_a_deprecated_property_says_so(api, obdf):
     """bansos:statusEkonomi is deprecated in the fixture; a proposal that reuses it must tell the
-    administrator that approving withdraws the deprecation."""
+    administrator that approving withdraws the deprecation. Its domain PenerimaBansos is safe
+    because every subject that gets it is a PenerimaBansos (ADR-0033)."""
+    use_mapping(api, obdf, fx.MAPPING_SHARED_TEMPLATE)
     api.put(f'/api/v1/obdf/{obdf}/naming-policy',
             json={'property_iri_template': '{namespace}statusEkonomi', 'on_collision': 'hitl',
                   'namespace': 'http://bansos.go.id/ontology/'})
@@ -317,6 +392,7 @@ def test_add_that_reuses_a_deprecated_property_says_so(api, obdf):
 
 
 def test_add_that_reuses_a_property_with_another_range_is_refused(api, obdf):
+    use_mapping(api, obdf, fx.MAPPING_SHARED_TEMPLATE)
     api.put(f'/api/v1/obdf/{obdf}/type-mappings', json=[
         {'dbms': 'postgresql', 'native_type': 'integer', 'teiid_type': 'integer',
          'xsd_datatype': 'xsd:integer'}])
@@ -329,3 +405,18 @@ def test_add_that_reuses_a_property_with_another_range_is_refused(api, obdf):
     assert any('already exists with range' in r for r in out['reasons'])
     assert out['add_options']['proposed_iri'] is None          # the administrator must give a name
     assert [a['artifact'] for a in out['actions']] == ['vdb']
+
+
+def test_add_does_not_reuse_a_property_whose_domain_would_classify_other_subjects(api, obdf):
+    """ADR-0033: reusing deprecated bansos:statusEkonomi (domain PenerimaBansos) would make the
+    ringkas subjects of MapRingkas PenerimaBansos instances, so ASCAM proposes a new IRI."""
+    api.put(f'/api/v1/obdf/{obdf}/naming-policy',
+            json={'property_iri_template': '{namespace}statusEkonomi',
+                  'on_collision': 'qualify_with_class', 'namespace': 'http://bansos.go.id/ontology/'})
+    out = impact(api, obdf, operation='add', source='kemensos', schema='public',
+                 table='penerima_manfaat', column='status_baru', column_type='varchar(20)')
+    assert out['add_options']['proposed_iri'] == 'http://bansos.go.id/ontology/statusEkonomi_PenerimaBansos'
+    assert any('would make subjects of the new mapping' in r for r in out['reasons'])
+    assert not any('withdraws the deprecation' in r for r in out['reasons'])
+    ontology = [a for a in out['actions'] if a['operation'] == 'add_datatype_property'][0]
+    assert ontology['domain'] == []

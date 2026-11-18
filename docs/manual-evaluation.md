@@ -405,10 +405,15 @@ pg "UPDATE public.account SET status = 'open'"
 
 **Yang dicek**
 - Plan: `hitl`, `P-001`. Alasannya menyebut `more than one class`.
-- Pilihan kelas yang ditawarkan adalah ex:Account dan ex:Customer. Usulan domain-nya ex:Account.
+- Pilihan kelas yang ditawarkan adalah ex:Account dan ex:Customer. Usulannya ex:Account.
 - Ada dua aksi `add_predicate_object_map`, pada TM_Account dan TM_AccountRecord. Inilah
   X_C = {m ∈ X | 𝒞_m = ∅ atau C ∈ 𝒞_m}. TM_Customer tidak ikut karena kelasnya ex:Customer.
-- Sesudah disetujui: ex:status domain ex:Account. Blok POM ada di dua map tersebut.
+- `safe_domains` kosong, dan alasannya menyebut `gets no rdfs:domain` serta TM_AccountRecord
+  (ADR-0033). Map itu tidak punya kelas dan membangun IRI `record/{id}`. Dengan
+  `rdfs:domain ex:Account`, Ontop akan menyimpulkan bahwa setiap record adalah ex:Account.
+- Di form *Approvals*, pratinjau menulis bahwa property ini **tidak** mendapat rdfs:domain.
+- Sesudah disetujui: blok property ex:status tanpa `rdfs:domain` (hanya range xsd:string). Blok
+  POM ada di dua map tersebut.
 
 **SPARQL**
 
@@ -418,16 +423,13 @@ pg "UPDATE public.account SET status = 'open'"
 | `SELECT * WHERE { ?c a ex:Customer ; ex:status ?s }` | 0 | 0 |
 | OWNER | 4 | 4 |
 | CUSTOMER | 2 | 2 |
-| ACCOUNT | 2 | **4** (lihat catatan) |
+| ACCOUNT | 2 | 2 (query kelas lama tidak berubah) |
 
-> **Catatan, perlu didiskusikan.** Dalam uji Ontop, `?a a ex:Account` naik dari 2 menjadi 4.
-> `record/1` dan `record/2` ikut dijawab sebagai ex:Account. Penyebabnya axiom
-> `ex:status rdfs:domain ex:Account`: subjek TM_AccountRecord (yang tidak punya kelas) sekarang
-> punya ex:status, sehingga Ontop menyimpulkan subjek itu bertipe ex:Account. Artinya, query lama
-> yang tidak menyentuh kolom baru pun mendapat jawaban baru. Cek apakah ini juga terjadi di stack
-> Anda. Lalu kita bahas apakah ini melanggar syarat adaptasi di paper. Pilihannya: X_C tidak
-> menyertakan map tanpa kelas kalau domain dipasang, atau domain tidak dipasang ketika X_C memuat
-> map seperti itu.
+> **Kenapa ACCOUNT harus tetap 2.** Sebelum ADR-0033, P-001 menulis `ex:status rdfs:domain
+> ex:Account`. Dalam uji Ontop, `?a a ex:Account` lalu naik dari 2 menjadi 4 karena `record/1`
+> dan `record/2` disimpulkan sebagai ex:Account. Sekarang domain hanya ditulis bila setiap subjek
+> yang mendapat property sudah anggota kelasnya. Kalau ACCOUNT menjadi 4 di stack Anda, aturan
+> ADR-0033 tidak bekerja dan itu temuan.
 
 ### r15. Add `person.birth_date` (X = ∅, triples map baru)
 

@@ -66,7 +66,9 @@ Q = {
             **CONTROL},
     'r13': {'population': ('affected', q('?c ex:population ?x')), 'city_name': ('neighbour', CITY_NAME),
             'member_name': ('control', MEMBER_NAME)},
+    # ex:Account must keep its answers: the property has no domain (ADR-0033)
     'r14': {'status': ('affected', q('?a ex:status ?s')), 'owner': ('neighbour', q('?a ex:owner ?o')),
+            'account': ('neighbour', q('?a a ex:Account')),
             'customer': ('neighbour', q('?c a ex:Customer')), **CONTROL},
     'r15': {'birth_date': ('affected', q('?p ex:birthDate ?d')), 'nickname': ('neighbour', NICKNAME),
             'name': ('neighbour', ACTIVE_NAME), **CONTROL},

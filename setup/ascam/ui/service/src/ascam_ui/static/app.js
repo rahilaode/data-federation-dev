@@ -317,12 +317,12 @@ function propertyForm(plan) {
   const id = esc(plan.id);
   const domain = o.proposed_domain || (o.classes || [])[0] || '';
   return `<section><h3>New ontology property</h3>
-    <p class="muted small" style="margin-bottom:0.75rem">${o.proposed_iri ? 'Proposal of ASCAM from the naming policy. Change it if needed; approving with another name or domain is recorded as a revised plan.'
+    <p class="muted small" style="margin-bottom:0.75rem">${o.proposed_iri ? 'Proposal of ASCAM from the naming policy. Change it if needed; approving with another name or class is recorded as a revised plan.'
       : 'ASCAM cannot propose a name free of collisions. Choose the property name before approving.'}</p>
     <div class="form-row">
       <div><label for="prop-${id}">Property name</label>
         <input id="prop-${id}" data-property="${id}" value="${esc(o.proposed_iri ? short(o.proposed_iri) : '')}" placeholder="${esc(camel(o.column))}" maxlength="100" autocomplete="off" spellcheck="false"></div>
-      <div><label for="dom-${id}">Domain (subject class)</label>${(o.classes || []).length
+      <div><label for="dom-${id}">Subject class</label>${(o.classes || []).length
         ? `<select id="dom-${id}" data-property="${id}">${o.classes.map((c) => `<option value="${esc(c)}" ${c === domain ? 'selected' : ''}>${esc(short(c))}</option>`).join('')}</select>`
         : '<p class="small muted" style="padding-top:0.5rem">The exposing TriplesMaps give no class, so the property has no domain.</p>'}</div>
     </div>
@@ -346,7 +346,13 @@ function propertyPreview(id) {
   }
   const iri = p.o.iri_template.replace('{namespace}', p.o.namespace).replace('{column_camel}', p.name).replace('{column}', p.name);
   const tm = p.o.triples_maps.filter((t) => !p.domain || !t.classes.length || t.classes.includes(p.domain)).map((t) => short(t.iri));
-  el.innerHTML = `IRI <code>${esc(iri)}</code>; column ${esc(p.o.column)} is mapped in ${tm.length ? tm.map(esc).join(', ') : '<strong>no TriplesMap</strong>'}.`;
+  // ADR-0033: rdfs:domain is written only when every subject that gets the property is already
+  // an instance of the class; otherwise Ontop would infer new class members
+  const safe = p.o.safe_domains || [];
+  const axiom = !p.domain ? '' : safe.includes(p.domain)
+    ? ` The property gets rdfs:domain ${esc(short(p.domain))}.`
+    : ` The property gets <strong>no rdfs:domain</strong>: not every subject of these TriplesMaps is known to be a ${esc(short(p.domain))}, and the domain would make it one.`;
+  el.innerHTML = `IRI <code>${esc(iri)}</code>; column ${esc(p.o.column)} is mapped in ${tm.length ? tm.map(esc).join(', ') : '<strong>no TriplesMap</strong>'}.${axiom}`;
 }
 
 function proposalDocument(plan, { decidable, preview = false }) {
@@ -386,7 +392,7 @@ async function approvalsPage() {
   const decided = all.filter((p) => p.decided_by && p.decision === 'hitl' && p.status !== 'revised').slice(0, 8);
   content().innerHTML = `
     <div class="page-header"><div><h1>Approvals</h1>
-      <p class="muted">A column addition adds a new property to the ontology, so it always waits for your decision. Check the name and domain of the property and the actions on every OBDF layer, then approve or reject. Changes that cannot be adapted automatically do not appear here but on the Notifications page.</p></div></div>
+      <p class="muted">A column addition adds a new property to the ontology, so it always waits for your decision. Check the name and class of the property and the actions on every OBDF layer, then approve or reject. Changes that cannot be adapted automatically do not appear here but on the Notifications page.</p></div></div>
     ${pending.length ? pending.map((p) => proposalDocument(p, { decidable: true })).join('')
       : '<div class="panel"><p class="empty">No proposal is waiting for a decision. Column additions to federated tables will appear here.</p></div>'}
     ${decided.length ? `<div class="panel" style="margin-top:1.25rem"><h3>Latest decisions</h3><table>

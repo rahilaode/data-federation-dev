@@ -129,6 +129,9 @@ Knowledge (`test_case_study_example.py`).
 | r20 | `ALTER TABLE member ADD COLUMN email VARCHAR(50)` (MySQL) | P-001 di MySQL, X = ∅, property aktif ex:email dipakai ulang | hitl | map baru dari TM_Member; ex:email domain ex:Member | ex:email untuk member |
 | r21 | `ALTER TABLE member DROP COLUMN panggilan` (MySQL) | P-002 di MySQL, ex:nickname tetap diisi S1 | auto | hapus POM ex:nickname dari TM_Member; ex:nickname dipertahankan | ex:nickname tinggal dari person |
 
+Langkah evaluasi manual per skenario (DDL, yang dicek, dan query SPARQL) ada di
+[`manual-evaluation.md`](manual-evaluation.md).
+
 ## 5. Apa yang sudah diperiksa tanpa Docker
 
 * `test_case_study_example.py` (Knowledge): keputusan, pola, alasan, dan aksi ke-21 skenario atas

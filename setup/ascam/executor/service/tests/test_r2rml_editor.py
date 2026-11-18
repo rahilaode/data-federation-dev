@@ -34,8 +34,17 @@ def test_add_predicate_object_map():
     graph = Graph()
     graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
     columns = {str(o) for o in graph.objects(None, RR.column)}
-    assert 'email' in columns and 'nik' in columns                 # existing mappings remain
+    assert '"email"' in columns and 'nik' in columns               # existing mappings remain
     assert result.startswith('# bansos mapping')                # header kept
+
+
+def test_add_predicate_object_map_delimits_a_mixed_case_column():
+    """The column keeps its case: undelimited, wlbEntryYear would mean wlbentryyear on
+    PostgreSQL, and Ontop rejects the placeholder (found on the NPD validation layer)."""
+    result = r2rml.add_predicate_object_map(MAPPING, 'penerima_manfaat', 'wlbEntryYear', EMAIL)
+    graph = Graph()
+    graph.parse(data=result, format='turtle', publicID=r2rml.BASE)
+    assert '"wlbEntryYear"' in {str(o) for o in graph.objects(None, RR.column)}
 
 
 def test_add_is_idempotent():

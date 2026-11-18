@@ -776,7 +776,7 @@ def _decide_add(db, obdf_id, version, event, table_columns, existing, report,
     if problems:
         report.reasons.extend(problems)
         if naming.on_collision == 'qualify_with_class' and domain:
-            iri = f"{iri}_{domain.rsplit('/', 1)[-1]}"
+            iri = f"{iri}_{domain.rsplit('#', 1)[-1].rsplit('/', 1)[-1]}"
             report.reasons.append(f'the name collision policy uses IRI {iri}')
             problems = property_problems(db, version.id, iri, axiom, options['range_iri'], domain)
         if problems:

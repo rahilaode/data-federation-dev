@@ -111,7 +111,10 @@ def add_predicate_object_map(text: str, table: str | None, column: str, predicat
         required['xsd'] = 'http://www.w3.org/2001/XMLSchema#'
     result = ensure_prefixes(text, required)
     prefixes = prefix_map(result)
-    obj = 'rr:column "%s"' % column
+    # a delimited identifier, as in add_triples_map: the logical table returns the column under
+    # the name it has in Σ (rr:tableName or SELECT *), and an undelimited wlbEntryYear would mean
+    # wlbentryyear on PostgreSQL, which Ontop rejects as a placeholder missing from the query
+    obj = 'rr:column %s' % _turtle_string('"' + column.replace('"', '""') + '"')
     if datatype_iri:
         obj += ' ; rr:datatype %s' % shorten(datatype_iri, prefixes)
     block = '\n'.join([
